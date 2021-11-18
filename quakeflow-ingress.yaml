@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quakeflow-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "quakeflow-static-ip"
+spec:
+  # defaultBackend:
+  #   service:
+  #     name: phasenet-api
+  #     port:
+  #       number: 8000
+  rules:
+  - host: phasenet.quakeflow.com
+    http: 
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: phasenet-api
+            port:
+              number: 8000
+  - host: gamma.quakeflow.com
+    http: 
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: gamma-api
+            port:
+              number: 8001
+  - host: deepdenoiser.quakeflow.com
+    http: 
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: deepdenoiser-api
+            port:
+              number: 8002
+  - host: ui.quakeflow.com
+    http: 
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: quakeflow-ui
+            port:
+              number: 8005
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: backendconfig
+spec:
+  timeoutSec: 600
+  # connectionDraining:
+  #   drainingTimeoutSec: 600
+---

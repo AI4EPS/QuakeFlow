@@ -1,0 +1,8 @@
+HYPODD
+HYPODD*
+dt*.ct
+event*.dat
+event*.sel
+f77
+g77
+stations_*.dat

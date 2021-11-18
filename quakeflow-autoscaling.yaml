@@ -1,0 +1,101 @@
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: phasenet-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: phasenet-api
+  minReplicas: 1
+  maxReplicas: 365
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: AverageValue
+        averageValue: 1000Mi
+  # Uncomment these lines if you create the custom packets_per_second metric and
+  # configure your app to export the metric.
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: packets_per_second
+  #     target:
+  #       type: AverageValue
+  #       averageValue: 100
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gamma-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gamma-api
+  minReplicas: 1
+  maxReplicas: 365
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 200
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: AverageValue
+        averageValue: 500Mi
+  # Uncomment these lines if you create the custom packets_per_second metric and
+  # configure your app to export the metric.
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: packets_per_second
+  #     target:
+  #       type: AverageValue
+  #       averageValue: 100
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: deepdenoiser-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: deepdenoiser-api
+  minReplicas: 1
+  maxReplicas: 365
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: AverageValue
+        averageValue: 1000Mi
+  # Uncomment these lines if you create the custom packets_per_second metric and
+  # configure your app to export the metric.
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: packets_per_second
+  #     target:
+  #       type: AverageValue
+  #       averageValue: 100

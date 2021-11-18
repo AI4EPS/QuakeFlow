@@ -1,0 +1,1 @@
+{"region": "Ridgecrest_oneweek", "center": [-117.504, 35.705], "xlim_degree": [-118.004, -117.004], "ylim_degree": [35.205, 36.205], "degree2km": 111.19492474777779, "starttime": "2019-07-04T00:00:00", "endtime": "2019-07-10T00:00:00", "networks": ["CI"], "channels": "HH*,BH*,EH*,HN*", "client": "SCEDC"}

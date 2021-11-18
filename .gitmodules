@@ -1,0 +1,12 @@
+[submodule "DeepDenoiser"]
+	path = DeepDenoiser
+	url = https://github.com/wayneweiqiang/DeepDenoiser.git
+	branch = master
+[submodule "PhaseNet"]
+	path = PhaseNet
+ 	url = https://github.com/wayneweiqiang/PhaseNet.git
+	branch = master
+[submodule "GaMMA"]
+	path = GaMMA
+	url = https://github.com/wayneweiqiang/GaMMA.git
+	branch = master
