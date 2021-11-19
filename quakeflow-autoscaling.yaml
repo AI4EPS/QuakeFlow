@@ -15,13 +15,27 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 50
+        averageUtilization: 150
   - type: Resource
     resource:
       name: memory
       target:
         type: AverageValue
-        averageValue: 1000Mi
+        averageValue: 3000Mi
+  # - type: Object
+  #   object:
+  #     metric:
+  #       name: requests-per-second
+  #     describedObject:
+  #     #   apiVersion: v1
+  #     #   kind: Service
+  #     #   name: phasenet-api
+  #       apiVersion: networking.k8s.io/v1beta1
+  #       kind: Ingress
+  #       name: quakeflow-ingress
+  #     target:
+  #       type: Value
+  #       value: 10
   # Uncomment these lines if you create the custom packets_per_second metric and
   # configure your app to export the metric.
   # - type: Pods
@@ -49,7 +63,7 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 200
+        averageUtilization: 300
   - type: Resource
     resource:
       name: memory
