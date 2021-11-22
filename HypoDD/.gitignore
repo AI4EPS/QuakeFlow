@@ -6,3 +6,5 @@ event*.sel
 f77
 g77
 stations_*.dat
+tmp_*
+hypoDD_*.reloc
