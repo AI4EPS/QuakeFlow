@@ -6,5 +6,9 @@ event*.sel
 f77
 g77
 stations_*.dat
+
+Hawaii*
+Ridgecrest*
+PuertoRico*
 tmp_*
-hypoDD_*.reloc
+*.html

@@ -36,7 +36,8 @@ def download_test_data():
     os.system("curl -O -J -L https://osf.io/aw53b/download")
     os.system("curl -O -J -L https://osf.io/y879e/download")
     os.system("curl -O -J -L https://osf.io/km97w/download")
-    
+
+# %%
 def convert_stations():
     os.system("python convert_stations.py")
 
@@ -117,8 +118,6 @@ def convert_picks():
     idx = int(i // MAXEVENT)
     os.system(f"mkdir tmp_{idx:02d}")
     os.system(f"cp hypoDD.pha hypoDD.inp ph2dt.inp stations_hypoDD.dat ./tmp_{idx:02d}")
-# catalog = run_hypoDD(i, MAXEVENT)
-# hypoDD_catalogs.append(catalog)
 
 
 # %%
