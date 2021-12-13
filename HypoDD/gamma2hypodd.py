@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 from glob import glob
 from multiprocessing import Pool
+import time
 
 # %%
 def download_hypodd():
@@ -137,16 +138,23 @@ def run_hypoDD(data_path):
 
 
 if __name__ == "__main__":
-    
-    # download_hypodd()
-    # download_test_data()
+   
+    print(f"Start time: {time.asctime()}")
+    start_time = time.time()
+    download_hypodd()
+    download_test_data()
     convert_stations()
-    # convert_picks()
+    convert_picks()
 
     tmp_paths = sorted(glob("./tmp_*"))
     with Pool(processes=len(tmp_paths)) as pool:
         pool.map(run_hypoDD, tmp_paths)
 
-    # %% concatenate segmented catalogs
+    # %% concatenate catalogs
+    hypoDD_catalogs = sorted(glob("./hypoDD_*"))
     print(f"cat {' '.join(hypoDD_catalogs)} > hypoDD_catalog.txt")
     os.system(f"cat {' '.join(hypoDD_catalogs)} > hypoDD_catalog.txt")
+
+    end_time = time.time()
+    print(f"Finish time: {time.asctime()}")
+    print(f"HypoDD takes {end_time - start_time:.0f}s")
