@@ -8,7 +8,7 @@ python gamma2hypoDD.py
 # $ph2dt ph2dt.inp
 # $hypoDD hypoDD.inp
 
-# ## hypoinverse
+# ## gamma to hypoinverse
 # python convert_stations.py
 # python convert_picks.py
 # $hypo < hyp.command
