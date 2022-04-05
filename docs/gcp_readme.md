@@ -1,1 +1,0 @@
-../gcp_readme.md

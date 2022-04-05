@@ -1,1 +1,0 @@
-# Downloading Data using Obspy
