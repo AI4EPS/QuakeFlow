@@ -1,4 +1,0 @@
-pyspark==2.4.4
-numpy
-kafka-python
-requests
