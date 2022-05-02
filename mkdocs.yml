@@ -18,5 +18,5 @@ plugins:
   - exclude:
       glob:
         - PhaseNet/*
-        - GMMA/*
+        - GaMMA/*
         - "*_demo"
