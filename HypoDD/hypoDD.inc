@@ -37,7 +37,7 @@ c     &          MAXCL=    50)
 
 cc parameters for large problems (e.g. SUN BLADE 100, 2 GB RAM):
       parameter(MAXEVE=   10800,    
-     &          MAXDATA=  3100000,
+     &          MAXDATA=  10100000,
      &          MAXEVE0=  50,	
      &          MAXDATA0= 10000,	
      &          MAXLAY=   15,		

@@ -17,7 +17,7 @@ SRCS	= $(CMD).f \
 CSRCS	= atoangle_.c atoangle.c datetime_.c hypot_.c rpad_.c sscanf3_.c
 OBJS	= $(SRCS:%.f=%.o) $(CSRCS:%.c=%.o)
 INCLDIR	= ../../include
-CFLAGS	= -O -I$(INCLDIR)
+CFLAGS	= -O -I$(INCLDIR) -mcmodel=large
 
 # Flags for GNU g77 compiler
 #FFLAGS	= -O -I$(INCLDIR) -fno-silent -Wall -implicit
