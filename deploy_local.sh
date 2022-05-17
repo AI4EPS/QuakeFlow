@@ -24,6 +24,9 @@ helm upgrade quakeflow-kafka bitnami/kafka --set externalAccess.enabled=true,ext
 # kubectl run --quiet=true -it --rm quakeflow-kafka-client --restart='Never' --image docker.io/bitnami/kafka:2.7.0-debian-10-r68 --restart=Never \
 #     --command -- bash -c "kafka-topics.sh --describe --topics-with-overrides --bootstrap-server quakeflow-kafka.default.svc.cluster.local:9092"
 
+# Deploy MongoDB
+helm install quakeflow-mongodb --set auth.rootPassword=quakeflow123,auth.username=quakeflow,auth.password=quakeflow123,auth.database=quakeflow bitnami/mongodb
+
 # Deploy to Kubernetes
 kubectl apply -f metrics-server.yaml
 kubectl apply -f quakeflow-local.yaml
