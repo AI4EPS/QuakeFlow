@@ -20,3 +20,7 @@ plugins:
         - PhaseNet/*
         - GaMMA/*
         - "*_demo"
+extra:
+  analytics:
+    provider: google
+    property: G-69DX3B35RK
