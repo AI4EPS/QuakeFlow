@@ -12,7 +12,8 @@ kubectl run --quiet=true -it --rm quakeflow-kafka-client --restart='Never' --ima
 #     --command -- bash -c "kafka-topics.sh --describe --topics-with-overrides --bootstrap-server quakeflow-kafka.default.svc.cluster.local:9092"
 
 # Deploy MongoDB
-helm install quakeflow-mongodb --set auth.rootPassword=quakeflow123,auth.username=quakeflow,auth.password=quakeflow123,auth.database=quakeflow bitnami/mongodb
+helm install quakeflow-mongodb --set auth.rootPassword=quakeflow123,auth.username=quakeflow,auth.password=quakeflow123,auth.database=quakeflow,architecture=replicaset,persistence.size=100Gi
+ bitnami/mongodb
 
 # Deploy to Kubernetes
 kubectl apply -f quakeflow-gcp.yaml
