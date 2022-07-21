@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/logo.png">
+<!-- <img src="https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/logo.png"> -->
 
 # QuakeFlow: A Scalable Deep-learning-based Earthquake Monitoring Workflow with Cloud Computing
 [![documentation](https://github.com/wayneweiqiang/QuakeFlow/actions/workflows/docs.yml/badge.svg)](https://wayneweiqiang.github.io/QuakeFlow/)
