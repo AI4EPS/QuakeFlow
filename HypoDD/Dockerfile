@@ -15,7 +15,11 @@ RUN ln -s $(which gfortran) f77
 RUN ln -s $(which gfortran) g77
 RUN make -C HYPODD/src
 
-RUN ls -l /opt/HYPODD/src/hypoDD/hypoDD
-COPY gamma2hypodd.py convert_stations.py /opt/
-COPY hypoDD_ct.inp hypoDD_cc.inp ph2dt.inp /opt/
+RUN mkdir hypoDD
+RUN cp HYPODD/src/ph2dt/ph2dt hypoDD/ph2dt
+RUN cp HYPODD/src/hypoDD/hypoDD hypoDD/hypoDD
+
+# RUN ls -l /opt/HYPODD/src/hypoDD/hypoDD
+# COPY gamma2hypodd.py convert_stations.py /opt/
+# COPY hypoDD_ct.inp hypoDD_cc.inp ph2dt.inp /opt/
 RUN python -m pip install --upgrade numpy pandas tqdm minio && rm -rf /var/cache/apk/*
