@@ -7,7 +7,7 @@ repo_url: 'https://github.com/wayneweiqiang/QuakeFlow'
 nav:
     - Overview: README.md
     - Pipeline: workflow.ipynb
-    - Visualization: plot_catalog.ipynb
+    # - Visualization: plot_catalog.ipynb
     # - FastAPI: fastapi.ipynb
     # - Deploy on cluster: k8s_readme.md
     # - Deploy on cloud: gcp_readme.md
