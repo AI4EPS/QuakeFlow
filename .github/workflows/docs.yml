@@ -15,6 +15,6 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - run: apt install mkdocs
+      - run: sudo apt-get install -y mkdocs
       - run: pip install mkdocs-material mkdocs-jupyter mkdocs-exclude
       - run: mkdocs gh-deploy --force
