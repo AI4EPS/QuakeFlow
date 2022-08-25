@@ -21,7 +21,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           miniconda-version: "latest"
-          activate-environment: mkdocs
+          # activate-environment: mkdocs
       - run: conda install jinja2
       - run: conda install mkdocs-material mkdocs-jupyter mkdocs-exclude mkdocs -c conda-forge
       - run: mkdocs gh-deploy --force
