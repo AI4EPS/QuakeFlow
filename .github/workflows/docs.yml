@@ -8,12 +8,13 @@ on:
 
 jobs:
   deploy:
-    # runs-on: ubuntu-latest
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    # runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - run: pip install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude
+      - run: apt install mkdocs
+      - run: pip install mkdocs-material mkdocs-jupyter mkdocs-exclude
       - run: mkdocs gh-deploy --force
