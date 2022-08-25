@@ -14,5 +14,5 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.x
-      - run: pip install mkdocs-material mkdocs-jupyter mkdocs-exclude lxml==4.8.0
+      - run: pip install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude
       - run: mkdocs gh-deploy --force
