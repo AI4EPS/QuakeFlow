@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dataaccess
+spec:
+  containers:
+  - name: alpine
+    image: alpine:latest
+    command: ['sleep', 'infinity']
+    volumeMounts:
+    - name: mypvc
+      mountPath: /data
+  volumes:
+  - name: mypvc
+    persistentVolumeClaim:
+      # claimName: quakeflow-4ldv8-data-volume-37
+      claimName: quakeflow-4ldv8-data-volume-0

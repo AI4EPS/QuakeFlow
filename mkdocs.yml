@@ -7,6 +7,7 @@ repo_url: 'https://github.com/wayneweiqiang/QuakeFlow'
 nav:
     - Overview: README.md
     - Pipeline: workflow.ipynb
+    - Standard Formats: data_format.md
     # - Visualization: plot_catalog.ipynb
     # - FastAPI: fastapi.ipynb
     # - Deploy on cluster: k8s_readme.md
@@ -14,7 +15,8 @@ nav:
 theme:
   name: 'material'
 plugins:
-  - mkdocs-jupyter
+  - mkdocs-jupyter:
+      ignore_h1_titles: True
   - exclude:
       glob:
         - PhaseNet/*

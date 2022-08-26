@@ -1,0 +1,42 @@
+# Standard Data Formats of QuakeFlow
+
+- Raw data: 
+	- Waveform: MSEED
+	- Stations:  JSON
+	- Configuration:  JSON
+- Denoising:
+	- Inputs:
+		- Waveform: MSEED
+		- Configuration:  JSON
+	- Outputs:
+		- Waveform: MSEED
+- Phase picking:
+	- Inputs: 
+		- Waveform: MSEED
+		- Stations: JSON
+		- Configuration:  JSON
+	- Outputs:
+		- Phase picks: CSV
+- Phase association:
+	- Inputs: 
+		- Phase picks: CSV
+		- Stations: JSON
+		- Configuration:  JSON
+	- Ouputs:
+		- Associated picks: CSV
+		- Associated events: CSV
+- Earthquake location:
+	- Inputs: 
+		- Associated picks: CSV
+		- Stations: JSON
+		- Configuration:  JSON
+	- Ouputs:
+		- Located events: CSV
+- Earthquake relocation:
+	- Inputs: 
+		- Associated picks: CSV
+		- Associated/Located events: CSV
+		- Stations: JSON
+		- Configuration:  JSON
+	- Ouputs:
+		- Re-located events: CSV
