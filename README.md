@@ -31,6 +31,8 @@ With auto-scaling enabled on Kubernetes, our system can balance computational lo
 - [Colab example](https://colab.research.google.com/drive/19dC8-Vq0mv1Q9K-OS8VJf3xNEweKv4SN)
 - [Kubeflow](https://www.kubeflow.org/): [(example)](https://wayneweiqiang.github.io/QuakeFlow/workflow/)
 
+![](https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/quakeflow.gif)
+
 ## Deployment
 
 QuakeFlow can be deployed on any cloud platforms with Kubernetes service.
