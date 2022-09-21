@@ -1,7 +1,7 @@
 <!-- <img src="https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/logo.png"> -->
 
-# [QuakeFlow: A Scalable Machine-learning-based Earthquake Monitoring Workflow with Cloud Computing](https://wayneweiqiang.github.io/QuakeFlow/)
-[![documentation](https://github.com/wayneweiqiang/QuakeFlow/actions/workflows/docs.yml/badge.svg)](https://wayneweiqiang.github.io/QuakeFlow/)
+# [QuakeFlow: A Scalable Machine-learning-based Earthquake Monitoring Workflow with Cloud Computing](https://ai4eps.github.io/QuakeFlow/)
+[![documentation](https://github.com/wayneweiqiang/QuakeFlow/actions/workflows/docs.yml/badge.svg)](https://ai4eps.github.io/QuakeFlow/)
 
 ## Overview
 
