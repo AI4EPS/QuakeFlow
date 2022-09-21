@@ -5,7 +5,7 @@
 
 ## Overview
 
-![](https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/quakeflow_diagram.png)
+![](https://raw.githubusercontent.com/ai4eps/QuakeFlow/master/docs/assets/quakeflow_diagram.png)
 
 QuakeFlow is a scalable deep-learning-based earthquake monitoring system with cloud computing. 
 It applies the state-of-art deep learning/machine learning models for earthquake detection. 
