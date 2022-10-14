@@ -4,7 +4,6 @@ site_author: 'Weiqiang Zhu'
 docs_dir: docs/
 repo_name: 'AI4EPS/QuakeFlow'
 repo_url: 'https://github.com/ai4eps/QuakeFlow'
-site_url: 'https://ai4eps.github.io/projects/'
 nav:
     - Overview: README.md
     - Pipeline: kubeflow/workflow.ipynb
