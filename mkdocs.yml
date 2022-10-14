@@ -6,7 +6,7 @@ repo_name: 'wayneweiqiang/QuakeFlow'
 repo_url: 'https://github.com/wayneweiqiang/QuakeFlow'
 nav:
     - Overview: README.md
-    - Pipeline: workflow.ipynb
+    - Pipeline: kubeflow/workflow.ipynb
     - Standard Formats: data_format.md
     # - Visualization: plot_catalog.ipynb
     # - FastAPI: fastapi.ipynb
