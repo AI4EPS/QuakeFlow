@@ -154,3 +154,4 @@ cython_debug/
 *.pkl
 hypoinverse/
 notebooks/*/config.json
+Trash
