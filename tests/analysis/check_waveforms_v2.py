@@ -328,42 +328,15 @@ def plot_waveforms(
         print(f"Saving {i:04d}_{starttime.datetime.isoformat(timespec='milliseconds')}.png")
 
 
-# %%
-if __name__ == "__main__":
+# %% [markdown]
+# ## Read Growclust catalog
+def load_catalog_glowclust(file_path, config):
 
-    # %%
-    center = (-155.32, 19.39)
-    client = "IRIS"
-    minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.55, -155.45, 19.52, 19.8)
-    network_list = ["HV", "PT"]
-    channel_list = "HH*,BH*,EH*,HN*"
-    starttime = obspy.UTCDateTime("2018-01-01T00")
-    endtime = obspy.UTCDateTime("2022-08-12T00")
-
-    config = {}
-    config["client"] = client
-    config["minlongitude"] = minlongitude
-    config["maxlongitude"] = maxlongitude
-    config["minlatitude"] = minlatitude
-    config["maxlatitude"] = maxlatitude
-    config["networks"] = network_list
-    config["channels"] = channel_list
-    config["starttime"] = starttime.datetime.isoformat(timespec="milliseconds")
-    config["endtime"] = endtime.datetime.isoformat(timespec="milliseconds")
-    config["window_length"] = 30
-    config["taup_model"] = "vz_hawaii2.tvel"
-    # %%
-    input_path = Path("input")
-    output_path = Path("output")
-    if not output_path.exists():
-        output_path.mkdir()
-
-    # %% [markdown]
-    # ## Read Growclust catalog
-
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
     # %%
     catalog = pd.read_csv(
-        input_path.joinpath("catalogs/out.growclust_cat"),
+        file_path,
         sep="\s+",
         header=None,
         names=[
@@ -413,8 +386,43 @@ if __name__ == "__main__":
         & (catalog["latitude"] < config["maxlatitude"])
     ]
 
+    return catalog_selected
+
+
+# %%
+if __name__ == "__main__":
+
     # %%
-    events = catalog_selected[["time", "latitude", "longitude", "depth_km"]]
+    center = (-155.32, 19.39)
+    client = "IRIS"
+    minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.55, -155.45, 19.52, 19.8)
+    network_list = ["HV", "PT"]
+    channel_list = "HH*,BH*,EH*,HN*"
+    starttime = obspy.UTCDateTime("2018-01-01T00")
+    endtime = obspy.UTCDateTime("2022-08-12T00")
+
+    config = {}
+    config["client"] = client
+    config["minlongitude"] = minlongitude
+    config["maxlongitude"] = maxlongitude
+    config["minlatitude"] = minlatitude
+    config["maxlatitude"] = maxlatitude
+    config["networks"] = network_list
+    config["channels"] = channel_list
+    config["starttime"] = starttime.datetime.isoformat(timespec="milliseconds")
+    config["endtime"] = endtime.datetime.isoformat(timespec="milliseconds")
+    config["window_length"] = 30
+    config["taup_model"] = "vz_hawaii2.tvel"
+    # %%
+    input_path = Path("input")
+    output_path = Path("output")
+    if not output_path.exists():
+        output_path.mkdir()
+
+    catalog = load_catalog_glowclust(input_path / "catalogs/out.growclust_cat", config)
+
+    # %%
+    events = catalog[["time", "latitude", "longitude", "depth_km"]]
     plt.figure()
     plt.scatter(events["longitude"], events["latitude"], c=events["depth_km"], s=5.0)
     plt.axis("scaled")
