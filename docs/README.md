@@ -29,7 +29,7 @@ With auto-scaling enabled on Kubernetes, our system can balance computational lo
 
 ### Data process
 - [Colab example](https://colab.research.google.com/drive/19dC8-Vq0mv1Q9K-OS8VJf3xNEweKv4SN)
-- [Kubeflow](https://www.kubeflow.org/): [(example)](https://wayneweiqiang.github.io/QuakeFlow/workflow/)
+- [Kubeflow](https://www.kubeflow.org/): [(example)](https://ai4eps.github.io/QuakeFlow/kubeflow/workflow/)
 
 ![](https://raw.githubusercontent.com/wayneweiqiang/QuakeFlow/master/docs/assets/quakeflow.gif)
 
