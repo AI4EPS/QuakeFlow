@@ -41,6 +41,41 @@ def sort_events(events):
     return events_
 
 
+def projection(θ, φ, c0, xyz, degree=True):
+    if degree:
+        θ = θ / 180.0 * np.pi
+        ϕ = ϕ / 180.0 * np.pi
+    e = np.array([np.sin(θ) * np.cos(ϕ), np.sin(θ) * np.sin(ϕ), np.cos(θ)])
+    e1 = np.array([-np.sin(ϕ), np.cos(ϕ), 0])
+    e2 = np.array([-np.cos(θ) * np.cos(ϕ), -np.cos(θ) * np.sin(ϕ), np.sin(θ)])
+    # r = np.abs(np.dot((xyz - c0), e))
+    r = np.dot((xyz - c0), e)
+    x1 = np.dot((xyz - c0), e1)
+    y1 = np.dot((xyz - c0), e2)
+    return x1, y1, r
+
+
+def filt_events(events, config, w=2):
+
+    c0 = np.array(
+        [(config["minlongitude"] + config["maxlongitude"]) / 2, (config["minlatitude"] + config["maxlatitude"]) / 2, 0]
+    )
+    deg2km = 111.1949
+    xyz = events[["longitude", "latitude", "depth_km"]].values
+    xyz[:, 0] = (xyz[:, 0] - c0[0]) * deg2km * np.cos(c0[1] / 180.0 * np.pi)
+    xyz[:, 1] = (xyz[:, 1] - c0[1]) * deg2km
+    θ = 90
+    ϕ = -10
+    x1, y1, r = projection(θ, ϕ, [0, 0, 0], xyz)
+    r_ = np.abs(r)
+    idx = np.argsort(-r_)
+    x1_ = x1[idx]
+    y1_ = y1[idx]
+    r_ = r_[idx]
+
+    return events.iloc[idx[r_ < w]]
+
+
 # %% [markdown]
 # ## Download stations
 
@@ -176,7 +211,7 @@ def download_waveform(config, events, stations, window_length=30, data_path="out
             print(f"{fname} empty data")
 
     threads = []
-    MAX_THREADS = 8
+    MAX_THREADS = 3
     # MAX_THREADS = 1
 
     download(events.iloc[0])
@@ -184,7 +219,7 @@ def download_waveform(config, events, stations, window_length=30, data_path="out
     for index, event in events.iterrows():
         t = threading.Thread(target=download, args=(event,))
         t.start()
-        # time.sleep(1)
+        # time.sleep(0.1)
         threads.append(t)
         if index % MAX_THREADS == MAX_THREADS - 1:
             for t in threads:
@@ -328,6 +363,191 @@ def plot_waveforms(
         print(f"Saving {i:04d}_{starttime.datetime.isoformat(timespec='milliseconds')}.png")
 
 
+# %%
+def plot_waveform_by_station(
+    events,
+    stations,
+    config,
+    waveform_path="waveforms",
+    input_path="input",
+    output_path="output",
+    events_background=None,
+):
+
+    vp, vs = 6.0, 6.0 / 1.73
+    if isinstance(waveform_path, str):
+        waveform_path = Path(waveform_path)
+    if isinstance(output_path, str):
+        output_path = Path(output_path)
+    if not output_path.exists():
+        output_path.mkdir(parents=True)
+
+    normalize = lambda x: (x - x.mean()) / x.std()
+    if events_background is None:
+        events_background = events
+
+    for i, station in stations.iterrows():
+
+        network, station_, location, channel = station["id"].split(".")
+
+        # fig, axes = plt.subplots(1, 2, figsize=(20, 10), gridspec_kw={"width_ratios": [1, 8]})
+        # # axes[0].scatter(stations["longitude"], stations["latitude"], s=20, marker="^")
+        # axes[0].scatter(events_background["longitude"], events_background["latitude"], s=100, marker=".", color="k")
+        # axes[0].scatter(event["longitude"], event["latitude"], s=100, marker=".", color="red")
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 50))
+
+        events["dist_xy_km"] = events.apply(
+            lambda x: obspy.geodetics.base.gps2dist_azimuth(
+                station["latitude"], station["longitude"], x["latitude"], x["longitude"]
+            )[0]
+            / 1000,
+            axis=1,
+        )
+        events["dist_xyz_km"] = events.apply(
+            lambda x: np.sqrt(x["dist_xy_km"] ** 2 + (x["depth_km"] / 1e3 - station["elevation(m)"] / 1e3) ** 2),
+            axis=1,
+        )
+        # events = events.sort_values(by="dist_xyz_km").reset_index(drop=True)
+        events = events.sort_values(by="latitude").reset_index(drop=True)
+
+        ii = 0
+        for j, event in events.iterrows():
+
+            eventtime = obspy.UTCDateTime(event["time"])
+            starttime = eventtime - 5
+            endtime = eventtime + config["window_length"] - 5
+            fname = "{}.mseed".format(starttime.datetime.isoformat(timespec="milliseconds"))
+
+            if not (waveform_path / fname).exists():
+                print(f"{waveform_path / fname} does not exists.")
+                continue
+
+            stream = obspy.read(waveform_path / fname)
+            stream = stream.detrend("linear")
+            stream = stream.filter("highpass", freq=2.0)
+            stream = stream.trim(starttime + 1.0, endtime - 1.0, pad=True, fill_value=0)
+
+            # stream_selected = stream.select(network=network, station=station_, location=location, channel=channel + "Z")
+            stream_selected = stream.select(network=network, station=station_, location=location, channel=channel + "Z")
+            if len(stream_selected) > 0:
+                for trace in stream_selected:
+                    t = trace.times(reftime=eventtime)
+                    ax.plot(t, normalize(trace.data) / 6 + ii, linewidth=1.0, color="k")
+                    # tp = traveltime(
+                    #     str(input_path / config["taup_model"]),
+                    #     event["depth_km"],
+                    #     event["dist_xy_km"],
+                    #     -station["elevation(m)"] / 1e3,
+                    #     phases=["P", "p", "Pg"],
+                    #     shift=10,
+                    # )
+                    # ts = traveltime(
+                    #     str(input_path / config["taup_model"]),
+                    #     event["depth_km"],
+                    #     event["dist_xy_km"],
+                    #     -station["elevation(m)"] / 1e3,
+                    #     phases=["S", "s", "Sg"],
+                    #     shift=10,
+                    # )
+                    # if tp is None:
+                    #     tp = event["dist_xyz_km"] / vp
+                    # if ts is None:
+                    #     ts = event["dist_xyz_km"] / vs
+                    # ax.plot([tp, tp], [ii - 0.7, ii + 0.7], color="blue")
+                    # ax.plot([ts, ts], [ii - 0.7, ii + 0.7], color="red")
+
+                    ii += 1
+
+            # if j > 100:
+            #     break
+
+        ax.set_ylim([-1, ii])
+        ax.grid("on")
+        ax.autoscale(enable=True, axis="x", tight=True)
+        # plt.tight_layout()
+        plt.close(fig)
+        fig.savefig(output_path / f"{i}.png", bbox_inches="tight", dpi=600)
+        print(f"Saving {i}.png")
+
+
+def save_waveform_by_station(
+    events,
+    stations,
+    config,
+    waveform_path="waveforms",
+    input_path="input",
+    output_path="output",
+    events_background=None,
+):
+
+    vp, vs = 6.0, 6.0 / 1.73
+    if isinstance(waveform_path, str):
+        waveform_path = Path(waveform_path)
+    if isinstance(output_path, str):
+        output_path = Path(output_path)
+    if not output_path.exists():
+        output_path.mkdir(parents=True)
+
+    normalize = lambda x: (x - x.mean()) / x.std()
+    if events_background is None:
+        events_background = events
+
+    for i, station in stations.iterrows():
+
+        network, station_, location, channel = station["id"].split(".")
+
+        events["dist_xy_km"] = events.apply(
+            lambda x: obspy.geodetics.base.gps2dist_azimuth(
+                station["latitude"], station["longitude"], x["latitude"], x["longitude"]
+            )[0]
+            / 1000,
+            axis=1,
+        )
+        events["dist_xyz_km"] = events.apply(
+            lambda x: np.sqrt(x["dist_xy_km"] ** 2 + (x["depth_km"] / 1e3 - station["elevation(m)"] / 1e3) ** 2),
+            axis=1,
+        )
+        # events = events.sort_values(by="dist_xyz_km").reset_index(drop=True)
+        events = events.sort_values(by="latitude").reset_index(drop=True)
+
+        ii = 0
+        waveforms = []
+        max_nt = 0
+        event_index = []
+        for j, event in events.iterrows():
+            event_index.append(j)
+
+            eventtime = obspy.UTCDateTime(event["time"])
+            starttime = eventtime - 5
+            endtime = eventtime + config["window_length"] - 5
+            fname = "{}.mseed".format(starttime.datetime.isoformat(timespec="milliseconds"))
+
+            if not (waveform_path / fname).exists():
+                print(f"{waveform_path / fname} does not exists.")
+                continue
+
+            stream = obspy.read(waveform_path / fname)
+            stream = stream.detrend("linear")
+            stream = stream.filter("highpass", freq=2.0)
+            stream = stream.trim(starttime + 1.0, endtime - 1.0, pad=True, fill_value=0)
+
+            stream_selected = stream.select(network=network, station=station_, location=location, channel=channel + "Z")
+
+            if len(stream_selected) > 0:
+                waveforms.append(stream_selected[0].data)
+                max_nt = max([len(stream_selected[0].data), max_nt])
+                ii += 1
+
+        waveforms_ = np.zeros([len(waveforms), max_nt])
+        for jj in range(len(waveforms)):
+            waveforms_[jj, : len(waveforms[jj])] = waveforms[jj]
+        waveforms = np.array(waveforms_)
+        # np.save(output_path / f"{i}.npy", waveforms)
+        np.savez(output_path / f"{i}.npz", data=waveforms, event_index=event_index)
+        print(ii)
+
+
 # %% [markdown]
 # ## Read Growclust catalog
 def load_catalog_glowclust(file_path, config):
@@ -395,7 +615,11 @@ if __name__ == "__main__":
     # %%
     center = (-155.32, 19.39)
     client = "IRIS"
-    minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.55, -155.45, 19.52, 19.8)
+    # minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.55, -155.45, 19.52, 19.8)
+    # minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.57, -155.44, 19.50, 19.82)
+    # minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.57, -155.44, 19.50, 19.9)
+    # minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.57, -155.44, 19.50, 19.825)
+    minlongitude, maxlongitude, minlatitude, maxlatitude = (-155.57, -155.44, 19.50, 19.83)
     network_list = ["HV", "PT"]
     channel_list = "HH*,BH*,EH*,HN*"
     starttime = obspy.UTCDateTime("2018-01-01T00")
@@ -413,6 +637,7 @@ if __name__ == "__main__":
     config["endtime"] = endtime.datetime.isoformat(timespec="milliseconds")
     config["window_length"] = 30
     config["taup_model"] = "vz_hawaii2.tvel"
+
     # %%
     input_path = Path("input")
     output_path = Path("output")
@@ -423,6 +648,10 @@ if __name__ == "__main__":
 
     # %%
     events = catalog[["time", "latitude", "longitude", "depth_km"]]
+    print(f"Selected {len(events)} events.")
+
+    events.to_csv(output_path / "selected_events.csv")
+
     plt.figure()
     plt.scatter(events["longitude"], events["latitude"], c=events["depth_km"], s=5.0)
     plt.axis("scaled")
@@ -431,10 +660,23 @@ if __name__ == "__main__":
     plt.show()
 
     # %%
-    events = sort_events(events)
+    events = filt_events(events, config, w=5)
+    print(f"After filtering {len(events)} events.")
+
+    events.to_csv(output_path / "filt_events.csv")
+
+    plt.figure()
+    plt.scatter(events["longitude"], events["latitude"], c=events["depth_km"], s=5.0)
+    plt.axis("scaled")
+    plt.tight_layout()
+    plt.savefig(output_path / "filt_events.png")
+    plt.show()
 
     # %%
-    stations = download_stations(config, output_path / "stations.json", edge=0.16)
+    # events = sort_events(events)
+
+    # %%
+    stations = download_stations(config, output_path / "stations.json", edge=0.15)
 
     plt.figure()
     plt.scatter(stations["longitude"], stations["latitude"], s=10, marker="^")
@@ -447,22 +689,73 @@ if __name__ == "__main__":
     download_waveform(config, events, stations, window_length=30, data_path=output_path)
 
     # %%
-    # plot_waveforms(events, stations, 30, output_path/"waveforms", output_path/"figures")
+    # plot_waveforms(events, stations, config, output_path/"waveforms", output_path/"figures")
 
+    # ctx = mp.get_context("spawn")
+    # ncpu = mp.cpu_count()
+    # print("Number of CPUs: {}".format(ncpu))
+    # processes = []
+    # for i in range(ncpu):
+    #     p = ctx.Process(
+    #         target=plot_waveforms,
+    #         args=(
+    #             events.iloc[i::ncpu],
+    #             stations,
+    #             config,
+    #             output_path / "waveforms",
+    #             input_path,
+    #             output_path / "figures",
+    #             events,
+    #         ),
+    #     )
+    #     p.start()
+    #     processes.append(p)
+    # for p in processes:
+    #     p.join()
+
+    # plot_waveform_by_station(
+    #     events, stations, config, output_path / "waveforms", input_path, output_path / "figures_by_station"
+    # )
+
+    # ctx = mp.get_context("spawn")
+    # ncpu = mp.cpu_count()
+    # print("Number of CPUs: {}".format(ncpu))
+    # processes = []
+    # for i in range(ncpu):
+    #     p = ctx.Process(
+    #         target=plot_waveform_by_station,
+    #         args=(
+    #             events,
+    #             stations.iloc[i::ncpu],
+    #             config,
+    #             output_path / "waveforms",
+    #             input_path,
+    #             output_path / "figures_by_station",
+    #             events,
+    #         ),
+    #     )
+    #     p.start()
+    #     processes.append(p)
+    # for p in processes:
+    #     p.join()
+
+    # save_waveform_by_station(
+    #     events, stations, config, output_path / "waveforms", input_path, output_path / "waveforms_by_station"
+    # )
     ctx = mp.get_context("spawn")
     ncpu = mp.cpu_count()
     print("Number of CPUs: {}".format(ncpu))
     processes = []
     for i in range(ncpu):
         p = ctx.Process(
-            target=plot_waveforms,
+            target=save_waveform_by_station,
             args=(
-                events.iloc[i::ncpu],
-                stations,
+                events,
+                stations.iloc[i::ncpu],
                 config,
                 output_path / "waveforms",
                 input_path,
-                output_path / "figures",
+                output_path / "waveforms_by_station",
                 events,
             ),
         )
