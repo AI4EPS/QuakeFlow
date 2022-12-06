@@ -16,10 +16,10 @@ With auto-scaling enabled on Kubernetes, our system can balance computational lo
 ## Current Modules 
 
 ### Models
-- [DeepDenoiser](https://wayneweiqiang.github.io/DeepDenoiser/): [(paper)](https://arxiv.org/abs/1811.02695) [(example)](https://wayneweiqiang.github.io/DeepDenoiser/example_interactive/)
-- [PhaseNet](https://wayneweiqiang.github.io/PhaseNet/): [(paper)](https://arxiv.org/abs/1803.03211) [(example)](https://wayneweiqiang.github.io/PhaseNet/example_interactive/)
-- [GaMMA](https://wayneweiqiang.github.io/GaMMA/): [(paper)](https://arxiv.org/abs/2109.09008) [(example)](https://wayneweiqiang.github.io/GaMMA/example_interactive/)
-- [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html) [(paper)](https://pubs.geoscienceworld.org/ssa/bssa/article-abstract/90/6/1353/120565/A-Double-Difference-Earthquake-Location-Algorithm?redirectedFrom=fulltext) [(example)](https://github.com/wayneweiqiang/QuakeFlow/blob/master/HypoDD/gamma2hypodd.py)
+- [DeepDenoiser](https://ai4eps.github.io/DeepDenoiser/): [(paper)](https://arxiv.org/abs/1811.02695) [(example)](https://ai4eps.github.io/DeepDenoiser/example_interactive/)
+- [PhaseNet](https://ai4eps.github.io/PhaseNet/): [(paper)](https://arxiv.org/abs/1803.03211) [(example)](https://ai4eps.github.io/PhaseNet/example_interactive/)
+- [GaMMA](https://ai4eps.github.io/GaMMA/): [(paper)](https://arxiv.org/abs/2109.09008) [(example)](https://ai4eps.github.io/GaMMA/example_interactive/)
+- [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html) [(paper)](https://pubs.geoscienceworld.org/ssa/bssa/article-abstract/90/6/1353/120565/A-Double-Difference-Earthquake-Location-Algorithm?redirectedFrom=fulltext) [(example)](https://github.com/ai4eps/QuakeFlow/blob/master/HypoDD/gamma2hypodd.py)
 - More models to be added. Contributions are highly welcomed!
   
 ### Data stream
