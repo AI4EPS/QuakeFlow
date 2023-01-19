@@ -26,5 +26,6 @@ jobs:
         with:
           miniconda-version: "latest"
 #       - run: conda install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
-      - run: $CONDA/bin/pip install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude
+      - run: $CONDA/bin/pip install mkdocs-material
+      - run: $CONDA/bin/pip install mkdocs mkdocs-material=="9.*" mkdocs-jupyter mkdocs-exclude
       - run: $CONDA/bin/mkdocs gh-deploy --force
