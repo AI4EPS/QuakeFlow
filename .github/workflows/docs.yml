@@ -12,16 +12,16 @@ jobs:
     # runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      # - uses: actions/setup-python@v2
-      #   with:
-      #     python-version: 3.x
-      # # - run: sudo apt-get install -y mkdocs
-      # - run: pip install mkdocs-material mkdocs-jupyter mkdocs-exclude
-      # - run: mkdocs gh-deploy --force
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: actions/setup-python@v2
         with:
-          miniconda-version: "latest"
-          # activate-environment: mkdocs
-      - run: conda install jinja2
-      - run: conda install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
-      - run: $CONDA/bin/mkdocs gh-deploy --force
+          python-version: 3.x
+      - run: sudo apt-get install -y mkdocs
+      - run: pip install mkdocs-material mkdocs-jupyter mkdocs-exclude
+      - run: mkdocs gh-deploy --force
+#       - uses: conda-incubator/setup-miniconda@v2
+#         with:
+#           miniconda-version: "latest"
+#           # activate-environment: mkdocs
+#       - run: conda install jinja2
+#       - run: conda install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
+#       - run: $CONDA/bin/mkdocs gh-deploy --force
