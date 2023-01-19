@@ -8,22 +8,23 @@ on:
 
 jobs:
   deploy:
-#     runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 #     runs-on: macos-latest
-    runs-on: windows-latest
+#     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-      - run: pip install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude
-      - run: mkdocs gh-deploy --force
-#       - uses: conda-incubator/setup-miniconda@v2
+          
+#       - uses: actions/setup-python@v4
 #         with:
-#           miniconda-version: "latest"
-#           # activate-environment: mkdocs
-#       - run: conda install jinja2
-#       - run: conda install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
-#       - run: $CONDA/bin/mkdocs gh-deploy --force
+#           python-version: 3.x
+#       - run: pip install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude
+#       - run: mkdocs gh-deploy --force
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+      - run: conda install jinja2
+      - run: conda install mkdocs mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
+      - run: $CONDA/bin/mkdocs gh-deploy --force
