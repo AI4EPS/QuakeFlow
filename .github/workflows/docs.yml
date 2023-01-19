@@ -27,6 +27,5 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           miniconda-version: "latest"
-      - run: $CONDA/bin/pip install -r requirements.txt
-#       - run: conda install mkdocs jupyter mkdocs-material mkdocs-jupyter mkdocs-exclude -c conda-forge
+      - run: conda install mkdocs=1.3.0 mkdocs-material=8.4.1 mkdocs-material-extensions==1.0.3 mkdocs-jupyter=0.21.0 mkdocs-exclude -c conda-forge
       - run: $CONDA/bin/mkdocs gh-deploy --force
