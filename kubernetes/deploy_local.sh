@@ -7,6 +7,7 @@ git submodule update --init --recursive
 # Build all docker images
 cd ../PhaseNet; docker build --tag phasenet-api:1.0 . ; cd ../kubernetes;
 cd ../GaMMA; docker build --tag gamma-api:1.0 . ; cd ../kubernetes;
+cd ../DeepDenoiser; docker build --tag deepdenoiser-api:1.0 . ; cd ../kubernetes;
 cd ../spark; docker build --tag quakeflow-spark:1.0 .; cd ../kubernetes;
 cd ../waveform; docker build --tag quakeflow-waveform:1.0 .; cd ../kubernetes;
 cd ../streamlit; docker build --tag quakeflow-streamlit:1.0 .; cd ../kubernetes;
@@ -36,7 +37,12 @@ kubectl autoscale deployment phasenet-api --cpu-percent=80 --min=1 --max=10
 kubectl autoscale deployment gmma-api --cpu-percent=80 --min=1 --max=10
 
 # Expose APIs
-kubectl expose deployment phasenet-api --type=LoadBalancer --name=phasenet-service
-kubectl expose deployment gmma-api --type=LoadBalancer --name=gmma-service
+# kubectl expose deployment phasenet-api --type=LoadBalancer --name=phasenet-service
+# kubectl expose deployment gmma-api --type=LoadBalancer --name=gmma-service
 # kubectl expose deployment quakeflow-streamlit --type=LoadBalancer --name=streamlit-ui
-kubectl expose deployment quakeflow-ui --type=LoadBalancer --name=quakeflow-ui
+# kubectl expose deployment quakeflow-ui --type=LoadBalancer --name=quakeflow-ui
+
+# Port forward
+kubectl port-forward svc/phasenet-api 8001:8001 --address='0.0.0.0' & \
+kubectl port-forward svc/gamma-api 8002:8002 --address='0.0.0.0' & \
+kubectl port-forward svc/deepdenoiser-api 8003:8003 --address='0.0.0.0' &

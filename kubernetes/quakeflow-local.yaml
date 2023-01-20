@@ -96,6 +96,46 @@ spec:
       port: 8002
       targetPort: 8000
   type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepdenoiser-api
+  labels:
+    app: deepdenoiser
+spec:
+  # replicas: 1
+  selector:
+    matchLabels:
+      app: deepdenoiser
+  template:
+    metadata:
+      labels:
+        app: deepdenoiser
+    spec:
+      containers:
+        - name: deepdenoiser
+          image: deepdenoiser-api:1.0
+          ports:
+            - containerPort: 8000
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deepdenoiser-api
+spec:
+  selector:
+    app: deepdenoiser
+  ports:
+    - protocol: TCP
+      port: 8003
+      targetPort: 8000
+  type: LoadBalancer
+  # type: NodePort
 # ---
 # apiVersion: apps/v1
 # kind: Deployment
