@@ -25,7 +25,7 @@ kubectl autoscale deployment deepdenoiser-api --cpu-percent=50 --min=1 --max=10
 
 # Expose APIs
 # kubectl expose deployment phasenet-api --type=LoadBalancer --name=phasenet-service
-# kubectl expose deployment gmma-api --type=LoadBalancer --name=gmma-service
+# kubectl expose deployment gamma-api --type=LoadBalancer --name=gmma-service
 # kubectl expose deployment quakeflow-streamlit --type=LoadBalancer --name=streamlit-ui
 # kubectl expose deployment quakeflow-ui --type=LoadBalancer --name=quakeflow-ui
 
