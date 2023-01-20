@@ -46,3 +46,4 @@ kubectl autoscale deployment gmma-api --cpu-percent=80 --min=1 --max=10
 kubectl port-forward svc/phasenet-api 8001:8001 --address='0.0.0.0' & \
 kubectl port-forward svc/gamma-api 8002:8002 --address='0.0.0.0' & \
 kubectl port-forward svc/deepdenoiser-api 8003:8003 --address='0.0.0.0' &
+# kubeflow port-forward svc/ml-pipeline-ui 8080:80 --address='0.0.0.0' &
