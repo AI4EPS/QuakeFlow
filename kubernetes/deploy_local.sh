@@ -5,11 +5,11 @@ eval $(minikube docker-env)
 git submodule update --init --recursive
 
 # Build all docker images
-cd PhaseNet; docker build --tag phasenet-api:1.0 . ; cd ..;
-cd GMMA; docker build --tag gmma-api:1.0 . ; cd ..;
-cd spark; docker build --tag quakeflow-spark:1.0 .; cd ..;
-cd waveform; docker build --tag quakeflow-waveform:1.0 .; cd ..;
-cd streamlit; docker build --tag quakeflow-streamlit:1.0 .; cd ..;
+cd ../PhaseNet; docker build --tag phasenet-api:1.0 . ; cd ../kubernetes;
+cd ../GaMMA; docker build --tag gamma-api:1.0 . ; cd ../kubernetes;
+cd ../spark; docker build --tag quakeflow-spark:1.0 .; cd ../kubernetes;
+cd ../waveform; docker build --tag quakeflow-waveform:1.0 .; cd ../kubernetes;
+cd ../streamlit; docker build --tag quakeflow-streamlit:1.0 .; cd ../kubernetes;
 
 # Deploy Kafka with Helm, create client and add topics
 helm repo add bitnami https://charts.bitnami.com/bitnami

@@ -53,7 +53,7 @@ spec:
     app: phasenet
   ports:
     - protocol: TCP
-      port: 8000
+      port: 8001
       targetPort: 8000
   type: LoadBalancer
   # type: NodePort
@@ -61,24 +61,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gmma-api
+  name: gamma-api
   labels:
-    app: gmma
+    app: gamma
 spec:
   # replicas: 1
   selector:
     matchLabels:
-      app: gmma
+      app: gamma
   template:
     metadata:
       labels:
-        app: gmma
+        app: gamma
     spec:
       containers:
-        - name: gmma
-          image: gmma-api:1.0
+        - name: gamma
+          image: gamma-api:1.0
           ports:
-            - containerPort: 8001
+            - containerPort: 8000
           imagePullPolicy: Never
           resources:
             requests:
@@ -87,14 +87,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gmma-api
+  name: gamma-api
 spec:
   selector:
-    app: gmma
+    app: gamma
   ports:
     - protocol: TCP
-      port: 8001
-      targetPort: 8001
+      port: 8002
+      targetPort: 8000
+  type: LoadBalancer
 # ---
 # apiVersion: apps/v1
 # kind: Deployment

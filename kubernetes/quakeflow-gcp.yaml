@@ -105,7 +105,7 @@ spec:
         - name: gamma
           image: zhuwq0/gamma-api:1.0
           ports:
-            - containerPort: 8001
+            - containerPort: 8000
           imagePullPolicy: Always
           resources:
             requests:
@@ -167,7 +167,7 @@ spec:
   ports:
     - protocol: TCP
       port: 8001
-      targetPort: 8001
+      targetPort: 8000
   type: LoadBalancer
   # type: NodePort
 ---
@@ -191,7 +191,7 @@ spec:
         - name: deepdenoiser
           image: zhuwq0/deepdenoiser-api:1.0
           ports:
-            - containerPort: 8002
+            - containerPort: 8000
           imagePullPolicy: Always
           resources:
             requests:
@@ -227,7 +227,7 @@ spec:
   ports:
     - protocol: TCP
       port: 8002
-      targetPort: 8002
+      targetPort: 8000
   type: LoadBalancer
   # type: NodePort
 # ---
