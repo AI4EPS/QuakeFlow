@@ -1,0 +1,15 @@
+apiVersion: skaffold/v4beta2
+kind: Config
+metadata:
+  name: quakeflow
+build:
+  artifacts:
+  - image: phasenet-api
+    context: PhaseNet
+  - image: gamma-api
+    context: GaMMA
+  - image: deepdenoiser-api
+    context: DeepDenoiser
+manifests:
+  rawYaml:
+    - kubernetes/quakeflow-local.yaml
