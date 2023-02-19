@@ -29,5 +29,5 @@ SHELL ["conda", "run", "-n", "quakeflow", "/bin/bash", "-c"]
 
 
 COPY . /app
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "quakeflow", "python", "/app/spark_structured_streaming.py"]
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "quakeflow", "python", "/app/spark_streaming.py"]
 # CMD /spark-2.4.7-bin-hadoop2.7/bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.4.0 /app/spark.py
