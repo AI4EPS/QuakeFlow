@@ -158,6 +158,7 @@ class Client(EasySeedLinkClient):
         value = {
             "timestamp": timestamp(trace.stats.starttime.datetime),
             "vec": (trace.data / station_resp[trace.id]).tolist(),
+            "dt": trace.stats.delta,
         }
         self.producer.send('waveform_raw', key=trace.id, value=value)
 
@@ -176,7 +177,8 @@ if __name__ == '__main__':
         )
     except Exception as error:
         print('k8s kafka not found or connection failed, fallback to local')
-        BROKER_URL = 'localhost:9092'
+        # BROKER_URL = '127.0.0.1:9092'
+        BROKER_URL = '127.0.0.1:9094'
         producer = KafkaProducer(
             bootstrap_servers=[BROKER_URL],
             key_serializer=lambda x: dumps(x).encode('utf-8'),
