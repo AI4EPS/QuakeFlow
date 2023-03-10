@@ -1,53 +1,122 @@
 # %%
 import obspy
-from obspy.clients.fdsn.mass_downloader import CircularDomain, Restrictions, MassDownloader
+from obspy.clients.fdsn.mass_downloader import CircularDomain, RectangularDomain, Restrictions, MassDownloader
 from dataclasses import dataclass
 import json
+import os
+from pathlib import Path
+from collections import defaultdict
 
 # %%
-with open("config.json", "r") as fp:
+result_path = Path("results")
+if not result_path.exists():
+    result_path.mkdir()
+
+# %%
+# config = {
+#     "region": "Ridgecrest",
+#     "center": [
+#         -117.504,
+#         35.705
+#     ],
+#     "longitude0": -117.504,
+#     "latitude0": 35.705,
+#     "maxradius_degree": 1.0,
+#     "horizontal_degree": 1.0,
+#     "vertical_degree": 1.0,
+#     "starttime": "2019-07-04T17:00:00",
+#     "endtime": "2019-07-04T19:00:00",
+#     "channel_list": [
+#         "HH[321ENZ]",
+#         "EH[321ENZ]",
+#         "HN[321ENZ]",
+#         "BH[321ENZ]",
+#     ],
+#     "provider": None,
+#     "degree2km": 111.19492474777779,
+# }
+
+# with open("config.json", "w") as fp:
+#     json.dump(config, fp, indent=4)
+
+
+# %%
+with open(result_path / "config.json", "r") as fp:
     config = json.load(fp)
 print(config)
 
 
 # %%
-
-origin_time = obspy.UTCDateTime(2011, 3, 11, 5, 47, 32)
-
-# Circular domain around the epicenter. This will download all data between
-# 70 and 90 degrees distance from the epicenter. This module also offers
-# rectangular and global domains. More complex domains can be defined by
-# inheriting from the Domain class.
-domain = CircularDomain(latitude=37.52, longitude=143.04, minradius=70.0, maxradius=90.0)
-
-restrictions = Restrictions(
-    # Get data from 5 minutes before the event to one hour after the
-    # event. This defines the temporal bounds of the waveform data.
-    starttime=origin_time - 5 * 60,
-    endtime=origin_time + 3600,
-    # You might not want to deal with gaps in the data. If this setting is
-    # True, any trace with a gap/overlap will be discarded.
-    reject_channels_with_gaps=True,
-    # And you might only want waveforms that have data for at least 95 % of
-    # the requested time span. Any trace that is shorter than 95 % of the
-    # desired total duration will be discarded.
-    minimum_length=0.95,
-    # No two stations should be closer than 10 km to each other. This is
-    # useful to for example filter out stations that are part of different
-    # networks but at the same physical station. Settings this option to
-    # zero or None will disable that filtering.
-    minimum_interstation_distance_in_m=10e3,
-    # Only HH or BH channels. If a station has HH channels, those will be
-    # downloaded, otherwise the BH. Nothing will be downloaded if it has
-    # neither. You can add more/less patterns if you like.
-    channel_priorities=["HH[ZNE]", "BH[ZNE]"],
-    # Location codes are arbitrary and there is no rule as to which
-    # location is best. Same logic as for the previous setting.
-    location_priorities=["", "00", "10"],
+domain = CircularDomain(
+    longitude=config["longitude0"], latitude=config["latitude0"], minradius=0, maxradius=config["maxradius_degree"]
 )
 
-# No specified providers will result in all known ones being queried.
-mdl = MassDownloader()
-# The data will be downloaded to the ``./waveforms/`` and ``./stations/``
-# folders with automatically chosen file names.
-mdl.download(domain, restrictions, mseed_storage="waveforms", stationxml_storage="stations")
+restrictions = Restrictions(
+    starttime=obspy.UTCDateTime(config["starttime"]),
+    endtime=obspy.UTCDateTime(config["endtime"]),
+    chunklength_in_sec=3600,
+    channel_priorities=config["channel_list"],
+    location_priorities=["", "--", "00", "10"],
+    minimum_interstation_distance_in_m=1000,
+)
+
+
+def get_mseed_storage(network, station, location, channel, starttime, endtime):
+    file_name = f"waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
+    if os.path.exists(file_name):
+        return True
+    return file_name
+
+
+# mdl = MassDownloader(providers=["SCEDC",])
+mdl = MassDownloader(
+    providers=config["provider"],
+)
+mdl.download(
+    domain,
+    restrictions,
+    mseed_storage=get_mseed_storage,
+    stationxml_storage="stations",
+)
+
+# %%
+responses = obspy.read_inventory("stations/*xml")
+
+
+def parse_response(response):
+    stations = {}
+    for net in response:
+        for sta in net:
+            components = defaultdict(list)
+            channel = {}
+
+            for chn in sta:
+                key = f"{chn.location_code}{chn.code[:-1]}"
+                components[key].append(chn.code[-1])
+
+                if key not in channel:
+                    channel[key] = {
+                        "latitude": chn.latitude,
+                        "longitude": chn.longitude,
+                        "elevation_m": chn.elevation,
+                        "location": chn.location_code,
+                        "device": chn.code[:-1],
+                    }
+
+            for key in components:
+                stations[f"{net.code}.{sta.code}.{channel[key]['location']}.{channel[key]['device']}"] = {
+                    "network": net.code,
+                    "station": sta.code,
+                    "location": channel[key]["location"],
+                    "component": sorted(components[key]),
+                    "latitude": channel[key]["latitude"],
+                    "longitude": channel[key]["longitude"],
+                    "elevation_m": channel[key]["elevation_m"],
+                }
+    return stations
+
+
+stations = parse_response(responses)
+with open(result_path / "stations.json", "w") as f:
+    json.dump(stations, f, indent=4)
+# %%

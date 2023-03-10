@@ -1,0 +1,5 @@
+obspy
+h5py
+tensorflow
+tqdm
+pymongo
