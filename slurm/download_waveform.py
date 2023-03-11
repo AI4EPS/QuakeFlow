@@ -13,31 +13,33 @@ if not result_path.exists():
     result_path.mkdir()
 
 # %%
-# config = {
-#     "region": "Ridgecrest",
-#     "center": [
-#         -117.504,
-#         35.705
-#     ],
-#     "longitude0": -117.504,
-#     "latitude0": 35.705,
-#     "maxradius_degree": 1.0,
-#     "horizontal_degree": 1.0,
-#     "vertical_degree": 1.0,
-#     "starttime": "2019-07-04T17:00:00",
-#     "endtime": "2019-07-04T19:00:00",
-#     "channel_list": [
-#         "HH[321ENZ]",
-#         "EH[321ENZ]",
-#         "HN[321ENZ]",
-#         "BH[321ENZ]",
-#     ],
-#     "provider": None,
-#     "degree2km": 111.19492474777779,
-# }
+config = {
+    "region": "Ridgecrest",
+    "center": [
+        -117.504,
+        35.705
+    ],
+    "longitude0": -117.504,
+    "latitude0": 35.705,
+    "xlim_degree": [-118.504, -116.504],
+    "ylim_degree": [34.705, 36.705],
+    "maxradius_degree": 1.0,
+    "horizontal_degree": 1.0,
+    "vertical_degree": 1.0,
+    "starttime": "2019-07-04T17:00:00",
+    "endtime": "2019-07-04T19:00:00",
+    "channel_list": [
+        "HH[321ENZ]",
+        "EH[321ENZ]",
+        "HN[321ENZ]",
+        "BH[321ENZ]",
+    ],
+    "provider": ["IRIS", "SCEDC"],
+    "degree2km": 111.19492474777779,
+}
 
-# with open("config.json", "w") as fp:
-#     json.dump(config, fp, indent=4)
+with open(result_path/"config.json", "w") as fp:
+    json.dump(config, fp, indent=4)
 
 
 # %%

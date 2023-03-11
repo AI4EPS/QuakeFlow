@@ -1,15 +1,16 @@
 # %%
-import multiprocessing as mp
-import pandas as pd
-from pathlib import Path
-import numpy as np
 import json
+import multiprocessing as mp
 from dataclasses import dataclass
-# from cctorch import extract_template_numpy
 from datetime import datetime, timedelta, timezone
-import obspy
-from tqdm import tqdm
+from pathlib import Path
+
 import gamma
+import numpy as np
+import obspy
+import pandas as pd
+from tqdm import tqdm
+
 
 def extract_template_numpy(template_array, travel_time_array, travel_time_index_array, travel_time_type_array, snr_array,
                            mseed_path, events, stations, picks, config, output_path, figure_path, lock, ibar):
@@ -89,25 +90,26 @@ def extract_template_numpy(template_array, travel_time_array, travel_time_index_
                     ## TODO: check if multiple phases for the same station
                     phase_timestamp = picks_.loc[f"{station_id}.{phase_type}"]["phase_timestamp"]
                     phase_timestamp_pred[j] = phase_timestamp
+                    mean_shift.append(phase_timestamp - (events_.loc[event_index]["event_timestamp"] + travel_time[j]))
+                    
                     travel_time[j] = phase_timestamp - events_.loc[event_index]["event_timestamp"]
                     travel_time_type_[i, j] = 1
-                    mean_shift.append(phase_timestamp - (events_.loc[event_index]["event_timestamp"] - travel_time[j]))
                 else:
                     travel_time_type_[i, j] = 0
-            if len(mean_shift) > 0:
-                mean_shift = float(np.median(mean_shift))
-            else:
-                mean_shift = 0
-            phase_timestamp_pred[travel_time_type_[i, :] == 0] += mean_shift
-            travel_time[travel_time_type_[i, :] == 0] += mean_shift
-            travel_time_[i, :] = travel_time
+
+            # if len(mean_shift) > 0:
+            #     mean_shift = float(np.median(mean_shift))
+            # else:
+            #     mean_shift = 0
+            # phase_timestamp_pred[travel_time_type_[i, :] == 0] += mean_shift
+            # travel_time[travel_time_type_[i, :] == 0] += mean_shift
+            # travel_time_[i, :] = travel_time
 
             for c in config.components:
                 
                 c_index = i*3 + config.component_mapping[c]
                 empty_data = True
 
-                # fig, axis = plt.subplots(1, 1, squeeze=False, figsize=(6, 10))
                 for j, station_id in enumerate(stations["station_id"]):
 
                     if f"{station_id}{c}" in waveforms_dict:
@@ -125,12 +127,6 @@ def extract_template_numpy(template_array, travel_time_array, travel_time_index_
                             + config.time_after
                         )
                         
-                        # if begin_time < 0:
-                        #     print(f"{events_.loc[event_index]['event_time'] = }")
-                        #     print(f"{predicted_phase_timestamp[j] = }")
-                        #     print(f"{trace.stats.starttime.datetime = }")
-                        #     print(f"{trace.stats.starttime.datetime.replace(tzinfo=timezone.utc).timestamp() = }")
-                        #     print(f"{begin_time = }")
 
                         
                         trace_data = trace.data[
@@ -146,25 +142,6 @@ def extract_template_numpy(template_array, travel_time_array, travel_time_index_
                         if std == 0:
                             continue
 
-                        # if trace.stats.sampling_rate != config.sampling_rate:
-                        #     # print(f"Resampling {trace.id}: {trace.stats.sampling_rate}Hz -> {config.sampling_rate}Hz")
-                        #     trace_data = resample(trace_data, trace.stats.sampling_rate, config.sampling_rate)
-                        #     if len(trace_data) < config.nt:
-                        #         continue
-                        # if len(trace_data) > config.nt:
-                        #     print(f"{len(trace_data) = }")
-                        #     print(f"{begin_time = }")
-                        #     print(f"{end_time = }")
-                        #     print(f"{max(0, int(begin_time * trace.stats.sampling_rate)) = }")
-                        #     print(f"{int(end_time * trace.stats.sampling_rate) = }")
-
-                        # trace_data -= np.mean(trace_data)
-                        # trace_data = detrend(trace_data)
-                        # trace_data = taper(trace_data, taper_type="hann", taper_fraction=0.05)
-                        # # trace_data = filter(trace_data, type="highpass", freq=1, sampling_rate=config.sampling_rate)
-                        # trace_data = filter(trace_data, type="bandpass", freq=(1, 15), sampling_rate=config.sampling_rate)
-
-                        # if travel_time_type_[i, j] == 1:
 
                         empty_data = False
                         template_[c_index, j, : config.nt] = trace_data[: config.nt]
@@ -175,21 +152,6 @@ def extract_template_numpy(template_array, travel_time_array, travel_time_index_
                         else:
                             snr_[c_index, j] = s / n
 
-                #         if travel_time_type_[i, j] == 1:
-                #             color = "r"
-                #         else:
-                #             color = "k"
-                #         axis[0, 0].plot(
-                #             np.arange(len(trace_data)) / config.sampling_rate - config.time_before,
-                #             trace_data / std / 3.0 + j,
-                #             c=color,
-                #             linewidth=0.5,
-                #             label=station_id,
-                #         )
-                        
-                # if not empty_data:
-                #     fig.savefig(figure_path / f"{event_index}_{phase_type}_{c}.png", dpi=300)
-                #     plt.close(fig)
 
         template_array[event_index] = template_
         travel_time_array[event_index] = travel_time_
@@ -238,13 +200,6 @@ with open(result_path / "config.json", "r") as f:
 print(config.__dict__)
 
 # %%
-
-# min_longitude, max_longitude, min_latitude, max_latitude = [34.7 + 0.4, 39.7 - 0.4, 35.5, 39.5 - 0.1]
-# center = [round((min_longitude + max_longitude) / 2, 2), round((min_latitude + max_latitude) / 2, 2)]
-# config.center = center
-# config.xlim_degree = [round(min_longitude, 2), round(max_longitude, 2)]
-# config.ylim_degree = [round(min_latitude, 2), round(max_latitude, 2)]
-
 stations = pd.read_json(result_path / "stations.json", orient="index")
 stations["station_id"] = stations.index
 stations = stations[
@@ -268,9 +223,6 @@ stations["y_km"] = stations.apply(lambda x: (x.latitude - config.center[1]) * co
 stations["z_km"] = stations.apply(lambda x: -x.elevation_m / 1e3, axis=1)
 
 # %%
-# events = pd.read_csv(
-#     "../EikoLoc/eikoloc_catalog.csv", parse_dates=["time"], date_parser=lambda x: pd.to_datetime(x, utc=True)
-# )
 events = pd.read_csv(
     result_path/"gamma_catalog.csv", parse_dates=["time"], date_parser=lambda x: pd.to_datetime(x, utc=True)
 )
@@ -286,8 +238,6 @@ events["y_km"] = events.apply(lambda x: (x.latitude - config.center[1]) * config
 events["z_km"] = events.apply(lambda x: x.depth_km, axis=1)
 
 # %%
-# events = events[events["event_index"].isin([1452114, 1452121, 1452131, 1452141, 1452151, 1452161, 1452171])]
-# events = events.iloc[-1000:]
 event_index = list(events["event_index"])
 with open(output_path/"event_index.txt", "w") as f:
     for i in event_index:
@@ -321,12 +271,17 @@ nch = 6 ## For [P,S] phases and [E,N,Z] components
 nev = int(events.index.max()) + 1
 nst = len(stations)
 print(f"nev: {nev}, nst: {nst}, nch: {nch}, nt: {nt}")
-config.template_shape = [nev, nch, nst, nt]
-template_array = np.memmap(output_path/"template.dat", dtype=np.float32, mode="w+", shape=(nev, nch, nst, nt))
-travel_time_array = np.memmap(output_path/"travel_time.dat", dtype=np.float32, mode="w+", shape=(nev, nch//3, nst))
-travel_time_index_array = np.memmap(output_path/"travel_time_index.dat", dtype=np.int32, mode="w+", shape=(nev, nch//3, nst))
-travel_time_type_array = np.memmap(output_path/"travel_time_type.dat", dtype=np.int32, mode="w+", shape=(nev, nch//3, nst))
-snr_array = np.memmap(output_path/"snr.dat", dtype=np.float32, mode="w+", shape=(nev, nch, nst))
+template_shape = (nev, nch, nst, nt)
+traveltime_shape = (nev, nch//3, nst)
+snr_shape = (nev, nch, nst)
+config.template_shape = template_shape
+config.traveltime_shape = traveltime_shape
+config.snr_shape = snr_shape
+template_array = np.memmap(output_path/"template.dat", dtype=np.float32, mode="w+", shape=template_shape)
+travel_time_array = np.memmap(output_path/"travel_time.dat", dtype=np.float32, mode="w+", shape=traveltime_shape)
+travel_time_index_array = np.memmap(output_path/"travel_time_index.dat", dtype=np.int32, mode="w+", shape=traveltime_shape)
+travel_time_type_array = np.memmap(output_path/"travel_time_type.dat", dtype=np.int32, mode="w+", shape=traveltime_shape)
+snr_array = np.memmap(output_path/"snr.dat", dtype=np.float32, mode="w+", shape=snr_shape)
 
 # %%
 with open(output_path/"config.json", "w") as f:
