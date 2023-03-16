@@ -145,6 +145,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+Trash
 
 # seismic data
 *.mseed
@@ -160,4 +161,5 @@ slurm/figures/
 slurm/waveforms/
 slurm/results/
 slurm/templates/
-Trash
+slurm/relocation/hypodd/
+slurm/relocation/growclust/

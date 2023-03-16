@@ -26,15 +26,17 @@ config = {
     "maxradius_degree": 1.0,
     "horizontal_degree": 1.0,
     "vertical_degree": 1.0,
-    "starttime": "2019-07-04T17:00:00",
-    "endtime": "2019-07-04T19:00:00",
+    # "starttime": "2019-07-04T17:00:00",
+    # "endtime": "2019-07-04T19:00:00",
+    "starttime": "2019-07-04T00:00:00",
+    "endtime": "2019-07-10T00:00:00",
     "channel_list": [
         "HH[321ENZ]",
         "EH[321ENZ]",
         "HN[321ENZ]",
         "BH[321ENZ]",
     ],
-    "provider": ["IRIS", "SCEDC"],
+    "provider": ["SCEDC", "IRIS"],
     "degree2km": 111.19492474777779,
 }
 

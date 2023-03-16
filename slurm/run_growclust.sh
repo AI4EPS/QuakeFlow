@@ -29,7 +29,7 @@ stlist.txt
 * xcordat_fmt (0 = binary, 1 = text), tdif_fmt (21 = tt2-tt1, 12 = tt1-tt2)
 1  12
 * fin_xcordat
-xcordata_debug.txt
+dt.cc
 *
 *******************************************
 *** Velocity Model / Travel Time Tables ***

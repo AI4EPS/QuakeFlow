@@ -7,12 +7,12 @@ import numpy as np
 import json
 import pandas as pd
 from datetime import datetime
+import os
 
 # %%
 output_path = Path("relocation/hypodd/")
 if not output_path.exists():
     output_path.mkdir(parents=True)
-
 
 # %%
 ############################################# Station Format ######################################################
@@ -22,7 +22,7 @@ stations = pd.read_json(station_json, orient="index")
 converted_hypoinverse = []
 converted_hypodd = {}
 
-for sta, row in tqdm(stations.iterrows()):
+for sta, row in stations.iterrows():
 
     network_code, station_code, comp_code, channel_code = sta.split(".")
     station_weight = " "
@@ -36,9 +36,10 @@ for sta, row in tqdm(stations.iterrows()):
     line_hypoinverse = f"{station_code:<5} {network_code:<2} {comp_code[:-1]:<1}{channel_code:<3} {station_weight}{abs(lat_degree):2.0f} {abs(lat_minute):7.4f}{north}{abs(lng_degree):3.0f} {abs(lng_minute):7.4f}{west}{elevation:4.0f}\n"
     converted_hypoinverse.append(line_hypoinverse)
 
-    tmp_code = f"{station_code}{channel_code}"
+    # tmp_code = f"{station_code}{channel_code}"
+    tmp_code = f"{station_code}"
     converted_hypodd[
-        f"{station_code}{channel_code}"
+        tmp_code
     ] = f"{tmp_code:<8s} {row['latitude']:.3f} {row['longitude']:.3f}\n"
 
 
@@ -91,10 +92,15 @@ for i, event in events.iterrows():
         phase_type = pick["phase_type"].upper()
         phase_score = pick["phase_score"]
         pick_time = (datetime.strptime(pick["phase_time"], "%Y-%m-%dT%H:%M:%S.%f") - event_time).total_seconds()
-        tmp_code = f"{station_code}{channel_code}"
+        # tmp_code = f"{station_code}{channel_code}"
+        tmp_code = f"{station_code}"
         pick_line = f"{tmp_code:<7s}   {pick_time:6.3f}   {phase_score:5.4f}   {phase_type}\n"
         # output_lines.append(pick_line)
         lines.append(pick_line)
 
 with open(output_path / "phase.txt", "w") as fp:
     fp.writelines(lines)
+
+# %%
+os.system("python convert_dtcc.py")
+os.system("cp templates/dt.cc relocation/hypodd/")

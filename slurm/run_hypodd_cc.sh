@@ -1,31 +1,14 @@
 #!/bin/bash
 cd relocation/hypodd
 
-cat <<EOF > phd2dt.inp
-* ph2dt.inp - input control file for program ph2dt
-* Input station file:
-stations.dat
-* Input phase file:
-phase.txt
-*MINWGHT: min. pick weight allowed [0]
-*MAXDIST: max. distance in km between event pair and stations [200]
-*MAXSEP: max. hypocentral separation in km [10]
-*MAXNGH: max. number of neighbors per event [10]
-*MINLNK: min. number of links required to define a neighbor [8]
-*MINOBS: min. number of links per pair saved [8]
-*MAXOBS: max. number of links per pair saved [20]
-*MINWGHT MAXDIST MAXSEP MAXNGH MINLNK MINOBS MAXOBS
-   0      120     10     50     8      8     100
-EOF
-
-cat <<EOF > ct.inp
+cat <<EOF > cc.inp
 * RELOC.INP:
 *--- input file selection
 * cross correlation diff times:
-
+dt.cc
 *
 *catalog P diff times:
-dt.ct
+
 *
 * event file:
 event.sel
@@ -37,7 +20,7 @@ stations.dat
 * original locations:
 hypodd.loc
 * relocations:
-hypodd.reloc
+hypodd_cc.reloc
 * station information:
 hypodd.sta
 * residual information:
@@ -50,7 +33,7 @@ hypodd.src
 * IPHA: 1= P; 2= S; 3= P&S
 * DIST:max dist [km] between cluster centroid and station 
 * IDAT   IPHA   DIST
-    2     3     120
+    1     3     120
 *
 *--- event clustering:
 * OBSCC:    min # of obs/pair for crosstime data (0= no clustering)
@@ -74,10 +57,10 @@ hypodd.src
 * DAMP:    		damping (for lsqr only) 
 *       ---  CROSS DATA ----- ----CATALOG DATA ----
 * NITER WTCCP WTCCS WRCC WDCC WTCTP WTCTS WRCT WDCT DAMP
-   4     -9     -9   -9    -9   1     1      8   -9  70 
-   4     -9     -9   -9    -9   1     1      6    4  70 
-   4     -9     -9   -9    -9   1    0.8     4    2  70 
-   4     -9     -9   -9    -9   1    0.8     3    2  70 
+   4      1    1    -9    -9    -9    -9     -9    -9  70
+   4      1    1     6    -9    -9    -9     -9    -9  70
+   4      1    0.8   3     4    -9    -9     -9    -9  70
+   4      1    0.8   2     2    -9    -9     -9    -9  70
 *
 *--- 1D model:
 * NLAY:		number of model layers  
@@ -99,7 +82,7 @@ hypodd.src
 * ID
 EOF
 
-../HypoDD/src/ph2dt/ph2dt phd2dt.inp
-../HypoDD/src/hypoDD/hypoDD ct.inp
-cp hypodd.reloc ../../results/hypodd_catalog.txt
+cp ../../results/hypodd_ct_catalog.txt hypodd.loc
+../HypoDD/src/hypoDD/hypoDD cc.inp
+cp hypodd_cc.reloc ../../results/hypodd_cc_catalog.txt
 cd ../../
