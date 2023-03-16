@@ -1,6 +1,3 @@
-# %% [markdown]
-# # PhaseNet Example
-# 
 # Applying GaMMA to associate PhaseNet picks
 
 # %%

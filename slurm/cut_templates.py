@@ -103,7 +103,7 @@ def extract_template_numpy(template_array, travel_time_array, travel_time_index_
             #     mean_shift = 0
             # phase_timestamp_pred[travel_time_type_[i, :] == 0] += mean_shift
             # travel_time[travel_time_type_[i, :] == 0] += mean_shift
-            # travel_time_[i, :] = travel_time
+            travel_time_[i, :] = travel_time
 
             for c in config.components:
                 
@@ -254,6 +254,7 @@ picks_ = picks.groupby("station_id").size()
 station_id_ = picks_[picks_ > (picks_.sum() / len(picks_) * 0.1)].index
 stations = stations[stations["station_id"].isin(station_id_)]
 stations.to_json(output_path/"stations_filtered.json", orient="index", indent=4)
+stations.to_csv(output_path/"stations_filtered.csv", index=True, index_label="station_id")
 
 # %%
 picks = picks.merge(stations, on="station_id")
