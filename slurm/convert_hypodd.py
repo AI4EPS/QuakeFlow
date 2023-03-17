@@ -8,6 +8,15 @@ import json
 import pandas as pd
 from datetime import datetime
 import os
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    ## true
+    parser.add_argument("--dtcc", action="store_true", help="run convert_dtcc.py")
+    return parser.parse_args()
+
+args = parse_args()
 
 # %%
 output_path = Path("relocation/hypodd/")
@@ -18,6 +27,9 @@ if not output_path.exists():
 ############################################# Station Format ######################################################
 station_json = Path("results/stations.json")
 stations = pd.read_json(station_json, orient="index")
+
+# shift_topo = stations["elevation_m"].max()/1e3 + 2.0
+shift_topo = 2.0 ## prevent air quakes
 
 converted_hypoinverse = []
 converted_hypodd = {}
@@ -61,11 +73,11 @@ picks = picks.loc[picks["event_index"].isin(events["event_index"])]
 
 lines = []
 picks_by_event = picks.groupby("event_index").groups
-for i, event in events.iterrows():
+for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(events)):
     event_time = datetime.strptime(event["time"], "%Y-%m-%dT%H:%M:%S.%f")
     lat = event["latitude"]
     lng = event["longitude"]
-    dep = event["depth(m)"] / 1e3
+    dep = event["depth(m)"] / 1e3 + shift_topo
     mag = event["magnitude"]
     EH = 0
     EZ = 0
@@ -102,5 +114,6 @@ with open(output_path / "phase.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
-os.system("python convert_dtcc.py")
-os.system("cp templates/dt.cc relocation/hypodd/")
+if args.dtcc:
+    os.system("python convert_dtcc.py")
+    os.system("cp templates/dt.cc relocation/hypodd/")

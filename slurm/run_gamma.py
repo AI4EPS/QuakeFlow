@@ -33,7 +33,11 @@ with open(data_dir("config.json"), "r") as f:
 picks = pd.read_csv(pick_csv)
 picks["id"] = picks["station_id"]
 picks["timestamp"] = picks["phase_time"]
-picks["amp"] = picks["phase_amp"]
+if "phase_amp" in picks.columns:
+    picks["amp"] = picks["phase_amp"]
+    picks["phase_amplitude"] = picks["phase_amp"]
+if "phase_amplitude" in picks.columns:
+    picks["amp"] = picks["phase_amplitude"]
 picks["type"] = picks["phase_type"]
 picks["prob"] = picks["phase_score"]
 
@@ -70,6 +74,7 @@ config["bfgs_bounds"] = (
 
 # DBSCAN
 config["dbscan_eps"] = 10 #s
+# config["dbscan_eps"] = 6 #s
 config["dbscan_min_samples"] = 3
 
 ## Eikonal for 1D velocity model
@@ -109,6 +114,7 @@ event_idx0 += len(catalogs)
 catalogs = pd.DataFrame(catalogs, columns=["time"]+config["dims"]+["magnitude", "sigma_time", "sigma_amp", "cov_time_amp",  "event_index", "gamma_score"])
 catalogs[["longitude","latitude"]] = catalogs.apply(lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1)
 catalogs["depth(m)"] = catalogs["z(km)"].apply(lambda x: x*1e3)
+catalogs.sort_values("time", inplace=True)
 with open(catalog_csv, 'w') as fp:
     catalogs.to_csv(fp, index=False, 
                     float_format="%.3f",
@@ -122,6 +128,6 @@ picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({'even
 with open(picks_csv, 'w') as fp:
     picks.to_csv(fp, index=False, 
                     date_format='%Y-%m-%dT%H:%M:%S.%f',
-                    columns=["station_id", "phase_time", "phase_type", "phase_score", "phase_amp", "event_index", "gamma_score"])
+                    columns=["station_id", "phase_time", "phase_type", "phase_score", "phase_amplitude", "event_index", "gamma_score"])
 
 

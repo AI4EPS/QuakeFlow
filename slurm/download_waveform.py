@@ -59,9 +59,11 @@ restrictions = Restrictions(
     starttime=obspy.UTCDateTime(config["starttime"]),
     endtime=obspy.UTCDateTime(config["endtime"]),
     chunklength_in_sec=3600,
-    channel_priorities=config["channel_list"],
-    location_priorities=["", "--", "00", "10"],
+    # channel_priorities=config["channel_list"],
+    # location_priorities=["", "--", "00", "10"],
     minimum_interstation_distance_in_m=1000,
+    minimum_length=0.1,
+    reject_channels_with_gaps=False,
 )
 
 
