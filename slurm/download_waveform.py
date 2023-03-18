@@ -86,11 +86,18 @@ mdl.download(
 )
 
 # %%
+mseeds = Path("waveforms").rglob("*.mseed")
+mseed_ids = []
+for mseed in mseeds:
+    mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
+
+
+# %%
 responses = obspy.read_inventory("stations/*xml")
 
-
-def parse_response(response):
+def parse_response(response, mseed_ids=None):
     stations = {}
+    num = 0
     for net in response:
         for sta in net:
             components = defaultdict(list)
@@ -110,7 +117,11 @@ def parse_response(response):
                     }
 
             for key in components:
-                stations[f"{net.code}.{sta.code}.{channel[key]['location']}.{channel[key]['device']}"] = {
+                station_id = f"{net.code}.{sta.code}.{channel[key]['location']}.{channel[key]['device']}"
+                if station_id not in mseed_ids:
+                    continue
+                num += 1
+                stations[station_id] = {
                     "network": net.code,
                     "station": sta.code,
                     "location": channel[key]["location"],
@@ -119,10 +130,13 @@ def parse_response(response):
                     "longitude": channel[key]["longitude"],
                     "elevation_m": channel[key]["elevation_m"],
                 }
+                
+    print(f"Found {num} stations")
+
     return stations
 
 
-stations = parse_response(responses)
+stations = parse_response(responses, mseed_ids)
 with open(result_path / "stations.json", "w") as f:
     json.dump(stations, f, indent=4)
 # %%

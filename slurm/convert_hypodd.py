@@ -28,8 +28,9 @@ if not output_path.exists():
 station_json = Path("results/stations.json")
 stations = pd.read_json(station_json, orient="index")
 
-# shift_topo = stations["elevation_m"].max()/1e3 + 2.0
-shift_topo = 2.0 ## prevent air quakes
+## prevent air quakes
+shift_topo = stations["elevation_m"].max()/1e3
+# shift_topo =+ 2.0
 
 converted_hypoinverse = []
 converted_hypodd = {}

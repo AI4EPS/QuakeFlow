@@ -3,18 +3,16 @@ from pathlib import Path
 import os
 
 # %%
-mseed_path = Path("waveforms")
-mseeds = sorted(list(mseed_path.rglob("*.mseed")))
-file_list = []
-for f in mseeds:
-    file_list.append(str(f).split(".mseed")[0][:-1]+"*.mseed")
-
-file_list = sorted(list(set(file_list)))
+waveform_path = Path("waveforms")
+mseed_list = sorted(list(waveform_path.rglob("*.mseed")))
+mseeds = []
+for f in mseed_list:
+    mseeds.append(str(f).split(".mseed")[0][:-1]+"*.mseed")
 
 # %%
 with open("mseed.csv", "w") as fp:
     fp.write("fname\n")
-    fp.write("\n".join(file_list))
+    fp.write("\n".join(mseeds))
 
 
 # %%

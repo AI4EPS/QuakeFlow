@@ -1,7 +1,7 @@
 #!/bin/bash
 cd relocation/hypodd
 
-cat <<EOF > phd2dt.inp
+cat <<EOF > ph2dt.inp
 * ph2dt.inp - input control file for program ph2dt
 * Input station file:
 stations.dat
@@ -99,7 +99,7 @@ hypodd.src
 * ID
 EOF
 
-../HypoDD/src/ph2dt/ph2dt phd2dt.inp
+../HypoDD/src/ph2dt/ph2dt ph2dt.inp
 ../HypoDD/src/hypoDD/hypoDD ct.inp
 cp hypodd_ct.reloc ../../results/hypodd_ct_catalog.txt
 cd ../../
