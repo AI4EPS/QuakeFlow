@@ -1,4 +1,11 @@
 ```
+mkir relocation
+cd relocation
+git clone git@github.com:zhuwq0/GrowClust.git
+git clone git@github.com:zhuwq0/HypoDD.git
+cd ..
+```
+```
 python download_waveform.py
 python run_phasenet.py
 python run_gamma.py
