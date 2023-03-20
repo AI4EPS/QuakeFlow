@@ -103,7 +103,7 @@ phase_list = ["P", "S"]
 def extract_picks(pair, data):
 
     h5, id1, id2 = pair
-    if id1 > id2:
+    if int(id1) > int(id2):
         return 0
 
     with h5py.File(h5, "r") as fp:
@@ -160,7 +160,7 @@ with mp.Manager() as manager:
                 for id2 in gp1:
                     pair_list.append((h5, id1, id2))
 
-
+    print(f"Initial number of pair: {len(pair_list)//2}")
     ncpu = max(1, mp.cpu_count()-1)
     with mp.Pool(processes=ncpu) as pool:
         pool.starmap(extract_picks, [(pair, data) for pair in pair_list])
@@ -168,8 +168,6 @@ with mp.Manager() as manager:
     data = dict(data)
 
 # %%
-print(f"Number of pairs: {len(data)//2}")
-
 with open(output_path / "dt.cc", "w") as fp:
     for key in tqdm(sorted(data.keys())):
         fp.write(f"# {key[0]} {key[1]} 0.000\n")

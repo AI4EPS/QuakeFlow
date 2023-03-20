@@ -202,12 +202,12 @@ print(config.__dict__)
 # %%
 stations = pd.read_json(result_path / "stations.json", orient="index")
 stations["station_id"] = stations.index
-stations = stations[
-    (stations["longitude"] > config.xlim_degree[0])
-    & (stations["longitude"] < config.xlim_degree[1])
-    & (stations["latitude"] > config.ylim_degree[0])
-    & (stations["latitude"] < config.ylim_degree[1])
-]
+# stations = stations[
+#     (stations["longitude"] >= config.xlim_degree[0])
+#     & (stations["longitude"] =< config.xlim_degree[1])
+#     & (stations["latitude"] >= config.ylim_degree[0])
+#     & (stations["latitude"] <= config.ylim_degree[1])
+# ]
 # stations["distance_km"] = stations.apply(
 #     lambda x: math.sqrt((x.latitude - config.center[1]) ** 2 + (x.longitude - config.center[0]) ** 2)
 #     * config.degree2km,
@@ -251,8 +251,9 @@ picks = picks[picks["event_index"] != -1]
 picks["phase_timestamp"] = picks["phase_time"].apply(lambda x: x.timestamp())
 
 picks_ = picks.groupby("station_id").size()
-station_id_ = picks_[picks_ > (picks_.sum() / len(picks_) * 0.1)].index
-stations = stations[stations["station_id"].isin(station_id_)]
+# station_id_ = picks_[picks_ > (picks_.sum() / len(picks_) * 0.1)].index
+# stations = stations[stations["station_id"].isin(station_id_)]
+stations = stations[stations["station_id"].isin(picks_.index)]
 stations.to_json(output_path/"stations_filtered.json", orient="index", indent=4)
 stations.to_csv(output_path/"stations_filtered.csv", index=True, index_label="station_id")
 

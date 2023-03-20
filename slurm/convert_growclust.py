@@ -8,6 +8,15 @@ import json
 import pandas as pd
 from datetime import datetime
 import os
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    ## true
+    parser.add_argument("--dtcc", action="store_true", help="run convert_dtcc.py")
+    return parser.parse_args()
+
+args = parse_args()
 
 # %%
 output_path = Path("relocation/growclust/")
@@ -17,8 +26,9 @@ if not output_path.exists():
 
 # %%
 station_file = Path("templates/stations_filtered.csv")
-# station_df = pd.read_json(station_file, orient="index")
 station_df = pd.read_csv(station_file)
+# station_file = Path("results/stations.json")
+# station_df = pd.read_json(station_file, orient="index")
 
 lines = []
 for i, row in station_df.iterrows():
@@ -34,7 +44,6 @@ with open(output_path / "stlist.txt", "w") as fp:
 catalog_file = Path("results/gamma_catalog.csv")
 catalog_df = pd.read_csv(catalog_file)
 
-# %%
 catalog_df[["year", "month", "day", "hour", "minute", "second"]] = (
     catalog_df["time"]
     .apply(lambda x: datetime.fromisoformat(x).strftime("%Y %m %d %H %M %S.%f").split(" "))
@@ -42,7 +51,6 @@ catalog_df[["year", "month", "day", "hour", "minute", "second"]] = (
     .apply(pd.to_numeric)
 )
 
-# %%
 lines = []
 for i, row in catalog_df.iterrows():
     # yr mon day hr min sec lat lon dep mag eh ez rms evid
@@ -51,7 +59,26 @@ for i, row in catalog_df.iterrows():
 
 with open(output_path / "evlist.txt", "w") as fp:
     fp.writelines(lines)
+
 # %%
 
-os.system("python convert_dtcc.py")
-os.system("cp templates/dt.cc relocation/growclust/")
+if not args.dtcc:
+    dt_ct = Path("relocation/hypodd/dt.ct")
+    lines = []
+    with open(dt_ct, "r") as fp:
+        for line in tqdm(fp):
+            if line.startswith("#"):
+                ev1, ev2 = line.split()[1:3]
+                lines.append(f"# {ev1} {ev2} 0.000\n")
+            else:
+                station, t1, t2, score, phase = line.split()
+                lines.append(f"{station} {float(t1)-float(t2):.5f} {score} {phase}\n")
+
+    with open(output_path / "dt.ct", "w") as fp:
+        fp.writelines(lines)
+
+# %%
+if args.dtcc:
+    if not os.path.exists("relocation/growclust/dt.cc"):
+        os.system("python convert_dtcc.py")
+    os.system("cp templates/dt.cc relocation/growclust/")

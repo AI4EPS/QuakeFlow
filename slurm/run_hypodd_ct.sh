@@ -74,10 +74,10 @@ hypodd.src
 * DAMP:    		damping (for lsqr only) 
 *       ---  CROSS DATA ----- ----CATALOG DATA ----
 * NITER WTCCP WTCCS WRCC WDCC WTCTP WTCTS WRCT WDCT DAMP
-   4     -9     -9   -9    -9   1     1      8   -9  70 
-   4     -9     -9   -9    -9   1     1      6    4  70 
-   4     -9     -9   -9    -9   1    0.8     4    2  70 
-   4     -9     -9   -9    -9   1    0.8     3    2  70 
+   4     -9     -9   -9    -9   1     1      6   10 4000 
+   4     -9     -9   -9    -9   1     1      6    8 3000 
+   4     -9     -9   -9    -9   1     1      6    6 2000 
+   4     -9     -9   -9    -9   1     1      6    4 1000 
 *
 *--- 1D model:
 * NLAY:		number of model layers  
@@ -85,7 +85,7 @@ hypodd.src
 * TOP:		depths of top of layer (km) 
 * VEL: 		layer velocities (km/s)
 * NLAY  RATIO 
-   12     1.82
+   12     1.73
 * TOP 
 0.0 1.0 3.0 5.0 7.0 9.0 11.0 13.0 17.0 21.0 31.00 31.10
 * VEL

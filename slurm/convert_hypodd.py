@@ -13,7 +13,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
     ## true
-    parser.add_argument("--dtcc", action="store_true", help="run convert_dtcc.py")
+    parser.add_argument("--dt_cc", action="store_true", help="run convert_dtcc.py")
     return parser.parse_args()
 
 args = parse_args()
@@ -28,9 +28,10 @@ if not output_path.exists():
 station_json = Path("results/stations.json")
 stations = pd.read_json(station_json, orient="index")
 
-## prevent air quakes
 shift_topo = stations["elevation_m"].max()/1e3
-# shift_topo =+ 2.0
+# shift_topo = stations["elevation_m"].max()/1e3 + 3.0
+# shift_topo = 0.0 ## prevent air quakes
+# shift_topo = 3.0
 
 converted_hypoinverse = []
 converted_hypodd = {}
@@ -115,6 +116,6 @@ with open(output_path / "phase.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
-if args.dtcc:
+if args.dt_cc:
     os.system("python convert_dtcc.py")
     os.system("cp templates/dt.cc relocation/hypodd/")

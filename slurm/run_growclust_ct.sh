@@ -29,7 +29,7 @@ stlist.txt
 * xcordat_fmt (0 = binary, 1 = text), tdif_fmt (21 = tt2-tt1, 12 = tt1-tt2)
 1  12
 * fin_xcordat
-dt.cc
+dt.ct
 *
 *******************************************
 *** Velocity Model / Travel Time Tables ***
@@ -49,9 +49,9 @@ TT/tt.sg
 * vpvs_factor  rayparam_min (-1 = default)
   1.732             0.0
 * tt_dep0  tt_dep1  tt_ddep
-   0.        30.       1.
+   -2.        31.       1.
 * tt_del0  tt_del1  tt_ddel
-   0.        200.      2.
+   0.        500.      2.
 *
 ******************************************
 ***** GrowClust Algorithm Parameters *****
@@ -67,18 +67,19 @@ TT/tt.sg
 * nboot  nbranch_min
    0         1
 * fout_cat (relocated catalog)
-OUT/out.growclust_cat
+OUT/out.growclust_ct_cat
 * fout_clust (relocated cluster file)
-OUT/out.growclust_clust
+OUT/out.growclust_ct_clust
 * fout_log (program log)
-OUT/out.growclust_log
+OUT/out.growclust_ct_log
 * fout_boot (bootstrap distribution)
-OUT/out.growclust_boot
+OUT/out.growclust_ct_boot
 ******************************************
 ******************************************
 EOF
 
 cat <<EOF > vzmodel.txt
+-2.0 5.30 0.00
 0.0 5.30 0.00
 1.0 5.65 0.00
 3.0 5.93 0.00
@@ -91,8 +92,9 @@ cat <<EOF > vzmodel.txt
 21.0 6.20 0.00
 31.00 7.50 0.00
 31.10 8.11 0.00
+100.0 8.11 0.00
 EOF
 
 ../GrowClust/SRC/growclust  growclust.inp
-cp OUT/out.growclust_cat ../../results/growclust_catalog.txt
-cd ..
+cp OUT/out.growclust_ct_cat ../../results/growclust_ct_catalog.txt
+cd ../../
