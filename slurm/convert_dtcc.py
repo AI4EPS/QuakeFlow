@@ -115,7 +115,7 @@ def extract_picks(pair, data):
         neighbor_score = fp[id1][id2]["neighbor_score"][:]
 
         cubic_score = scipy.interpolate.interp1d(x, neighbor_score, axis=-1, kind="quadratic")(xs)
-        cubic_index = np.argmax(cubic_score, axis=-1, keepdims=True) - (len(xs) // 2 - 1)
+        cubic_index = np.argmax(cubic_score, axis=-1, keepdims=True) - len(xs) // 2
         dt_cc = cc_index * dt + cubic_index * dt_cubic
 
         
