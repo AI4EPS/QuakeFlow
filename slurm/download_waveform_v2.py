@@ -1,137 +1,24 @@
 # %%
-import obspy
-from obspy.clients.fdsn.mass_downloader import CircularDomain, RectangularDomain, Restrictions, MassDownloader, GlobalDomain
-from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
+import re
+import threading
+import time
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
 
-config = {
-    "channel_priorities": ('HH[ZNE12]', 'BH[ZNE12]', 'MH[ZNE12]', 'EH[ZNE12]', 'LH[ZNE12]', 'HL[ZNE12]', 'BL[ZNE12]', 'ML[ZNE12]', 'EL[ZNE12]', 'LL[ZNE12]', 'SH[ZNE12]'),
-    "location_priorities": ('', '00', '10', '01', '20', '02', '30', '03', '40', '04', '50', '05', '60', '06', '70', '07', '80', '08', '90', '09'),
-    "degree2km": 111.1949,
-}
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.pyplot as plt
+import obspy
+import obspy.clients.fdsn
+import pandas as pd
 
 # %%
-# region = "Ridgecrest"
-# config_region = {
-#     "region": "Ridgecrest",
-#     "center": [
-#         -117.504,
-#         35.705
-#     ],
-#     "longitude0": -117.504,
-#     "latitude0": 35.705,
-#     "xlim_degree": [-118.504, -116.504],
-#     "ylim_degree": [34.705, 36.705],
-#     "maxradius_degree": 1.0,
-#     "horizontal_degree": 1.0,
-#     "vertical_degree": 1.0,
-#     # "starttime": "2019-07-04T17:00:00",
-#     # "endtime": "2019-07-04T19:00:00",
-#     "starttime": "2019-07-04T00:00:00",
-#     "endtime": "2019-07-10T00:00:00",
-#     "channel_list": [
-#         "HH[321ENZ]",
-#         "EH[321ENZ]",
-#         "HN[321ENZ]",
-#         "BH[321ENZ]",
-#     ],
-#     "provider": ["SCEDC", "IRIS"],
-#     "degree2km": 111.19492474777779,
-# }
-
-# region = "Hawaii_Loa"
-# config_region = {
-#     # "region": "Hawaii_Loa",
-#     region: region,
-#     "center": [
-#         -155.602737, 
-#         19.451827,
-#     ],
-#     "longitude0": -155.602737,
-#     "latitude0": 19.451827,
-#     "minlatitude": 19.451827 - 0.3/2, 
-#     "maxlatitude": 19.451827 + 0.3/2,
-#     "minlongitude": -155.602737 - 0.3/2,
-#     "maxlongitude": -155.602737 + 0.3/2,
-#     "xlim_degree": [-155.602737 - 0.3/2, -155.602737 + 0.3/2],
-#     "ylim_degree": [19.451827 - 0.3/2, 19.451827 + 0.3/2],
-#     "maxradius_degree": 0.3,
-#     "horizontal_degree": 0.3,
-#     "vertical_degree": 0.3,
-#     # "starttime": "2019-07-04T17:00:00",
-#     # "endtime": "2019-07-04T19:00:00",
-#     "starttime": "2022-11-30T22:00:00",
-#     "endtime": "2022-11-30T23:00:00",
-#     # "endtime": "2023-04-27T00:00:00",
-#     "channel_list": [
-#         "HH[321ENZ]",
-#         "BH[321ENZ]",
-#         "EH[321ENZ]",
-#         "HN[321ENZ]",
-#     ],
-#     "provider": ["IRIS"],
-#     "degree2km": 111.19492474777779,
-# }
-
-region = "South_Pole2"
-config_region = {
-    "region": region,
-    "starttime": "2003-01-01T00:00:00",
-    # "starttime": "2020-05-01T00:00:00",
-    # "endtime": "2020-06-01T00:00:00",
-    # "starttime": "2023-04-01T00:00:00",
-    "endtime": "2023-05-01T00:00:00",
-    # "minlatitude": -90,
-    # "maxlatitude": -80,
-    # "minlongitude": -180,
-    # "maxlongitude": 180,
-    "network": "IU",
-    "station": "QSPA",
-    "provider": ["IRIS"],
-    "channel_priorities": [
-        "HH[321ENZ]",
-        "BH[321ENZ]",
-        # "EH[321ENZ]",
-        # "HN[321ENZ]",
-    ],
-    "degree2km": 111.19492474777779,
-}
-
-region = "Montezuma"
-config_region = {
-    "region": region,
-    "starttime": "2020-05-01T00:00:00",
-    "endtime": "2023-05-01T00:00:00",
-    "minlatitude": 37.9937,
-    "maxlatitude": 38.1657,
-    "minlongitude": -122.0325,
-    "maxlongitude": -121.7275,
-    "provider": None,
-    "network": None,
-    "station": None,
-    "degree2km": 111.19492474777779,
-}
-
-region = "Kilauea"
-config_region = {
-    "region": region,
-    "starttime": "2018-04-29T00:00:00",
-    "endtime": "2018-08-12T00:00:00",
-    "minlatitude": 19.41 - 0.1,
-    "maxlatitude": 19.41 + 0.1,
-    "minlongitude": -155.28 - 0.1,
-    "maxlongitude": -155.28 + 0.1,
-    "provider": ["IRIS"],
-    # "provider": None,
-    "network": None,
-    "station": None,
-    "degree2km": 111.19492474777779,
-}
-
-config.update(config_region)
+region = ""
+config = {}
+exec(open('config.py').read())
 
 # %%
 root_path = Path(f"{region}")
@@ -144,11 +31,31 @@ if not result_path.exists():
 with open(result_path / "config.json", "w") as fp:
     json.dump(config, fp, indent=4)
 
-
 # %%
 with open(result_path / "config.json", "r") as fp:
     config = json.load(fp)
 print(config)
+
+# %%
+if ("provider" in config) and (config["provider"] is not None):
+    print("Downloading standard catalog...")
+
+    catalog = obspy.Catalog()
+    for provider in config["provider"]:
+        client = obspy.clients.fdsn.Client(provider)
+        events = client.get_events(
+            starttime=config["starttime"],
+            endtime=config["endtime"],
+            minlongitude=config["minlongitude"],
+            maxlongitude=config["maxlongitude"],
+            minlatitude=config["minlatitude"],
+            maxlatitude=config["maxlatitude"],
+        )
+        print(f"Dowloaded {len(events)} events from {provider}")
+        events.write(f"{root_path}/catalog_{provider}.xml", format="QUAKEML")
+        catalog += events
+
+    catalog.write(f"{root_path}/catalog.xml", format="QUAKEML")
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
@@ -157,69 +64,132 @@ if ("provider" in config) and (config["provider"] is not None):
     inventory = obspy.Inventory()
     for provider in config["provider"]:
         client = obspy.clients.fdsn.Client(provider)
-        if "station" in config:
-            inventory += client.get_stations(
+        if ("station" in config) and (config["station"] is not None):
+            stations = client.get_stations(
                 network=config["network"], 
                 station=config["station"],
                 starttime=config["starttime"], 
                 endtime=config["endtime"],
+                channel=config["channel"],
                 level="response")
         else:
-            inventory += client.get_stations(
+            stations = client.get_stations(
                 starttime=config["starttime"], 
                 endtime=config["endtime"],
                 minlatitude=config["minlatitude"],
                 maxlatitude=config["maxlatitude"],
                 minlongitude=config["minlongitude"],
                 maxlongitude=config["maxlongitude"],
+                channel=config["channel"],
                 level="response")
+            
+        print(f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider}")
+        stations.write(f"{root_path}/inventory_{provider}.xml", format="STATIONXML")
+        inventory += stations
 
-    inventory.write(f"{root_path}/response.xml", format="STATIONXML")
-    inventory.plot(projection="local", resolution="i", label=False, outfile=f"{root_path}/inventory.png")
+    inventory.write(f"{root_path}/inventory.xml", format="STATIONXML")
+
+# %%
+def download(starttime, inventory, waveform_path, lock):
+
+    starttime = obspy.UTCDateTime(starttime)
+    endtime = starttime + 3600 # 1 hour
+    waveform_path = waveform_path / f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}"
+    if not waveform_path.exists():
+        waveform_path.mkdir(parents=True)
+
+    max_retry = 10
+    inventory = inventory.select(starttime=starttime, endtime=endtime)
+    for network in inventory:
+        for station in network:
+            for channel in station:
+                print(f"********{network.code}.{station.code}.{channel.location_code}.{channel.code}********")
+
+                mseed_name = waveform_path / f"{network.code}.{station.code}.{channel.location_code}.{channel.code}.mseed"
+                if mseed_name.exists():
+                    print(f"File {mseed_name} already exists. Skip.")
+                    continue
+                
+                retry = 0
+                while retry < max_retry:
+                    try:
+                        stream = client.get_waveforms(
+                            network = network.code,
+                            station = station.code,
+                            location = channel.location_code,
+                            channel = channel.code,
+                            starttime = starttime,
+                            endtime = endtime,
+                        )
+                        stream.write(mseed_name, format="MSEED")
+                        break
+
+                    except Exception as err:
+                        err = str(err).rstrip("\n")
+                        message = "No data available for request."
+                        if err[: len(message)] == message:
+                            print(f"No data available for {mseed_name}")
+                            break
+                        else:
+                            print(f"Error occurred:{err}. Retrying...")
+                        retry += 1
+                        time.sleep(5)
+                        continue
+
+                if retry == max_retry:
+                    print(f"Failed to download {mseed_name}")
 
 
 # %%
-domain = GlobalDomain()
-if ("longitude0" in config) and ("latitude0" in config) and ("maxradius_degree" in config):
-    domain = CircularDomain(
-        longitude=config["longitude0"], latitude=config["latitude0"], minradius=0, maxradius=config["maxradius_degree"]
-    )
-if ("minlatitude" in config) and ("maxlatitude" in config) and ("minlongitude" in config) and ("maxlongitude" in config):
-    domain = RectangularDomain(minlatitude=config["minlatitude"], maxlatitude=config["maxlatitude"],
-                               minlongitude=config["minlongitude"], maxlongitude=config["maxlongitude"])
-print(f"{domain = }")
+waveform_path = root_path / "waveforms"
+if not waveform_path.exists():
+    waveform_path.mkdir()
 
-restrictions = Restrictions(
-    starttime=obspy.UTCDateTime(config["starttime"]),
-    endtime=obspy.UTCDateTime(config["endtime"]),
-    chunklength_in_sec=3600,
-    network=config["network"],
-    station=config["station"],
-    minimum_interstation_distance_in_m=1000,
-    minimum_length=0.1,
-    reject_channels_with_gaps=False,
-    channel_priorities=config["channel_priorities"],
-)
-print(f"{restrictions = }")
+for provider in config["provider"]:
 
-def get_mseed_storage(network, station, location, channel, starttime, endtime):
-    file_name = f"{root_path}/waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
-    if os.path.exists(file_name):
-        return True
-    return file_name
+    inventory = obspy.read_inventory(f"{root_path}/inventory_{provider}.xml")
 
-print(f"Downloading waveforms...")
-mdl = MassDownloader(
-    providers=config["provider"],
-)
-mdl.download(
-    domain,
-    restrictions,
-    mseed_storage=get_mseed_storage,
-    stationxml_storage=f"{root_path}/stations",
-    download_chunk_size_in_mb=20,
-    threads_per_client=3, # default 3
-)
+    client = obspy.clients.fdsn.Client(provider)
+
+    starttime_hour = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
+    starttimes = pd.date_range(starttime_hour, config["endtime"], freq="1H", tz="UTC")
+
+    threads = []
+    MAX_THREADS = 4
+    lock = threading.Lock()
+    for ii, starttime in enumerate(starttimes):
+        t = threading.Thread(target=download, args=(starttime, inventory, waveform_path, lock))
+        t.start()
+        time.sleep(1)
+        threads.append(t)
+        if ii % MAX_THREADS == MAX_THREADS - 1:
+            for t in threads:
+                t.join()
+            threads = []
+    for t in threads:
+        t.join()
+
+
+# %%
+catalog = obspy.read_events(f"{root_path}/events.xml")
+
+def parase_catalog(catalog):
+    events = {}
+    for event in catalog:
+        event_id = re.search(r"eventid=(\d+)$", event.resource_id.id).group(1)
+        events[event_id] = {
+            "time": event.origins[0].time,
+            "magnitude": event.magnitudes[0].mag,
+            "latitude": event.origins[0].latitude,
+            "longitude": event.origins[0].longitude,
+            "depth_km": event.origins[0].depth / 1000,
+        }
+    return events
+
+events = parase_catalog(catalog)
+events = pd.DataFrame.from_dict(events, orient="index")
+events.to_csv(result_path / "events.csv", index_label="event_id")
+
 
 # %%
 mseeds = (root_path / "waveforms").rglob("*.mseed")
@@ -227,14 +197,16 @@ mseed_ids = []
 for mseed in mseeds:
     mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
 
-
 # %%
-responses = obspy.read_inventory(f"{root_path}/stations/*xml")
+if os.path.exists(f"{root_path}/response.xml"):
+    inventory = obspy.read_inventory(f"{root_path}/response.xml")
+if os.path.exists(f"{root_path}/stations"):
+    inventory += obspy.read_inventory(f"{root_path}/stations/*xml")
 
-def parse_response(response, mseed_ids=None):
+def parse_response(inventory, mseed_ids=None):
     stations = {}
     num = 0
-    for net in response:
+    for net in inventory:
         for sta in net:
             components = defaultdict(list)
             channel = {}
@@ -254,7 +226,7 @@ def parse_response(response, mseed_ids=None):
 
             for key in components:
                 station_id = f"{net.code}.{sta.code}.{channel[key]['location']}.{channel[key]['device']}"
-                if station_id not in mseed_ids:
+                if (mseed_ids is not None) and (station_id not in mseed_ids):
                     continue
                 num += 1
                 stations[station_id] = {
@@ -265,14 +237,35 @@ def parse_response(response, mseed_ids=None):
                     "latitude": channel[key]["latitude"],
                     "longitude": channel[key]["longitude"],
                     "elevation_m": channel[key]["elevation_m"],
+                    "depth_km": - channel[key]["elevation_m"] / 1e3,
                 }
                 
     print(f"Found {num} stations")
 
     return stations
 
-
-stations = parse_response(responses, mseed_ids)
+# mseed_ids = None
+stations = parse_response(inventory, mseed_ids)
 with open(result_path / "stations.json", "w") as f:
     json.dump(stations, f, indent=4)
+stations = pd.DataFrame.from_dict(stations, orient="index")
+stations.to_csv(result_path / "stations.csv", index_label="station_id")
+
+
+# %%
+# plot stations and events in a map using cartopy
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+ax.set_extent([config["minlongitude"], config["maxlongitude"], config["minlatitude"], config["maxlatitude"]])
+ax.add_feature(cfeature.LAND)
+ax.add_feature(cfeature.OCEAN)
+ax.add_feature(cfeature.COASTLINE)
+ax.add_feature(cfeature.LAKES, alpha=0.5)
+ax.add_feature(cfeature.RIVERS)
+gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
+ax.scatter(events.longitude, events.latitude, transform=ccrs.PlateCarree(), s=1e4/len(events), c="r", marker=".", label="events")
+ax.scatter(stations.longitude, stations.latitude, transform=ccrs.PlateCarree(), s=100, c="b", marker="^", label="stations")
+ax.legend(scatterpoints=1, markerscale=0.5, fontsize=10)
+plt.savefig(result_path / "stations.png", dpi=300, bbox_inches="tight")
+
 # %%
