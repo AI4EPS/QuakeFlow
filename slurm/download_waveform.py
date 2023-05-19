@@ -1,6 +1,7 @@
 # %%
 import json
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -9,13 +10,10 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import obspy
 import pandas as pd
-from obspy.clients.fdsn.mass_downloader import (
-    CircularDomain,
-    GlobalDomain,
-    MassDownloader,
-    RectangularDomain,
-    Restrictions,
-)
+from obspy.clients.fdsn.mass_downloader import (CircularDomain, GlobalDomain,
+                                                MassDownloader,
+                                                RectangularDomain,
+                                                Restrictions)
 
 # %%
 region = ""
@@ -134,6 +132,26 @@ mdl.download(
     download_chunk_size_in_mb=20,
     threads_per_client=3, # default 3
 )
+
+# %%
+catalog = obspy.read_events(f"{root_path}/catalog.xml")
+
+def parase_catalog(catalog):
+    events = {}
+    for event in catalog:
+        event_id = re.search(r"eventid=(\d+)$", event.resource_id.id).group(1)
+        events[event_id] = {
+            "time": event.origins[0].time,
+            "magnitude": event.magnitudes[0].mag,
+            "latitude": event.origins[0].latitude,
+            "longitude": event.origins[0].longitude,
+            "depth_km": event.origins[0].depth / 1000,
+        }
+    return events
+
+events = parase_catalog(catalog)
+events = pd.DataFrame.from_dict(events, orient="index")
+events.to_csv(result_path / "events.csv", index_label="event_id")
 
 # %%
 mseeds = (root_path / "waveforms").rglob("*.mseed")

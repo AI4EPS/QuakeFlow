@@ -103,11 +103,14 @@ def download(starttime, inventory, waveform_path, lock):
     for network in inventory:
         for station in network:
             for channel in station:
-                print(f"********{network.code}.{station.code}.{channel.location_code}.{channel.code}********")
 
                 mseed_name = waveform_path / f"{network.code}.{station.code}.{channel.location_code}.{channel.code}.mseed"
                 if mseed_name.exists():
                     print(f"File {mseed_name} already exists. Skip.")
+                    continue
+                mseed_txt = waveform_path / f"{network.code}.{station.code}.{channel.location_code}.{channel.code}.txt"
+                if mseed_txt.exists():
+                    print(f"File {mseed_txt} no data available. Skip.")
                     continue
                 
                 retry = 0
@@ -122,6 +125,7 @@ def download(starttime, inventory, waveform_path, lock):
                             endtime = endtime,
                         )
                         stream.write(mseed_name, format="MSEED")
+                        print(f"Downloaded {mseed_name}")
                         break
 
                     except Exception as err:
@@ -129,6 +133,7 @@ def download(starttime, inventory, waveform_path, lock):
                         message = "No data available for request."
                         if err[: len(message)] == message:
                             print(f"No data available for {mseed_name}")
+                            os.system(f"touch {mseed_txt}")
                             break
                         else:
                             print(f"Error occurred:{err}. Retrying...")
@@ -152,7 +157,7 @@ for provider in config["provider"]:
     client = obspy.clients.fdsn.Client(provider)
 
     starttime_hour = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
-    starttimes = pd.date_range(starttime_hour, config["endtime"], freq="1H", tz="UTC")
+    starttimes = pd.date_range(starttime_hour, config["endtime"], freq="1H", tz="UTC", inclusive='left')
 
     threads = []
     MAX_THREADS = 4
@@ -160,7 +165,6 @@ for provider in config["provider"]:
     for ii, starttime in enumerate(starttimes):
         t = threading.Thread(target=download, args=(starttime, inventory, waveform_path, lock))
         t.start()
-        time.sleep(1)
         threads.append(t)
         if ii % MAX_THREADS == MAX_THREADS - 1:
             for t in threads:
@@ -171,7 +175,7 @@ for provider in config["provider"]:
 
 
 # %%
-catalog = obspy.read_events(f"{root_path}/events.xml")
+catalog = obspy.read_events(f"{root_path}/catalog.xml")
 
 def parase_catalog(catalog):
     events = {}
@@ -190,7 +194,6 @@ events = parase_catalog(catalog)
 events = pd.DataFrame.from_dict(events, orient="index")
 events.to_csv(result_path / "events.csv", index_label="event_id")
 
-
 # %%
 mseeds = (root_path / "waveforms").rglob("*.mseed")
 mseed_ids = []
@@ -198,10 +201,8 @@ for mseed in mseeds:
     mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
 
 # %%
-if os.path.exists(f"{root_path}/response.xml"):
-    inventory = obspy.read_inventory(f"{root_path}/response.xml")
-if os.path.exists(f"{root_path}/stations"):
-    inventory += obspy.read_inventory(f"{root_path}/stations/*xml")
+if os.path.exists(f"{root_path}/inventory.xml"):
+    inventory = obspy.read_inventory(f"{root_path}/inventory.xml")
 
 def parse_response(inventory, mseed_ids=None):
     stations = {}
@@ -240,7 +241,7 @@ def parse_response(inventory, mseed_ids=None):
                     "depth_km": - channel[key]["elevation_m"] / 1e3,
                 }
                 
-    print(f"Found {num} stations")
+    print(f"Parse {num} stations")
 
     return stations
 

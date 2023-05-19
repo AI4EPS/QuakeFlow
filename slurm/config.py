@@ -7,6 +7,12 @@ config = {
     "channel": "HH*,BH*,EH*,HN*",
     "channel_priorities": ('HH[ZNE12]', 'BH[ZNE12]', 'MH[ZNE12]', 'EH[ZNE12]', 'LH[ZNE12]', 'HL[ZNE12]', 'BL[ZNE12]', 'ML[ZNE12]', 'EL[ZNE12]', 'LL[ZNE12]', 'SH[ZNE12]'),
     "location_priorities": ('', '00', '10', '01', '20', '02', '30', '03', '40', '04', '50', '05', '60', '06', '70', '07', '80', '08', '90', '09'),
+    "phasenet": {},
+    "gamma": {},
+    "cctorch": {},
+    "adloc": {},
+    "hypodd": {},
+    "growclust": {},
 }
 
 # %%
@@ -110,7 +116,7 @@ config_region[region] = {
     "degree2km": 111.19492474777779,
 }
 
-region = "Kilauea_v1"
+region = "Kilauea"
 config_region[region] = {
     "region": region,
     "starttime": "2018-04-29T00:00:00",
@@ -123,6 +129,19 @@ config_region[region] = {
     "degree2km": 111.19492474777779,
 }
 
+region = "Kilauea_debug"
+config_region[region] = {
+    "region": region,
+    "starttime": "2018-04-29T00:00:00",
+    "endtime": "2018-04-29T01:00:00",
+    "minlatitude": 19.41 - 0.1,
+    "maxlatitude": 19.41 + 0.1,
+    "minlongitude": -155.28 - 0.1,
+    "maxlongitude": -155.28 + 0.1,
+    "provider": ["IRIS"],
+    "degree2km": 111.19492474777779,
+}
+
 # %%
-region = "Kilauea_v1"
+region = "Kilauea_debug"
 config.update(config_region[region])
