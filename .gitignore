@@ -163,3 +163,9 @@ slurm/results/
 slurm/templates/
 slurm/relocation/hypodd/
 slurm/relocation/growclust/
+
+slurm/*/stations/
+slurm/*/waveforms/
+slurm/*/waveforms/
+slurm/*/results/
+slurm/*/*.xml
