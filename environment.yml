@@ -1,0 +1,13 @@
+name: base
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - pip
+  - numpy
+  - matplotlib
+  - tqdm
+  - cartopy
+  - obspy
+  - rclone
+prefix: /opt/conda

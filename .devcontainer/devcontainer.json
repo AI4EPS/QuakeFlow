@@ -1,10 +1,11 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "hostRequirements": {
-    "cpus": 2
+    "cpus": 4
   },
   "waitFor": "onCreateCommand",
-  // "updateContentCommand": "python3 -m pip install -r requirements.txt",
+  "updateContentCommand": "sudo apt update && sudo apt install -y libgeos-dev && python3 -m pip install -r requirements.txt",
+  // "updateContentCommand": "conda env update --file environment.yml",
   "postCreateCommand": "",
   "customizations": {
     "codespaces": {
