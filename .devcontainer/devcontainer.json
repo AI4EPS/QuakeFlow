@@ -5,7 +5,6 @@
   },
   "waitFor": "onCreateCommand",
   // "updateContentCommand": "python3 -m pip install -r requirements.txt",
-  "updateContentCommand": "conda init zsh && source ~/.zshrc",
   "postCreateCommand": "",
   "customizations": {
     "codespaces": {
