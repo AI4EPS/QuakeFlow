@@ -16,6 +16,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+*pyc
 build/
 develop-eggs/
 dist/
@@ -163,3 +164,7 @@ slurm/results/
 slurm/templates/
 slurm/relocation/hypodd/
 slurm/relocation/growclust/
+slurm/Hawaii_Loa/stations/
+
+slurm/*/waveforms/*
+slurm/*/stations/*
