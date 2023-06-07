@@ -9,6 +9,8 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import obspy
+import obspy.clients.fdsn
+from obspy.clients.fdsn import header
 import pandas as pd
 from obspy.clients.fdsn.mass_downloader import (CircularDomain, GlobalDomain,
                                                 MassDownloader,
@@ -18,7 +20,12 @@ from obspy.clients.fdsn.mass_downloader import (CircularDomain, GlobalDomain,
 # %%
 region = ""
 config = {}
+config_region = {}
 exec(open('config.py').read())
+
+# %%
+region = "Kilauea_debug"
+config.update(config_region[region])
 
 # %%
 root_path = Path(f"{region}")
@@ -43,14 +50,18 @@ if ("provider" in config) and (config["provider"] is not None):
     catalog = obspy.Catalog()
     for provider in config["provider"]:
         client = obspy.clients.fdsn.Client(provider)
-        events = client.get_events(
-            starttime=config["starttime"],
-            endtime=config["endtime"],
-            minlongitude=config["minlongitude"],
-            maxlongitude=config["maxlongitude"],
-            minlatitude=config["minlatitude"],
-            maxlatitude=config["maxlatitude"],
-        )
+        try:
+            events = client.get_events(
+                starttime=config["starttime"],
+                endtime=config["endtime"],
+                minlongitude=config["minlongitude"],
+                maxlongitude=config["maxlongitude"],
+                minlatitude=config["minlatitude"],
+                maxlatitude=config["maxlatitude"],
+            )
+        except header.FDSNNoDataException as e:
+            print(e)
+            events = obspy.Catalog()
         print(f"Dowloaded {len(events)} events from {provider}")
         events.write(f"{root_path}/catalog_{provider}.xml", format="QUAKEML")
         catalog += events
@@ -107,7 +118,7 @@ restrictions = Restrictions(
     chunklength_in_sec=3600,
     network=config["network"],
     station=config["station"],
-    minimum_interstation_distance_in_m=1000,
+    minimum_interstation_distance_in_m=0,
     minimum_length=0.1,
     reject_channels_with_gaps=False,
     channel_priorities=config["channel_priorities"],
@@ -221,7 +232,8 @@ ax.add_feature(cfeature.COASTLINE)
 ax.add_feature(cfeature.LAKES, alpha=0.5)
 ax.add_feature(cfeature.RIVERS)
 gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
-ax.scatter(events.longitude, events.latitude, transform=ccrs.PlateCarree(), s=1e4/len(events), c="r", marker=".", label="events")
+if len(events) > 0:
+    ax.scatter(events.longitude, events.latitude, transform=ccrs.PlateCarree(), s=1e4/len(events), c="r", marker=".", label="events")
 ax.scatter(stations.longitude, stations.latitude, transform=ccrs.PlateCarree(), s=100, c="b", marker="^", label="stations")
 ax.legend(scatterpoints=1, markerscale=0.5, fontsize=10)
 plt.savefig(result_path / "stations.png", dpi=300, bbox_inches="tight")

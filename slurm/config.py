@@ -142,6 +142,15 @@ config_region[region] = {
     "degree2km": 111.19492474777779,
 }
 
-# %%
-region = "Kilauea_debug"
-config.update(config_region[region])
+region = "Kilauea_debug_v2"
+config_region[region] = {
+    "region": region,
+    "starttime": "2018-04-29T00:00:00",
+    "endtime": "2018-04-29T01:00:00",
+    "minlatitude": 19.41 - 0.1,
+    "maxlatitude": 19.41 + 0.1,
+    "minlongitude": -155.28 - 0.1,
+    "maxlongitude": -155.28 + 0.1,
+    "provider": ["IRIS"],
+    "degree2km": 111.19492474777779,
+}
