@@ -19,13 +19,17 @@ def parse_args():
 args = parse_args()
 
 # %%
-output_path = Path("relocation/hypodd/")
-if not output_path.exists():
-    output_path.mkdir(parents=True)
+region = "Kilauea"
+# region = "Kilauea_debug"
+root_path = Path(region)
+data_path = root_path / "gamma"
+result_path = root_path / "hypodd"
+if not result_path.exists():
+    result_path.mkdir()
 
 # %%
 ############################################# Station Format ######################################################
-station_json = Path("results/stations.json")
+station_json = root_path / "obspy" / "stations.json"
 stations = pd.read_json(station_json, orient="index")
 
 shift_topo = stations["elevation_m"].max()/1e3
@@ -57,15 +61,15 @@ for sta, row in stations.iterrows():
     ] = f"{tmp_code:<8s} {row['latitude']:.3f} {row['longitude']:.3f}\n"
 
 
-with open(output_path/"stations.dat", "w") as f:
+with open(result_path/"stations.dat", "w") as f:
     for k, v in converted_hypodd.items():
         f.write(v)
 
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = Path("results/gamma_picks.csv")
-catalog_csv = Path("results/gamma_catalog.csv")
+picks_csv = data_path / "gamma_picks.csv"
+catalog_csv = data_path / "gamma_catalog.csv"
 
 picks = pd.read_csv(picks_csv)
 events = pd.read_csv(catalog_csv)
@@ -112,7 +116,7 @@ for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(
         # output_lines.append(pick_line)
         lines.append(pick_line)
 
-with open(output_path / "phase.txt", "w") as fp:
+with open(result_path / "phase.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%

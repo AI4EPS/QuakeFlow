@@ -31,17 +31,17 @@ config.update(config_region[region])
 root_path = Path(f"{region}")
 if not root_path.exists():
     root_path.mkdir()
-result_path = root_path / "results"
+result_path = root_path / "obspy"
 if not result_path.exists():
     result_path.mkdir()
 
-with open(result_path / "config.json", "w") as fp:
+with open(root_path / "config.json", "w") as fp:
     json.dump(config, fp, indent=4)
 
 # %%
-with open(result_path / "config.json", "r") as fp:
+with open(root_path / "config.json", "r") as fp:
     config = json.load(fp)
-print(config)
+print(json.dumps(config, indent=4))
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
@@ -63,10 +63,10 @@ if ("provider" in config) and (config["provider"] is not None):
             print(e)
             events = obspy.Catalog()
         print(f"Dowloaded {len(events)} events from {provider}")
-        events.write(f"{root_path}/catalog_{provider}.xml", format="QUAKEML")
+        events.write(f"{result_path}/catalog_{provider}.xml", format="QUAKEML")
         catalog += events
 
-    catalog.write(f"{root_path}/catalog.xml", format="QUAKEML")
+    catalog.write(f"{result_path}/catalog.xml", format="QUAKEML")
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
@@ -95,10 +95,10 @@ if ("provider" in config) and (config["provider"] is not None):
                 level="response")
             
         print(f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider}")
-        stations.write(f"{root_path}/inventory_{provider}.xml", format="STATIONXML")
+        stations.write(f"{result_path}/inventory_{provider}.xml", format="STATIONXML")
         inventory += stations
 
-    inventory.write(f"{root_path}/inventory.xml", format="STATIONXML")
+    inventory.write(f"{result_path}/inventory.xml", format="STATIONXML")
 
 
 # %%
@@ -126,7 +126,7 @@ restrictions = Restrictions(
 print(f"{restrictions = }")
 
 def get_mseed_storage(network, station, location, channel, starttime, endtime):
-    file_name = f"{root_path}/waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
+    file_name = f"{result_path}/waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
     if os.path.exists(file_name):
         return True
     return file_name
@@ -139,13 +139,13 @@ mdl.download(
     domain,
     restrictions,
     mseed_storage=get_mseed_storage,
-    stationxml_storage=f"{root_path}/stations",
+    stationxml_storage=f"{result_path}/stations",
     download_chunk_size_in_mb=20,
     threads_per_client=3, # default 3
 )
 
 # %%
-catalog = obspy.read_events(f"{root_path}/catalog.xml")
+catalog = obspy.read_events(f"{result_path}/catalog.xml")
 
 def parase_catalog(catalog):
     events = {}
@@ -165,16 +165,16 @@ events = pd.DataFrame.from_dict(events, orient="index")
 events.to_csv(result_path / "events.csv", index_label="event_id")
 
 # %%
-mseeds = (root_path / "waveforms").rglob("*.mseed")
+mseeds = (result_path / "waveforms").rglob("*.mseed")
 mseed_ids = []
 for mseed in mseeds:
     mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
 
 # %%
-if os.path.exists(f"{root_path}/response.xml"):
-    inventory = obspy.read_inventory(f"{root_path}/response.xml")
-if os.path.exists(f"{root_path}/stations"):
-    inventory += obspy.read_inventory(f"{root_path}/stations/*xml")
+if os.path.exists(f"{result_path}/response.xml"):
+    inventory = obspy.read_inventory(f"{result_path}/response.xml")
+if os.path.exists(f"{result_path}/stations"):
+    inventory += obspy.read_inventory(f"{result_path}/stations/*xml")
 
 def parse_response(inventory, mseed_ids=None):
     stations = {}

@@ -19,16 +19,23 @@ def parse_args():
 args = parse_args()
 
 # %%
-output_path = Path("relocation/growclust/")
-if not output_path.exists():
-    output_path.mkdir(parents=True)
+# %%
+region = "Kilauea"
+# region = "Kilauea_debug"
+root_path = Path(region)
+data_path = root_path / "gamma"
+result_path = root_path / "growclust"
+if not result_path.exists():
+    result_path.mkdir()
 
 
 # %%
-station_file = Path("templates/stations_filtered.csv")
-station_df = pd.read_csv(station_file)
+# station_file = Path("templates/stations_filtered.csv")
+# station_df = pd.read_csv(station_file)
 # station_file = Path("results/stations.json")
 # station_df = pd.read_json(station_file, orient="index")
+station_json = root_path / "obspy" / "stations.json"
+station_df = pd.read_json(station_json, orient="index")
 
 lines = []
 for i, row in station_df.iterrows():
@@ -36,12 +43,12 @@ for i, row in station_df.iterrows():
     line = f"{row['station']:<4} {row['latitude']:.4f} {row['longitude']:.4f}\n"
     lines.append(line)
 
-with open(output_path / "stlist.txt", "w") as fp:
+with open(result_path / "stlist.txt", "w") as fp:
     fp.writelines(lines)
 
 
 # %%
-catalog_file = Path("results/gamma_catalog.csv")
+catalog_file = data_path / "gamma_catalog.csv"
 catalog_df = pd.read_csv(catalog_file)
 
 catalog_df[["year", "month", "day", "hour", "minute", "second"]] = (
@@ -57,13 +64,14 @@ for i, row in catalog_df.iterrows():
     line = f"{row['year']:4d} {row['month']:2d} {row['day']:2d} {row['hour']:2d} {row['minute']:2d} {row['second']:7.3f} {row['latitude']:.4f} {row['longitude']:.4f} {row['depth(m)']/1e3:7.3f} {row['magnitude']:.2f} 0.000 0.000 0.000 {row['event_index']:6d}\n"
     lines.append(line)
 
-with open(output_path / "evlist.txt", "w") as fp:
+with open(result_path / "evlist.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
 
 if not args.dtcc:
-    dt_ct = Path("relocation/hypodd/dt.ct")
+    # dt_ct = Path("relocation/hypodd/dt.ct")
+    dt_ct = root_path / "hypodd" / "dt.ct"
     lines = []
     with open(dt_ct, "r") as fp:
         for line in tqdm(fp):
@@ -74,7 +82,7 @@ if not args.dtcc:
                 station, t1, t2, score, phase = line.split()
                 lines.append(f"{station} {float(t1)-float(t2):.5f} {score} {phase}\n")
 
-    with open(output_path / "dt.ct", "w") as fp:
+    with open(result_path / "dt.ct", "w") as fp:
         fp.writelines(lines)
 
 # %%

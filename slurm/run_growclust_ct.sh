@@ -1,6 +1,14 @@
 #!/bin/bash
-cd relocation/growclust
+WORKING_DIR=$PWD
+region="Kilauea"
+cd $region/growclust
 mkdir -p TT OUT
+
+if [ ! -d "GrowClust" ]; then
+  git clone git@github.com:zhuwq0/GrowClust.git
+  make -C GrowClust/SRC/
+fi
+
 
 cat <<EOF > growclust.inp
 ****  Example GrowClust Control File  *****
@@ -49,7 +57,7 @@ TT/tt.sg
 * vpvs_factor  rayparam_min (-1 = default)
   1.732             0.0
 * tt_dep0  tt_dep1  tt_ddep
-   -2.        31.       1.
+   0.        31.       1.
 * tt_del0  tt_del1  tt_ddel
    0.        500.      2.
 *
@@ -79,7 +87,6 @@ OUT/out.growclust_ct_boot
 EOF
 
 cat <<EOF > vzmodel.txt
--2.0 5.30 0.00
 0.0 5.30 0.00
 1.0 5.65 0.00
 3.0 5.93 0.00
@@ -95,6 +102,6 @@ cat <<EOF > vzmodel.txt
 100.0 8.11 0.00
 EOF
 
-../GrowClust/SRC/growclust  growclust.inp
-cp OUT/out.growclust_ct_cat ../../results/growclust_ct_catalog.txt
-cd ../../
+./GrowClust/SRC/growclust  growclust.inp
+cp OUT/out.growclust_ct_cat growclust_ct_catalog.txt
+cd $WORKING_DIR
