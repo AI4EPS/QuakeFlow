@@ -1,174 +1,258 @@
 # %%
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from datetime import datetime
 import pandas as pd
-import os
 import json
 import numpy as np
+from pathlib import Path
+from matplotlib.colors import LightSource
+import pygmt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import cartopy.io.img_tiles as cimgt
+import plotly.graph_objects as go
 
 # %%
-result_label="GaMMA"
-catalog_label="SCSN"
-
-data_dir = lambda x: os.path.join("results", x)
-# station_csv = data_dir("stations.csv")
-station_json = data_dir("stations.json")
-if not os.path.exists("figures"):
-    os.makedirs("figures")
-figure_dir = lambda x: os.path.join("figures", x)
+region = "Kilauea"
+# region = "Kilauea_debug"
+root_path = Path(region)
+obspy_path = root_path / "obspy"
+gamma_path = root_path / "gamma"
+plot_standard_catalog = True
+use_pygmt = True
 
 # %%
-with open(data_dir("config.json"), "r") as f:
+with open(root_path / "config.json", "r") as f:
     config = json.load(f)
+config.pop("channel_priorities", None)
+config.pop("location_priorities", None)
+print(json.dumps(config, indent=4, sort_keys=True))
 
 # %%
-stations = pd.read_json(station_json, orient="index")
-# stations = stations.rename(columns={"station":"id"})
+stations = pd.read_json(obspy_path / "stations.json", orient="index")
 stations["id"] = stations.index
-# events = pd.read_csv(data_dir("events.csv"), delimiter="\t")
-# events["time"] = events["time"].apply(lambda x: datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%f"))
 
-catalog = pd.read_csv(data_dir("gamma_catalog.csv"), parse_dates=["time"])
-# catalog["time"] = catalog["time"].apply(lambda x: datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%f"))
+# %%
+gamma_catalog = pd.read_csv(gamma_path / "gamma_catalog.csv", parse_dates=["time"])
+if plot_standard_catalog:
+    standard_catalog = pd.read_csv(obspy_path / "events.csv",  parse_dates=["time"])
 
-plt.figure()
-plt.hist(catalog["time"], range=(config["starttime"], config["endtime"]), bins=24, edgecolor="k", alpha=1.0, linewidth=0.5, label=f"{result_label}: {len(catalog['time'])}")
-# plt.hist(events["time"], range=(config["starttime"], config["endtime"]), bins=24, edgecolor="k", alpha=0.6, linewidth=0.5, label=f"{catalog_label}: {len(events['time'])}")
+# %%
+gamma_label="GaMMA"
+standard_label="Standard"
+
+# %%
+unit = "D"
+starttime = np.datetime64(config["starttime"], unit)
+endtime = np.datetime64(config["endtime"], unit)
+
+bins = np.arange(starttime, endtime, np.timedelta64(1, 'D'), dtype="datetime64[D]")
+plt.figure(figsize=plt.rcParams["figure.figsize"]*np.array([1.5,1.0]))
+plt.hist(gamma_catalog["time"], bins=bins, edgecolor="k", alpha=1.0, linewidth=0.5, label=f"{gamma_label}: {len(gamma_catalog['time'])}")
+if plot_standard_catalog:
+    plt.hist(standard_catalog["time"], bins=bins, edgecolor="k", alpha=0.6, linewidth=0.5, label=f"{standard_label}: {len(standard_catalog['time'])}")
 plt.ylabel("Frequency")
 plt.xlabel("Date")
 plt.gca().autoscale(enable=True, axis='x', tight=True)
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d:%H'))
+# plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d:%H'))
 plt.gcf().autofmt_xdate()
 plt.legend()
-plt.savefig(figure_dir("earthquake_number.png"), bbox_inches="tight", dpi=300)
-plt.savefig(figure_dir("earthquake_number.pdf"), bbox_inches="tight")
-plt.show();
+plt.grid(linestyle='--', linewidth=0.5, alpha=0.5)
+plt.savefig(gamma_path / "earthquake_number.png", bbox_inches="tight", dpi=300)
+plt.savefig(gamma_path / "earthquake_number.pdf", bbox_inches="tight", dpi=300)
+plt.show()
 
 # %%
-fig = plt.figure(figsize=plt.rcParams["figure.figsize"]*np.array([1.5,1]))
-box = dict(boxstyle='round', facecolor='white', alpha=1)
-text_loc = [0.05, 0.92]
-grd = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[1.5, 1], height_ratios=[1,1])
-fig.add_subplot(grd[:, 0])
-plt.plot(catalog["longitude"], catalog["latitude"], '.',markersize=2, alpha=1.0)
-# plt.plot(events["longitude"], events["latitude"], '.', markersize=2, alpha=0.6)
-plt.axis("scaled")
-plt.xlim(np.array(config["xlim_degree"])+np.array([0.2,-0.27]))
-plt.ylim(np.array(config["ylim_degree"])+np.array([0.2,-0.27]))
-plt.xlabel("Latitude")
-plt.ylabel("Longitude")
-plt.gca().set_prop_cycle(None)
-plt.plot(config["xlim_degree"][0]-10, config["ylim_degree"][0]-10, '.', markersize=10, label=f"{result_label}", rasterized=True)
-plt.plot(config["xlim_degree"][0]-10, config["ylim_degree"][0]-10, '.', markersize=10, label=f"{catalog_label}", rasterized=True)
-plt.plot(stations["longitude"], stations["latitude"], 'k^', markersize=5, alpha=0.7, label="Stations")
-plt.legend(loc="lower right")
-plt.text(text_loc[0], text_loc[1], '(i)', horizontalalignment='left', verticalalignment="top", 
-         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
-
-fig.add_subplot(grd[0, 1])
-plt.plot(catalog["longitude"], catalog["depth(m)"]/1e3, '.', markersize=2, alpha=1.0, rasterized=True)
-# plt.plot(events["longitude"], events["depth(m)"]/1e3, '.', markersize=2, alpha=0.6, rasterized=True)
-# plt.axis("scaled")
-plt.xlim(np.array(config["xlim_degree"])+np.array([0.2,-0.27]))
-plt.ylim([0,21])
-plt.gca().invert_yaxis()
-plt.xlabel("Longitude")
-plt.ylabel("Depth (km)")
-plt.gca().set_prop_cycle(None)
-plt.plot(config["xlim_degree"][0]-10, 31, '.', markersize=10, label=f"{result_label}")
-plt.plot(31, 31, '.', markersize=10, label=f"{catalog_label}")
-plt.legend(loc="lower right")
-plt.text(text_loc[0], text_loc[1], '(ii)', horizontalalignment='left', verticalalignment="top", 
-         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
-
-fig.add_subplot(grd[1, 1])
-plt.plot(catalog["latitude"], catalog["depth(m)"]/1e3, '.', markersize=2, alpha=1.0, rasterized=True)
-# plt.plot(events["latitude"], events["depth(m)"]/1e3, '.', markersize=2, alpha=0.6, rasterized=True)
-# plt.axis("scaled")
-plt.xlim(np.array(config["ylim_degree"])+np.array([0.2,-0.27]))
-plt.ylim([0,21])
-plt.gca().invert_yaxis()
-plt.xlabel("Latitude")
-plt.ylabel("Depth (km)")
-plt.gca().set_prop_cycle(None)
-plt.plot(config["ylim_degree"][0]-10, 31, '.', markersize=10, label=f"{result_label}")
-plt.plot(31, 31, '.', markersize=10, label=f"{catalog_label}")
-plt.legend(loc="lower right")
-plt.tight_layout()
-plt.text(text_loc[0], text_loc[1], '(iii)', horizontalalignment='left', verticalalignment="top", 
-         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
-plt.savefig(figure_dir("earthquake_location.png"), bbox_inches="tight", dpi=300)
-plt.savefig(figure_dir("earthquake_location.pdf"), bbox_inches="tight", dpi=300)
-plt.show();
-
-# %%
+if plot_standard_catalog:
+    bins = np.arange(-1, standard_catalog["magnitude"].max()+0.19, 0.2)
+else:
+    bins = np.arange(-1, gamma_catalog["magnitude"].max()+0.19, 0.2)
 plt.figure()
-plt.hist(catalog["magnitude"], range=(-1., catalog["magnitude"].max()), bins=25, alpha=1.0,  edgecolor="k", linewidth=0.5, label=f"{result_label}: {len(catalog['magnitude'])}")
-# plt.hist(events["magnitude"], range=(-1., catalog["magnitude"].max()), bins=25, alpha=0.6,  edgecolor="k", linewidth=0.5, label=f"{catalog_label}: {len(events['magnitude'])}")
+plt.hist(gamma_catalog["magnitude"], bins=bins, alpha=1.0,  edgecolor="k", linewidth=0.5, label=f"{gamma_label}: {len(gamma_catalog['magnitude'])}")
+if plot_standard_catalog:
+    plt.hist(standard_catalog["magnitude"], bins=bins, alpha=0.6,  edgecolor="k", linewidth=0.5, label=f"{standard_label}: {len(standard_catalog['magnitude'])}")
 plt.legend()
-# plt.figure()
-plt.xlim([-1,catalog["magnitude"].max()])
 plt.xlabel("Magnitude")
 plt.ylabel("Frequency")
 plt.gca().set_yscale('log')
-plt.savefig(figure_dir("earthquake_magnitude_frequency.png"), bbox_inches="tight", dpi=300)
-plt.savefig(figure_dir("earthquake_magnitude_frequency.pdf"), bbox_inches="tight")
-plt.show();
+plt.savefig(gamma_path / "earthquake_magnitude_frequency.png", bbox_inches="tight", dpi=300)
+plt.savefig(gamma_path / "earthquake_magnitude_frequency.pdf", bbox_inches="tight", dpi=300)
+plt.show()
 
 # %%
-plt.figure()
-plt.plot(catalog["time"], catalog["magnitude"], '.', markersize=5, alpha=1.0, rasterized=True)
-# plt.plot(events["time"], events["magnitude"], '.', markersize=5, alpha=0.8, rasterized=True)
-# plt.xlim(config["starttime"], config["endtime"])
-ylim = plt.ylim()
+gamma_markersize = min(1, 1e5/len(gamma_catalog))
+standard_markersize = min(1, 1e4/len(standard_catalog))
+plt.figure(figsize=plt.rcParams["figure.figsize"]*np.array([1.5,1.0]))
+
+plt.scatter(gamma_catalog["time"], gamma_catalog["magnitude"], s=gamma_markersize, alpha=1.0, linewidth=0, rasterized=True)
+if plot_standard_catalog:
+    plt.scatter(standard_catalog["time"], standard_catalog["magnitude"], s=standard_markersize, alpha=1.0, linewidth=0, rasterized=True)
+
 plt.ylabel("Magnitude")
-# plt.xlabel("Date")
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d:%H'))
+plt.xlabel("Date")
 plt.gcf().autofmt_xdate()
+
 plt.gca().set_prop_cycle(None)
-# plt.plot(config["starttime"], -10, '.', markersize=15, alpha=1.0, label=f"{result_label}: {len(catalog['magnitude'])}")
-# plt.plot(config["starttime"], -10, '.', markersize=15, alpha=1.0, label=f"{catalog_label}: {len(events['magnitude'])}")
-plt.legend()
+xlim = plt.xlim()
+ylim = plt.ylim()
+plt.plot(xlim[0]-10, ylim[0]-10, '.', markersize=15, alpha=1.0, label=f"{gamma_label}: {len(gamma_catalog)}")
+plt.plot(xlim[0]-10, ylim[0]-10,  '.', markersize=15, alpha=1.0, label=f"{standard_label}: {len(standard_catalog)}")
+plt.legend(loc="lower right")
+plt.xlim(xlim)
 plt.ylim(ylim)
-plt.grid()
-plt.savefig(figure_dir("earthquake_magnitude_time.png"), bbox_inches="tight", dpi=300)
-plt.savefig(figure_dir("earthquake_magnitude_time.pdf"), bbox_inches="tight", dpi=300)
-plt.show();
+plt.grid(linestyle='--', linewidth=0.5, alpha=0.5)
+plt.savefig(gamma_path / "earthquake_magnitude_time.png", bbox_inches="tight", dpi=300)
+plt.savefig(gamma_path / "earthquake_magnitude_time.pdf", bbox_inches="tight", dpi=300)
+plt.show()
 
 # %%
-# covariance = np.array(catalog["covariance"].to_list())
+gamma_markersize = min(1, 1e5/len(gamma_catalog))
+standard_markersize = min(1, 1e4/len(standard_catalog))
 fig = plt.figure(figsize=plt.rcParams["figure.figsize"]*np.array([0.8,1.1]))
 box = dict(boxstyle='round', facecolor='white', alpha=1)
 text_loc = [0.05, 0.90]
 plt.subplot(311)
-plt.plot(catalog["time"], catalog["sigma_time"], '.', markersize=3.0, label="Travel-time")
+plt.scatter(gamma_catalog["time"], gamma_catalog["sigma_time"], s=gamma_markersize, linewidth=0, label="Travel-time")
 # plt.ylim([0, 3])
 plt.ylabel(r"$\sigma_{11}$ (s)")
 plt.legend(loc="upper right")
 plt.text(text_loc[0], text_loc[1], '(i)', horizontalalignment='left', verticalalignment="top", 
          transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
 plt.subplot(312)
-plt.plot(catalog["time"], catalog["sigma_amp"], '.', markersize=3.0, label="Amplitude")
+plt.scatter(gamma_catalog["time"], gamma_catalog["sigma_amp"], s=gamma_markersize, linewidth=0, label="Amplitude")
 # plt.ylim([0, 1])
 plt.ylabel(r"$\sigma_{22}$ ($\log10$ m/s)")
 plt.legend(loc="upper right")
 plt.text(text_loc[0], text_loc[1], '(ii)', horizontalalignment='left', verticalalignment="top", 
          transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
 plt.subplot(313)
-plt.plot(catalog["time"], catalog["cov_time_amp"], '.', markersize=3.0, label="Travel-time vs. Amplitude")
+plt.scatter(gamma_catalog["time"], gamma_catalog["cov_time_amp"], s=gamma_markersize, linewidth=0, label="Travel-time vs. Amplitude")
 plt.ylabel(r"$\Sigma_{12}$")
 plt.ylim([-0.5, 0.5])
 plt.legend(loc="upper right")
 plt.text(text_loc[0], text_loc[1], '(iii)', horizontalalignment='left', verticalalignment="top", 
          transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d:%H'))
 plt.gcf().autofmt_xdate()
 # plt.suptitle(r"Covariance Matrix ($\Sigma$) Coefficients")
 plt.tight_layout()
 plt.gcf().align_labels()
-plt.savefig(figure_dir("covariance.png"), bbox_inches="tight", dpi=300)
-plt.savefig(figure_dir("covariance.pdf"), bbox_inches="tight")
-plt.show();
+plt.savefig(gamma_path / "covariance.png", bbox_inches="tight", dpi=300)
+plt.savefig(gamma_path / "covariance.pdf", bbox_inches="tight")
+plt.show()
 
 
+# %%
+plot_standard_catalog = False
+gamma_catalog = gamma_catalog[gamma_catalog["gamma_score"] > 30]
+
+fig = plt.figure(figsize=plt.rcParams["figure.figsize"]*np.array([1.5,1]))
+box = dict(boxstyle='round', facecolor='white', alpha=1)
+text_loc = [0.05, 0.92]
+
+gamma_markersize = min(1e5/len(gamma_catalog["latitude"]), 1)
+standard_markersize = min(1e4/len(standard_catalog["latitude"]), 1)
+alpha=0.3
+grd = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[1.5, 1], height_ratios=[1,1])
+ax1 = fig.add_subplot(grd[:, 0], projection=ccrs.PlateCarree())
+ax1.set_extent([config["minlongitude"], config["maxlongitude"], config["minlatitude"], config["maxlatitude"]], crs=ccrs.PlateCarree())
+# terrain = cimgt.Stamen("terrain-background")
+# ax1.add_image(terrain, 10, alpha=0.4)
+topo = pygmt.datasets.load_earth_relief(resolution="01s", region=[config["minlongitude"], config["maxlongitude"], config["minlatitude"], config["maxlatitude"]]).to_numpy()/1e3
+topo = np.flipud(topo)
+ls = LightSource()
+ax1.imshow(ls.hillshade(topo, vert_exag=300, dx=1.0, dy=1.0), origin="upper", extent=[config["minlongitude"], config["maxlongitude"], config["minlatitude"], config["maxlatitude"]], cmap="gray", alpha=0.5, transform=ccrs.PlateCarree())
+
+ax1.coastlines(resolution="10m", color="gray", linewidth=0.5)
+gl = ax1.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=0.5, color="gray", alpha=0.5, linestyle="--")
+gl.top_labels = False
+gl.right_labels = False
+ax1.scatter(gamma_catalog["longitude"], gamma_catalog["latitude"], s=gamma_markersize, linewidth=0, alpha=alpha)
+if plot_standard_catalog:
+    ax1.scatter(standard_catalog["longitude"], standard_catalog["latitude"], s=standard_markersize, linewidth=0, alpha=alpha)
+# ax1.axis("scaled")
+# ax1.set_xlim([config["minlongitude"], config["maxlongitude"]])
+# ax1.set_ylim([config["minlatitude"], config["maxlatitude"]])
+# ax1.set_xlabel("Latitude")
+# ax1.set_ylabel("Longitude")
+ax1.set_prop_cycle(None)
+ax1.plot(config["minlongitude"]-10, config["minlatitude"]-10, '.', markersize=10, label=f"{gamma_label}", rasterized=True)
+ax1.plot(config["minlongitude"]-10, config["minlatitude"]-10, '.', markersize=10, label=f"{standard_label}", rasterized=True)
+ax1.plot(stations["longitude"], stations["latitude"], 'k^', markersize=5, alpha=0.7, label="Stations")
+ax1.text(text_loc[0], text_loc[1], '(i)', horizontalalignment='left', verticalalignment="top", 
+         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
+plt.legend(loc="lower right")
+
+ax2 = fig.add_subplot(grd[0, 1])
+ax2.scatter(gamma_catalog["longitude"], gamma_catalog["depth(m)"]/1e3, s=gamma_markersize, linewidth=0, alpha=alpha, rasterized=True)
+if plot_standard_catalog:
+    ax2.scatter(standard_catalog["longitude"], standard_catalog["depth_km"], s=standard_markersize, linewidth=0, alpha=alpha, rasterized=True)
+ax2.set_xlim([config["minlongitude"], config["maxlongitude"]])
+ax2.set_ylim([0,21])
+ax2.invert_yaxis()
+ax2.set_xlabel("Longitude")
+ax2.set_ylabel("Depth (km)")
+ax2.set_prop_cycle(None)
+ax2.plot(config["minlongitude"]-10, 31, '.', markersize=10, label=f"{gamma_label}")
+ax2.plot(31, 31, '.', markersize=10, label=f"{standard_label}")
+ax2.text(text_loc[0], text_loc[1], '(ii)', horizontalalignment='left', verticalalignment="top", 
+         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
+plt.legend(loc="lower right")
+
+
+fig.add_subplot(grd[1, 1])
+plt.scatter(gamma_catalog["latitude"], gamma_catalog["depth(m)"]/1e3, s=gamma_markersize, linewidth=0, alpha=alpha, rasterized=True)
+if plot_standard_catalog:
+    plt.scatter(standard_catalog["latitude"], standard_catalog["depth_km"], s=standard_markersize, linewidth=0, alpha=alpha, rasterized=True)
+plt.xlim([config["minlatitude"], config["maxlatitude"]])
+plt.ylim([0,21])
+plt.gca().invert_yaxis()
+plt.xlabel("Latitude")
+plt.ylabel("Depth (km)")
+plt.gca().set_prop_cycle(None)
+plt.plot(config["minlatitude"]-10, 31, '.', markersize=10, label=f"{gamma_label}")
+plt.plot(31, 31, '.', markersize=10, label=f"{standard_label}")
+plt.legend(loc="lower right")
+plt.tight_layout()
+plt.text(text_loc[0], text_loc[1], '(iii)', horizontalalignment='left', verticalalignment="top", 
+         transform=plt.gca().transAxes, fontsize="large", fontweight="normal", bbox=box)
+plt.savefig(gamma_path / "earthquake_location.png", bbox_inches="tight", dpi=300)
+plt.savefig(gamma_path / "earthquake_location.pdf", bbox_inches="tight", dpi=300)
+plt.show()
+
+# %%
+def plot3d(x, y, z, config, fig_name):
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="markers",
+                marker=dict(size=2.0, color=z, cmin=config["gamma"]["zmin_km"], cmax=config["gamma"]["zmax_km"], colorscale="Viridis", opacity=0.6),
+            )
+        ],
+    )
+
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(
+                nticks=4,
+                range=[config["minlongitude"], config["maxlongitude"]],
+            ),
+            yaxis=dict(
+                nticks=4,
+                range=[config["minlatitude"], config["maxlatitude"]]
+            ),
+            zaxis=dict(
+                nticks=4,
+                # range=[z.max(), z.min()],
+                range=[config["gamma"]["zmax_km"], config["gamma"]["zmin_km"]],
+            ),
+            #         aspectratio = dict(x=(xlim[1]-xlim[0])/2, y=(ylim[1]-ylim[0])/2, z=1),
+            aspectratio=dict(x=1, y=1, z=0.5),
+        ),
+        margin=dict(r=0, l=0, b=0, t=0),
+    )
+    fig.write_html(fig_name)
+
+plot3d(gamma_catalog["longitude"], gamma_catalog["latitude"], gamma_catalog["depth(m)"]/1e3, config, gamma_path / "earthquake_location.html")
+# %%

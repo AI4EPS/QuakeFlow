@@ -1,5 +1,14 @@
 #!/bin/bash
-cd relocation/hypodd
+
+WORKING_DIR=$PWD
+region="Kilauea"
+cd $region/hypodd
+
+if [ ! -d "HypoDD" ]; then
+  git clone git@github.com:zhuwq0/HypoDD.git
+  export PATH=$PATH:$PWD/HypoDD
+  make -C HypoDD/src/
+fi
 
 cat <<EOF > ph2dt.inp
 * ph2dt.inp - input control file for program ph2dt
@@ -99,7 +108,9 @@ hypodd.src
 * ID
 EOF
 
-../HypoDD/src/ph2dt/ph2dt ph2dt.inp
-../HypoDD/src/hypoDD/hypoDD ct.inp
-cp hypodd_ct.reloc ../../results/hypodd_ct_catalog.txt
-cd ../../
+if [ ! -f "dt.ct" ]; then
+    ./HypoDD/src/ph2dt/ph2dt ph2dt.inp
+fi
+./HypoDD/src/hypoDD/hypoDD ct.inp
+cp hypodd_ct.reloc hypodd_ct_catalog.txt
+cd $WORKING_DIR

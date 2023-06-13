@@ -127,6 +127,7 @@ config_region[region] = {
     "maxlongitude": -155.28 + 0.1,
     "provider": ["IRIS"],
     "degree2km": 111.19492474777779,
+    "gamma": {"zmin_km": -1, "zmax_km": 10},
 }
 
 region = "Kilauea_debug"

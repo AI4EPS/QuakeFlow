@@ -30,17 +30,17 @@ config.update(config_region[region])
 root_path = Path(f"/workspaces/disk/{region}")
 if not root_path.exists():
     root_path.mkdir()
-result_path = root_path / "results"
+result_path = root_path / "obspy"
 if not result_path.exists():
     result_path.mkdir()
 
-with open(result_path / "config.json", "w") as fp:
+with open(root_path / "config.json", "w") as fp:
     json.dump(config, fp, indent=4)
 
 # %%
-with open(result_path / "config.json", "r") as fp:
+with open(root_path / "config.json", "r") as fp:
     config = json.load(fp)
-print(config)
+print(json.dumps(config, indent=4))
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
@@ -62,10 +62,10 @@ if ("provider" in config) and (config["provider"] is not None):
             print(e)
             events = obspy.Catalog()
         print(f"Dowloaded {len(events)} events from {provider}")
-        events.write(f"{root_path}/catalog_{provider}.xml", format="QUAKEML")
+        events.write(f"{result_path}/catalog_{provider}.xml", format="QUAKEML")
         catalog += events
 
-    catalog.write(f"{root_path}/catalog.xml", format="QUAKEML")
+    catalog.write(f"{result_path}/catalog.xml", format="QUAKEML")
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
@@ -94,10 +94,10 @@ if ("provider" in config) and (config["provider"] is not None):
                 level="response")
             
         print(f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider}")
-        stations.write(f"{root_path}/inventory_{provider}.xml", format="STATIONXML")
+        stations.write(f"{result_path}/inventory_{provider}.xml", format="STATIONXML")
         inventory += stations
 
-    inventory.write(f"{root_path}/inventory.xml", format="STATIONXML")
+    inventory.write(f"{result_path}/inventory.xml", format="STATIONXML")
 
 # %%
 def download(starttime, inventory, waveform_path, deltatime="1D", lock=None):
@@ -162,13 +162,13 @@ def download(starttime, inventory, waveform_path, deltatime="1D", lock=None):
                     print(f"Failed to download {mseed_name}")
 
 # %%
-waveform_path = root_path / "waveforms"
+waveform_path = result_path / "waveforms"
 if not waveform_path.exists():
     waveform_path.mkdir()
 
 for provider in config["provider"]:
 
-    inventory = obspy.read_inventory(f"{root_path}/inventory_{provider}.xml")
+    inventory = obspy.read_inventory(f"{result_path}/inventory_{provider}.xml")
 
     client = obspy.clients.fdsn.Client(provider)
 
@@ -195,7 +195,7 @@ for provider in config["provider"]:
 
 
 # %%
-catalog = obspy.read_events(f"{root_path}/catalog.xml")
+catalog = obspy.read_events(f"{result_path}/catalog.xml")
 
 def parase_catalog(catalog):
     events = {}
@@ -215,14 +215,14 @@ events = pd.DataFrame.from_dict(events, orient="index")
 events.to_csv(result_path / "events.csv", index_label="event_id")
 
 # %%
-mseeds = (root_path / "waveforms").rglob("*.mseed")
+mseeds = (result_path / "waveforms").rglob("*.mseed")
 mseed_ids = []
 for mseed in mseeds:
     mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
 
 # %%
-if os.path.exists(f"{root_path}/inventory.xml"):
-    inventory = obspy.read_inventory(f"{root_path}/inventory.xml")
+if os.path.exists(f"{result_path}/inventory.xml"):
+    inventory = obspy.read_inventory(f"{result_path}/inventory.xml")
 
 def parse_response(inventory, mseed_ids=None):
     stations = {}

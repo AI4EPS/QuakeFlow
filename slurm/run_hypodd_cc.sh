@@ -1,5 +1,11 @@
 #!/bin/bash
-cd relocation/hypodd
+WORKING_DIR=$PWD
+region="Kilauea_debug"
+cd $region/hypodd
+
+if [ ! -d "HypoDD" ]; then
+  git clone git@github.com:zhuwq0/HypoDD.git
+fi
 
 cat <<EOF > cc.inp
 * RELOC.INP:
