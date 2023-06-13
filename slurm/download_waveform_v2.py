@@ -23,11 +23,11 @@ config_region = {}
 exec(open('config.py').read())
 
 # %%
-region = "Kilauea_debug_v2"
+region = "Kilauea"
 config.update(config_region[region])
 
 # %%
-root_path = Path(f"{region}")
+root_path = Path(f"/workspaces/disk/{region}")
 if not root_path.exists():
     root_path.mkdir()
 result_path = root_path / "results"
@@ -100,11 +100,18 @@ if ("provider" in config) and (config["provider"] is not None):
     inventory.write(f"{root_path}/inventory.xml", format="STATIONXML")
 
 # %%
-def download(starttime, inventory, waveform_path, lock):
+def download(starttime, inventory, waveform_path, deltatime="1D", lock=None):
 
     starttime = obspy.UTCDateTime(starttime)
-    endtime = starttime + 3600 # 1 hour
-    waveform_path = waveform_path / f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}"
+    if deltatime == "1H":
+        endtime = starttime + 3600
+        waveform_path = waveform_path / f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}"
+    elif deltatime == "1D":
+        endtime = starttime + 3600*24
+        waveform_path = waveform_path / f"{starttime.strftime('%Y-%j')}"
+    else:
+        raise ValueError("Invalid interval")
+    
     if not waveform_path.exists():
         waveform_path.mkdir(parents=True)
 
@@ -165,14 +172,18 @@ for provider in config["provider"]:
 
     client = obspy.clients.fdsn.Client(provider)
 
-    starttime_hour = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
-    starttimes = pd.date_range(starttime_hour, config["endtime"], freq="1H", tz="UTC", inclusive='left')
+    deltatime = "1D" # "1H"
+    if deltatime == "1H":
+        starttime_hour = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
+    elif deltatime == "1D":    
+        starttime_day = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
+    starttimes = pd.date_range(starttime_day, config["endtime"], freq=deltatime, tz="UTC", inclusive='left')
 
     threads = []
     MAX_THREADS = 3
     lock = threading.Lock()
     for ii, starttime in enumerate(starttimes):
-        t = threading.Thread(target=download, args=(starttime, inventory, waveform_path, lock))
+        t = threading.Thread(target=download, args=(starttime, inventory, waveform_path, deltatime, lock))
         t.start()
         threads.append(t)
         if ii % MAX_THREADS == MAX_THREADS - 1:
