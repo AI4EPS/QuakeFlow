@@ -10,15 +10,16 @@ from datetime import datetime
 import os
 import argparse
 
+# %%
 def parse_args():
     parser = argparse.ArgumentParser()
     ## true
     parser.add_argument("--dtcc", action="store_true", help="run convert_dtcc.py")
-    return parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    return args
 
 args = parse_args()
 
-# %%
 # %%
 region = "Kilauea"
 # region = "Kilauea_debug"
@@ -50,6 +51,8 @@ with open(result_path / "stlist.txt", "w") as fp:
 # %%
 catalog_file = data_path / "gamma_catalog.csv"
 catalog_df = pd.read_csv(catalog_file)
+# catalog_df = catalog_df[catalog_df["gamma_score"] > 10]
+# event_index = [f"{x:06d}" for x in catalog_df["event_index"]]
 
 catalog_df[["year", "month", "day", "hour", "minute", "second"]] = (
     catalog_df["time"]
@@ -68,9 +71,7 @@ with open(result_path / "evlist.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
-
 if not args.dtcc:
-    # dt_ct = Path("relocation/hypodd/dt.ct")
     dt_ct = root_path / "hypodd" / "dt.ct"
     lines = []
     with open(dt_ct, "r") as fp:
