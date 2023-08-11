@@ -147,20 +147,22 @@ if os.path.exists(f"{result_path}/inventory.xml"):
     inventory = obspy.read_inventory(f"{result_path}/inventory.xml")
 
 
-def parse_response(inventory, mseed_ids=[]):
+def parse_inventory_json(inventory, mseed_ids=[]):
+    comp = ["3", "2", "1", "E", "N", "Z"]
+    order = {key: i for i, key in enumerate(comp)}
     stations = {}
     num = 0
     for net in inventory:
         for sta in net:
+            sta_3c = {}
             components = defaultdict(list)
-            unique = {}
 
             for chn in sta:
-                key = f"{chn.location_code}{chn.code[:-1]}"
-                components[key].append(chn.code[-1])
+                key = f"{chn.location_code}.{chn.code[:-1]}"
+                components[key].append([chn.code[-1], chn.response.instrument_sensitivity.value])
 
-                if key not in unique:
-                    unique[key] = {
+                if key not in sta_3c:
+                    sta_3c[key] = {
                         "latitude": chn.latitude,
                         "longitude": chn.longitude,
                         "elevation_m": chn.elevation,
@@ -168,23 +170,24 @@ def parse_response(inventory, mseed_ids=[]):
                         "instrument": chn.code[:-1],
                     }
 
-            for key in components:
-                station_id = f"{net.code}.{sta.code}.{unique[key]['location']}.{unique[key]['instrument']}"
+            for key in list(sta_3c.keys()):
+                station_id = f"{net.code}.{sta.code}.{sta_3c[key]['location']}.{sta_3c[key]['instrument']}"
                 if (len(mseed_ids) > 0) and (station_id not in mseed_ids):
                     continue
                 num += 1
-                x_km, y_km = proj(unique[key]["longitude"], unique[key]["latitude"])
-                z_km = -unique[key]["elevation_m"] / 1e3
+                x_km, y_km = proj(sta_3c[key]["longitude"], sta_3c[key]["latitude"])
+                z_km = -sta_3c[key]["elevation_m"] / 1e3
                 stations[station_id] = {
                     "network": net.code,
                     "station": sta.code,
-                    "location": unique[key]["location"],
-                    "instrument": unique[key]["instrument"],
-                    "component": sorted(components[key]),
-                    "latitude": unique[key]["latitude"],
-                    "longitude": unique[key]["longitude"],
-                    "elevation_m": unique[key]["elevation_m"],
-                    "depth_km": -unique[key]["elevation_m"] / 1e3,
+                    "location": sta_3c[key]["location"],
+                    "instrument": sta_3c[key]["instrument"],
+                    "component": "".join([x[0] for x in sorted(components[key], key=lambda x: order[x[0]])]),
+                    "sensitivity": [x[1] for x in sorted(components[key], key=lambda x: order[x[0]])],
+                    "latitude": sta_3c[key]["latitude"],
+                    "longitude": sta_3c[key]["longitude"],
+                    "elevation_m": sta_3c[key]["elevation_m"],
+                    "depth_km": -sta_3c[key]["elevation_m"] / 1e3,
                     "x_km": round(x_km, 3),
                     "y_km": round(y_km, 3),
                     "z_km": round(z_km, 3),
@@ -195,16 +198,64 @@ def parse_response(inventory, mseed_ids=[]):
     return stations
 
 
-stations = parse_response(inventory)
-with open(result_path / "stations.json", "w") as f:
-    json.dump(stations, f, indent=4)
-stations = pd.DataFrame.from_dict(stations, orient="index")
-# stations[["x_km", "y_km"]] = stations.apply(lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1)
-# stations["z_km"] = stations["depth_km"]
+def parse_inventory_csv(inventory, mseed_ids=[]):
+    channel_list = []
+    for network in inventory:
+        for station in network:
+            for channel in station:
+                if channel.sensor is None:
+                    sensor_description = ""
+                else:
+                    sensor_description = channel.sensor.description
+                channel_list.append(
+                    {
+                        "network": network.code,
+                        "station": station.code,
+                        "location": channel.location_code,
+                        "instrument": channel.code[:-1],
+                        "component": channel.code[-1],
+                        "channel": channel.code,
+                        "longitude": channel.longitude,
+                        "latitude": channel.latitude,
+                        "elevation_m": channel.elevation,
+                        "depth_km": -channel.elevation / 1e3,
+                        # "depth_km": channel.depth,
+                        "begin_time": channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                        if channel.start_date is not None
+                        else None,
+                        "end_time": channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                        if channel.end_date is not None
+                        else None,
+                        "azimuth": channel.azimuth,
+                        "dip": channel.dip,
+                        "sensitivity": channel.response.instrument_sensitivity.value,
+                        "site": station.site.name,
+                        "sensor": sensor_description,
+                    }
+                )
+    channel_list = pd.DataFrame(channel_list)
+
+    print(f"Parse {len(channel_list)} stations")
+
+    return channel_list
+
+
+stations = parse_inventory_csv(inventory)
+# with open(result_path / "stations.json", "w") as f:
+#     json.dump(stations, f, indent=4)
+# stations = pd.DataFrame.from_dict(stations, orient="index")
+stations[["x_km", "y_km"]] = stations.apply(lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1)
+stations["z_km"] = stations["depth_km"]
 stations[["latitude", "longitude"]] = stations[["latitude", "longitude"]].round(4)
 stations["depth_km"] = stations["depth_km"].round(2)
 stations[["x_km", "y_km", "z_km"]] = stations[["x_km", "y_km", "z_km"]].round(2)
-stations.to_csv(result_path / "stations.csv", index_label="station_id")
+stations = stations.sort_values(by=["network", "station", "location", "channel"])
+stations = stations.groupby(["network", "station", "location", "channel"]).first().reset_index()
+stations.to_csv(result_path / "stations.csv", index=False)
+
+stations = parse_inventory_json(inventory)
+with open(result_path / "stations.json", "w") as f:
+    json.dump(stations, f, indent=4)
 
 
 # %%
@@ -347,7 +398,7 @@ if os.path.exists(f"{result_path}/inventory.xml"):
 
 
 # mseed_ids = None
-stations = parse_response(inventory, mseed_ids)
+stations = parse_inventory(inventory, mseed_ids)
 with open(result_path / "stations.json", "w") as f:
     json.dump(stations, f, indent=4)
 stations = pd.DataFrame.from_dict(stations, orient="index")
