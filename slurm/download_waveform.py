@@ -12,19 +12,23 @@ import obspy
 import obspy.clients.fdsn
 from obspy.clients.fdsn import header
 import pandas as pd
-from obspy.clients.fdsn.mass_downloader import (CircularDomain, GlobalDomain,
-                                                MassDownloader,
-                                                RectangularDomain,
-                                                Restrictions)
+from obspy.clients.fdsn.mass_downloader import (
+    CircularDomain,
+    GlobalDomain,
+    MassDownloader,
+    RectangularDomain,
+    Restrictions,
+)
 
 # %%
 region = ""
 config = {}
 config_region = {}
-exec(open('config.py').read())
+exec(open("config.py").read())
 
 # %%
-region = "Kilauea_debug"
+# region = "Kilauea_debug"
+region = "demo"
 config.update(config_region[region])
 
 # %%
@@ -70,30 +74,31 @@ if ("provider" in config) and (config["provider"] is not None):
 
 # %%
 if ("provider" in config) and (config["provider"] is not None):
-
     print("Downloading station response...")
     inventory = obspy.Inventory()
     for provider in config["provider"]:
         client = obspy.clients.fdsn.Client(provider)
         if ("station" in config) and (config["station"] is not None):
             stations = client.get_stations(
-                network=config["network"], 
+                network=config["network"],
                 station=config["station"],
-                starttime=config["starttime"], 
+                starttime=config["starttime"],
                 endtime=config["endtime"],
                 channel=config["channel"],
-                level="response")
+                level="response",
+            )
         else:
             stations = client.get_stations(
-                starttime=config["starttime"], 
+                starttime=config["starttime"],
                 endtime=config["endtime"],
                 minlatitude=config["minlatitude"],
                 maxlatitude=config["maxlatitude"],
                 minlongitude=config["minlongitude"],
                 maxlongitude=config["maxlongitude"],
                 channel=config["channel"],
-                level="response")
-            
+                level="response",
+            )
+
         print(f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider}")
         stations.write(f"{result_path}/inventory_{provider}.xml", format="STATIONXML")
         inventory += stations
@@ -107,9 +112,18 @@ if ("longitude0" in config) and ("latitude0" in config) and ("maxradius_degree" 
     domain = CircularDomain(
         longitude=config["longitude0"], latitude=config["latitude0"], minradius=0, maxradius=config["maxradius_degree"]
     )
-if ("minlatitude" in config) and ("maxlatitude" in config) and ("minlongitude" in config) and ("maxlongitude" in config):
-    domain = RectangularDomain(minlatitude=config["minlatitude"], maxlatitude=config["maxlatitude"],
-                               minlongitude=config["minlongitude"], maxlongitude=config["maxlongitude"])
+if (
+    ("minlatitude" in config)
+    and ("maxlatitude" in config)
+    and ("minlongitude" in config)
+    and ("maxlongitude" in config)
+):
+    domain = RectangularDomain(
+        minlatitude=config["minlatitude"],
+        maxlatitude=config["maxlatitude"],
+        minlongitude=config["minlongitude"],
+        maxlongitude=config["maxlongitude"],
+    )
 print(f"{domain = }")
 
 restrictions = Restrictions(
@@ -125,11 +139,13 @@ restrictions = Restrictions(
 )
 print(f"{restrictions = }")
 
+
 def get_mseed_storage(network, station, location, channel, starttime, endtime):
     file_name = f"{result_path}/waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
     if os.path.exists(file_name):
         return True
     return file_name
+
 
 print(f"Downloading waveforms...")
 mdl = MassDownloader(
@@ -141,11 +157,12 @@ mdl.download(
     mseed_storage=get_mseed_storage,
     stationxml_storage=f"{result_path}/stations",
     download_chunk_size_in_mb=20,
-    threads_per_client=3, # default 3
+    threads_per_client=3,  # default 3
 )
 
 # %%
 catalog = obspy.read_events(f"{result_path}/catalog.xml")
+
 
 def parase_catalog(catalog):
     events = {}
@@ -159,6 +176,7 @@ def parase_catalog(catalog):
             "depth_km": event.origins[0].depth / 1000,
         }
     return events
+
 
 events = parase_catalog(catalog)
 events = pd.DataFrame.from_dict(events, orient="index")
@@ -175,6 +193,7 @@ if os.path.exists(f"{result_path}/response.xml"):
     inventory = obspy.read_inventory(f"{result_path}/response.xml")
 if os.path.exists(f"{result_path}/stations"):
     inventory += obspy.read_inventory(f"{result_path}/stations/*xml")
+
 
 def parse_response(inventory, mseed_ids=None):
     stations = {}
@@ -211,9 +230,10 @@ def parse_response(inventory, mseed_ids=None):
                     "longitude": channel[key]["longitude"],
                     "elevation_m": channel[key]["elevation_m"],
                 }
-                
+
     print(f"Found {num} stations")
     return stations
+
 
 # mseed_ids = None
 stations = parse_response(inventory, mseed_ids)
@@ -221,7 +241,7 @@ with open(result_path / "stations.json", "w") as f:
     json.dump(stations, f, indent=4)
 stations = pd.DataFrame.from_dict(stations, orient="index")
 stations.to_csv(result_path / "stations.csv", index_label="station_id")
-    
+
 # %%
 fig = plt.figure(figsize=(10, 10))
 ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
@@ -231,9 +251,19 @@ ax.add_feature(cfeature.OCEAN)
 ax.add_feature(cfeature.COASTLINE)
 ax.add_feature(cfeature.LAKES, alpha=0.5)
 ax.add_feature(cfeature.RIVERS)
-gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
+gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=1, color="gray", alpha=0.5, linestyle="--")
 if len(events) > 0:
-    ax.scatter(events.longitude, events.latitude, transform=ccrs.PlateCarree(), s=1e4/len(events), c="r", marker=".", label="events")
-ax.scatter(stations.longitude, stations.latitude, transform=ccrs.PlateCarree(), s=100, c="b", marker="^", label="stations")
+    ax.scatter(
+        events.longitude,
+        events.latitude,
+        transform=ccrs.PlateCarree(),
+        s=1e4 / len(events),
+        c="r",
+        marker=".",
+        label="events",
+    )
+ax.scatter(
+    stations.longitude, stations.latitude, transform=ccrs.PlateCarree(), s=100, c="b", marker="^", label="stations"
+)
 ax.legend(scatterpoints=1, markerscale=0.5, fontsize=10)
 plt.savefig(result_path / "stations.png", dpi=300, bbox_inches="tight")
