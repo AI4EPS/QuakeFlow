@@ -52,6 +52,22 @@ config = {
 # %%
 config_region = {}
 
+region = "demo"
+config_region[region] = {
+    "region": region,
+    "longitude0": -117.504,
+    "latitude0": 35.705,
+    "maxradius_degree": 1.0,
+    "minlatitude": 34.705,
+    "maxlatitude": 36.705,
+    "minlongitude": -118.504,
+    "maxlongitude": -116.504,
+    "starttime": "2019-07-04T17:00:00",
+    "endtime": "2019-07-04T19:00:00",
+    "provider": ["SCEDC", "IRIS"],
+    "network": "CI",
+}
+
 region = "Ridgecrest"
 config_region[region] = {
     "region": region,
