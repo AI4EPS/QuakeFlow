@@ -287,6 +287,7 @@ def visulization(config, events, stations, fname):
 
 
 fname = f"{result_path}/stations.png"
+stations=pd.DataFrame.from_dict(stations, orient="index")
 visulization(config, events, stations, fname)
 
 
@@ -360,16 +361,16 @@ if not waveform_path.exists():
     waveform_path.mkdir()
 
 for provider in config["provider"]:
-    inventory = obspy.read_inventory(f"{result_path}/inventory_{provider}.xml")
+    inventory = obspy.read_inventory(f"{result_path}/inventory_{provider.lower()}.xml")
 
     client = obspy.clients.fdsn.Client(provider)
 
-    deltatime = "1D"  # "1H"
+    deltatime = "1H"  # "1H"
     if deltatime == "1H":
-        starttime_hour = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
+        starttime_period = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
     elif deltatime == "1D":
-        starttime_day = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
-    starttimes = pd.date_range(starttime_day, config["endtime"], freq=deltatime, tz="UTC", inclusive="left")
+        starttime_period = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
+    starttimes = pd.date_range(starttime_period, config["endtime"], freq=deltatime, tz="UTC", inclusive="left")
 
     threads = []
     MAX_THREADS = 3
@@ -398,7 +399,7 @@ if os.path.exists(f"{result_path}/inventory.xml"):
 
 
 # mseed_ids = None
-stations = parse_inventory(inventory, mseed_ids)
+stations = parse_inventory_json(inventory, mseed_ids)
 with open(result_path / "stations.json", "w") as f:
     json.dump(stations, f, indent=4)
 stations = pd.DataFrame.from_dict(stations, orient="index")
