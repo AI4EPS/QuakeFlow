@@ -22,7 +22,9 @@
             var offset = 0;            
             for (var id in data) {
                 traces.push({
-                    x: data[id].timestamp,
+                    // convert timestamp from seconds to ISO format in "yyyy-mm-dd hh:mm:ss"
+                    x: data[id].timestamp.map(function(x) { return new Date(x * 1000); }),
+                    // x: data[id].timestamp,
                     y: data[id].data,
                     type: "scatter",
                     mode: "lines",
