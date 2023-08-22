@@ -306,7 +306,7 @@ def download_event(event, stations, client, waveform_path, time_before=30, time_
                         starttime=obspy.UTCDateTime(starttime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
                         endtime=obspy.UTCDateTime(endtime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
                     )
-                    stream = stream.merge()
+                    stream.merge(fill_value="latest")
                     if len(stream) > 1:
                         print(f"Warning: {key} has {len(stream)} traces: {stream.get_id()}")
                     data.append(stream[0])

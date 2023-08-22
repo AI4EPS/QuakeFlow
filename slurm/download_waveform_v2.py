@@ -287,7 +287,7 @@ def visulization(config, events, stations, fname):
 
 
 fname = f"{result_path}/stations.png"
-stations=pd.DataFrame.from_dict(stations, orient="index")
+stations = pd.DataFrame.from_dict(stations, orient="index")
 visulization(config, events, stations, fname)
 
 
@@ -334,6 +334,7 @@ def download(starttime, inventory, waveform_path, deltatime="1D", lock=None):
                             starttime=starttime,
                             endtime=endtime,
                         )
+                        stream.merge(fill_value="latest")
                         stream.write(mseed_name, format="MSEED")
                         print(f"Downloaded {mseed_name}")
                         break
