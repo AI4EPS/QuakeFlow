@@ -5,8 +5,11 @@ from kfp import dsl
 
 
 @dsl.component(base_image="zhuwq0/quakeflow:latest")
-def download_catalog(root_path: str, region: str, config: Dict, protocol: str, bucket: str, token: Dict):
+def download_catalog(
+    root_path: str, region: str, config: Dict, protocol: str = "file", bucket: str = "", token: Dict = None
+):
     import json
+    import os
     import re
     from datetime import timezone
     from pathlib import Path
@@ -26,12 +29,11 @@ def download_catalog(root_path: str, region: str, config: Dict, protocol: str, b
 
     # %%
     fs = fsspec.filesystem(protocol, token=token)
-    root_path = Path(f"{root_path}/{region}")
-    if not root_path.exists():
-        root_path.mkdir()
-    result_path = root_path / "obspy"
-    if not result_path.exists():
-        result_path.mkdir()
+    if not os.path.exists(root_path):
+        os.makedirs(root_path)
+    data_dir = f"{region}/obspy"
+    if not os.path.exists(f"{root_path}/{data_dir}"):
+        os.makedirs(f"{root_path}/{data_dir}")
 
     print(json.dumps(config, indent=4))
 
@@ -59,20 +61,20 @@ def download_catalog(root_path: str, region: str, config: Dict, protocol: str, b
                 print(e)
                 events = obspy.Catalog()
             print(f"Dowloaded {len(events)} events from {provider.lower()}")
-            events.write(f"{result_path}/catalog_{provider.lower()}.xml", format="QUAKEML")
+            events.write(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml", format="QUAKEML")
             if protocol != "file":
                 fs.put(
-                    f"{result_path}/catalog_{provider.lower()}.xml",
-                    f"{bucket}/{result_path}/catalog_{provider.lower()}.xml",
+                    f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml",
+                    f"{bucket}/{data_dir}/catalog_{provider.lower()}.xml",
                 )
             catalog += events
 
-        catalog.write(f"{result_path}/catalog.xml", format="QUAKEML")
+        catalog.write(f"{root_path}/{data_dir}/catalog.xml", format="QUAKEML")
         if protocol != "file":
-            fs.put(f"{result_path}/catalog.xml", f"{bucket}/{result_path}/catalog.xml")
+            fs.put(f"{root_path}/{data_dir}/catalog.xml", f"{bucket}/{data_dir}/catalog.xml")
 
     # %%
-    catalog = obspy.read_events(f"{result_path}/catalog.xml")
+    catalog = obspy.read_events(f"{root_path}/{data_dir}/catalog.xml")
 
     def parase_catalog(catalog):
         events = {}
@@ -107,9 +109,9 @@ def download_catalog(root_path: str, region: str, config: Dict, protocol: str, b
     events[["latitude", "longitude"]] = events[["latitude", "longitude"]].round(5)
     events["depth_km"] = events["depth_km"].round(3)
     events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
-    events.to_csv(result_path / "events.csv", index=False)
+    events.to_csv(f"{root_path}/{data_dir}/events.csv", index=False)
     if protocol != "file":
-        fs.put(f"{result_path}/events.csv", f"{bucket}/{result_path}/events.csv")
+        fs.put(f"{root_path}/{data_dir}/events.csv", f"{bucket}/{data_dir}/events.csv")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):
@@ -148,27 +150,27 @@ def download_catalog(root_path: str, region: str, config: Dict, protocol: str, b
         ax.legend(scatterpoints=1, markerscale=0.5, fontsize=10)
         plt.savefig(fig_name, dpi=300, bbox_inches="tight")
 
-    fig_name = f"{result_path}/catalog.png"
     stations = None
-    if (result_path / "stations.csv").exists():
-        stations = pd.read_csv(result_path / "stations.csv")
-    visulization(config, events, stations, fig_name)
+    if os.path.exists(f"{root_path}/{data_dir}/stations.csv"):
+        stations = pd.read_csv(f"{root_path}/{data_dir}/stations.csv")
+    visulization(config, events, stations, f"{root_path}/{data_dir}/catalog.png")
     if protocol != "file":
-        fs.put(fig_name, f"{bucket}/{fig_name}")
+        fs.put(f"{root_path}/{data_dir}/catalog.png", f"{bucket}/{data_dir}/catalog.png")
 
 
 if __name__ == "__main__":
     import json
 
-    root_path = "./"
+    root_path = "local"
     region = "demo"
-    with open(f"{region}/config.json", "r") as fp:
+    with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
     download_catalog.python_func(root_path, region=region, config=config, protocol="file", bucket="", token=None)
 
-    # %%
+    # # %%
     # import os
+
     # from kfp import compiler
     # from kfp.client import Client
 

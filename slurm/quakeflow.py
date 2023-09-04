@@ -8,6 +8,7 @@ from kfp.client import Client
 if __name__ == "__main__":
     from download_catalog import download_catalog
     from download_station import download_station
+    from download_waveform_event import download_waveform_event
     from set_config import set_config
 
     bucket = "quakeflow_share"
@@ -21,29 +22,34 @@ if __name__ == "__main__":
     yaml_path = "yaml"
     root_path = "/data"
     region = "demo"
+    num_nodes = 4
     with open(f"config.json", "r") as fp:
         config = json.load(fp)
+    config["num_nodes"] = num_nodes
 
     compiler.Compiler().compile(set_config, f"{yaml_path}/set_config.yaml")
     compiler.Compiler().compile(download_catalog, f"{yaml_path}/download_catalog.yaml")
     compiler.Compiler().compile(download_station, f"{yaml_path}/download_station.yaml")
+    compiler.Compiler().compile(download_waveform_event, f"{yaml_path}/download_waveform_event.yaml")
 
     set_config = components.load_component_from_file(f"{yaml_path}/set_config.yaml")
     download_catalog = components.load_component_from_file(f"{yaml_path}/download_catalog.yaml")
     download_station = components.load_component_from_file(f"{yaml_path}/download_station.yaml")
+    download_waveform_event = components.load_component_from_file(f"{yaml_path}/download_waveform_event.yaml")
 
     @dsl.pipeline
     def quakeflow(region: str, config: dict):
         pvc = kubernetes.CreatePVC(
-            pvc_name_suffix="-quakeflow",
-            # pvc_name="quakeflow",
+            # pvc_name_suffix="-quakeflow",
+            pvc_name="quakeflow",
             access_modes=["ReadWriteOnce"],
             size="5Gi",
             storage_class_name="standard",
-        ).set_display_name("Create Storage")
+        )
         config = set_config(
             root_path=root_path, region=region, config=config, protocol=protocol, bucket=bucket, token=token
         )
+        # config.set_caching_options(enable_caching=False)
         kubernetes.mount_pvc(config, pvc_name=pvc.outputs["name"], mount_path=root_path)
         catalog = download_catalog(
             root_path=root_path, region=region, config=config.output, protocol=protocol, bucket=bucket, token=token
@@ -53,7 +59,26 @@ if __name__ == "__main__":
             root_path=root_path, region=region, config=config.output, protocol=protocol, bucket=bucket, token=token
         )
         kubernetes.mount_pvc(station, pvc_name=pvc.outputs["name"], mount_path=root_path)
-        delete_pvc = kubernetes.DeletePVC(pvc_name=pvc.outputs["name"]).after(catalog).after(station)
+
+        with dsl.ParallelFor(items=list(range(num_nodes)), parallelism=num_nodes) as index:
+            pvc_node = kubernetes.CreatePVC(
+                pvc_name_suffix="-quakeflow",
+                access_modes=["ReadWriteOnce"],
+                size="5Gi",
+                storage_class_name="standard",
+            )
+            waveform_event = download_waveform_event(
+                root_path=root_path,
+                region=region,
+                config=config.output,
+                index=index,
+                protocol=protocol,
+                bucket=bucket,
+                token=token,
+            )
+            waveform_event.after(catalog).after(station)
+            kubernetes.mount_pvc(waveform_event, pvc_name=pvc_node.outputs["name"], mount_path=root_path)
+            delete_pvc = kubernetes.DeletePVC(pvc_name=pvc_node.outputs["name"]).after(waveform_event)
 
     compiler.Compiler().compile(quakeflow, f"{yaml_path}/quakeflow.yaml")
     client = Client("https://3a1395ae1e4ad10-dot-us-west1.pipelines.googleusercontent.com")

@@ -8,17 +8,18 @@ from kfp import dsl
 def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket: str, token: Dict) -> Dict:
     import json
     import os
-    from pathlib import Path
 
     import fsspec
 
     fs = fsspec.filesystem(protocol, token=token)
-    root_path = Path(f"{root_path}/{region}")
-    if not root_path.exists():
-        root_path.mkdir()
-    result_path = root_path / "obspy"
-    if not result_path.exists():
-        result_path.mkdir()
+    if not os.path.exists(root_path):
+        os.makedirs(root_path)
+    data_dir = f"{region}"
+    if not os.path.exists(f"{root_path}/{data_dir}"):
+        os.makedirs(f"{root_path}/{data_dir}")
+    for subfolder in ["obspy", "waveforms"]:
+        if not os.path.exists(f"{root_path}/{data_dir}/{subfolder}"):
+            os.makedirs(f"{root_path}/{data_dir}/{subfolder}")
 
     config_region = {}
     if "default" in config:
@@ -29,10 +30,10 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
         if region in config["region"]:
             config_region.update(config["region"][region])
 
-    with open(root_path / "config.json", "w") as fp:
+    with open(f"{root_path}/{data_dir}/config.json", "w") as fp:
         json.dump(config_region, fp, indent=4)
     if protocol != "file":
-        fs.put(str(root_path / "config.json"), f"{bucket}/{region}/config.json")
+        fs.put(f"{root_path}/{data_dir}/config.json", f"{bucket}/{data_dir}/config.json")
     print(json.dumps(config_region, indent=4))
 
     return config_region
@@ -41,18 +42,19 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
 if __name__ == "__main__":
     import json
 
-    root_path = "./"
+    root_path = "local"
     region = "demo"
     with open("config.json", "r") as fp:
         config = json.load(fp)
 
     set_config.python_func(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
 
-    # %%
+    # # %%
     # import os
+    # from pathlib import Path
+
     # from kfp import compiler
     # from kfp.client import Client
-    # from pathlib import Path
 
     # bucket = "quakeflow_share"
     # protocol = "gs"
@@ -65,8 +67,6 @@ if __name__ == "__main__":
     # yaml_path = Path("yaml")
     # if not yaml_path.exists():
     #     yaml_path.mkdir()
-
-    # compiler.Compiler().compile(set_config, str(yaml_path / "set_config.yaml"))
 
     # @dsl.pipeline
     # def test_set_config():
