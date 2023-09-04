@@ -57,11 +57,11 @@ config_region[region] = {
     "region": region,
     "longitude0": -117.504,
     "latitude0": 35.705,
-    "maxradius_degree": 1.0,
-    "minlatitude": 34.705,
-    "maxlatitude": 36.705,
-    "minlongitude": -118.504,
-    "maxlongitude": -116.504,
+    "maxradius_degree": 0.5,
+    "minlatitude": 35.205,
+    "maxlatitude": 36.205,
+    "minlongitude": -118.004,
+    "maxlongitude": -117.004,
     "starttime": "2019-07-04T17:00:00",
     "endtime": "2019-07-04T19:00:00",
     "provider": ["SCEDC", "IRIS"],
@@ -234,4 +234,18 @@ config_region[region] = {
         "HH[ZNE12]",
         "BH[ZNE12]",
     ),
+}
+
+
+region = "Mendocino"
+config_region[region] = {
+    "region": region,
+    "starttime": "2014-12-01T00:00:00",
+    "endtime": "2014-12-31T00:00:00",
+    "minlatitude": 39.5,
+    "maxlatitude": 41.5,
+    "minlongitude": -126.5,
+    "maxlongitude": -123.0,
+    "provider": ["IRIS"],
+    "network": "_CASCADIA_OBS",
 }

@@ -1,0 +1,223 @@
+{
+    "obspy": {
+        "degree2km": 111.1949,
+        "channel": "HH*,BH*,EH*,HN*",
+        "channel_priorities": [
+            "HH[ZNE12]",
+            "BH[ZNE12]",
+            "MH[ZNE12]",
+            "EH[ZNE12]",
+            "LH[ZNE12]",
+            "HL[ZNE12]",
+            "BL[ZNE12]",
+            "ML[ZNE12]",
+            "EL[ZNE12]",
+            "LL[ZNE12]",
+            "SH[ZNE12]"
+        ],
+        "location_priorities": [
+            "",
+            "00",
+            "10",
+            "01",
+            "20",
+            "02",
+            "30",
+            "03",
+            "40",
+            "04",
+            "50",
+            "05",
+            "60",
+            "06",
+            "70",
+            "07",
+            "80",
+            "08",
+            "90",
+            "09"
+        ],
+        "level": "response"
+    },
+    "region": {
+        "demo": {
+            "longitude0": -117.504,
+            "latitude0": 35.705,
+            "maxradius_degree": 0.5,
+            "minlatitude": 35.205,
+            "maxlatitude": 36.205,
+            "minlongitude": -118.004,
+            "maxlongitude": -117.004,
+            "starttime": "2019-07-04T17:00:00",
+            "endtime": "2019-07-04T19:00:00",
+            "provider": [
+                "SCEDC",
+                "IRIS"
+            ],
+            "network": "CI"
+        },
+        "Ridgecrest": {
+            "center": [
+                -117.504,
+                35.705
+            ],
+            "longitude0": -117.504,
+            "latitude0": 35.705,
+            "minlatitude": 34.705,
+            "maxlatitude": 36.705,
+            "minlongitude": -118.504,
+            "maxlongitude": -116.504,
+            "xlim_degree": [
+                -118.504,
+                -116.504
+            ],
+            "ylim_degree": [
+                34.705,
+                36.705
+            ],
+            "maxradius_degree": 1.0,
+            "horizontal_degree": 1.0,
+            "vertical_degree": 1.0,
+            "starttime": "2019-07-04T00:00:00",
+            "endtime": "2019-07-10T00:00:00",
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "EH[321ENZ]",
+                "HN[321ENZ]",
+                "BH[321ENZ]"
+            ],
+            "provider": [
+                "SCEDC",
+                "IRIS"
+            ]
+        },
+        "Hawaii_Loa": {
+            "center": [
+                -155.602737,
+                19.451827
+            ],
+            "longitude0": -155.602737,
+            "latitude0": 19.451827,
+            "minlatitude": 19.151827,
+            "maxlatitude": 19.751827,
+            "minlongitude": -155.352737,
+            "maxlongitude": -155.852737,
+            "xlim_degree": [
+                -155.852737,
+                -155.352737
+            ],
+            "ylim_degree": [
+                19.151827,
+                19.751827
+            ],
+            "maxradius_degree": 0.3,
+            "horizontal_degree": 0.3,
+            "vertical_degree": 0.3,
+            "starttime": "2022-11-30T22:00:00",
+            "endtime": "2022-11-30T23:00:00",
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "BH[321ENZ]",
+                "EH[321ENZ]",
+                "HN[321ENZ]"
+            ],
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "South_Pole2": {
+            "starttime": "2003-01-01T00:00:00",
+            "endtime": "2023-05-01T00:00:00",
+            "network": "IU",
+            "station": "QSPA",
+            "provider": [
+                "IRIS"
+            ],
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "BH[321ENZ]"
+            ],
+            "degree2km": 111.19492474777779
+        },
+        "Montezuma": {
+            "starttime": "2020-05-01T00:00:00",
+            "endtime": "2023-05-01T00:00:00",
+            "minlatitude": 37.9937,
+            "maxlatitude": 38.1657,
+            "minlongitude": -122.0325,
+            "maxlongitude": -121.7275,
+            "degree2km": 111.19492474777779
+        },
+        "Kilauea": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-08-12T00:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ],
+            "degree2km": 111.19492474777779,
+            "gamma": {
+                "zmin_km": -1,
+                "zmax_km": 10
+            }
+        },
+        "Kilauea_debug": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-04-29T01:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ],
+            "degree2km": 111.19492474777779
+        },
+        "Kilauea_debug_v2": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-04-29T01:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ],
+            "degree2km": 111.19492474777779
+        },
+        "BayArea": {
+            "starttime": "2022-11-01T00:00:00",
+            "endtime": "2023-01-01T00:00:00",
+            "minlatitude": 36.5,
+            "maxlatitude": 37.0,
+            "minlongitude": -121.7,
+            "maxlongitude": -121.2,
+            "provider": [
+                "NCEDC"
+            ],
+            "network": "BK,NC",
+            "degree2km": 111.19492474777779,
+            "channel": "HN*",
+            "level": "channel",
+            "channel_priorities": [
+                "HH[ZNE12]",
+                "BH[ZNE12]"
+            ]
+        },
+        "Mendocino": {
+            "starttime": "2014-12-01T00:00:00",
+            "endtime": "2014-12-31T00:00:00",
+            "minlatitude": 39.5,
+            "maxlatitude": 41.5,
+            "minlongitude": -126.5,
+            "maxlongitude": -123.0,
+            "provider": [
+                "IRIS"
+            ],
+            "network": "_CASCADIA_OBS"
+        }
+    }
+}
