@@ -70,59 +70,73 @@ def download_waveform_event(
         starttime = arrival_time - pd.to_timedelta(time_before, unit="s")
         endtime = arrival_time + pd.to_timedelta(time_after, unit="s")
 
-        print(f"Downloading {event.event_id} ...")
-        for key, station in stations.items():
-            if not os.path.exists(f"{root_path}/{waveform_dir}/{event.event_id}"):
-                os.makedirs(f"{root_path}/{waveform_dir}/{event.event_id}")
-            mseed_name = f"{event.event_id}/{key}.mseed"
-            if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
-                print(f"{root_path}/{waveform_dir}/{mseed_name} already exists. Skip.")
+        merge_code = lambda x: ",".join(sorted(list(set(x))))
+        network = merge_code([station["network"] for station in stations.values()])
+        station = merge_code([station["station"] for station in stations.values()])
+        location = merge_code([station["location"] for station in stations.values()])
+        channel = merge_code(
+            [station["instrument"] + comp for station in stations.values() for comp in station["component"]]
+        )
+
+        # print(f"Downloading {event.event_id} ...")
+        # for key, station in stations.items():
+        # if not os.path.exists(f"{root_path}/{waveform_dir}/{event.event_id}"):
+        #     os.makedirs(f"{root_path}/{waveform_dir}/{event.event_id}")
+        # mseed_name = f"{event.event_id}/{key}.mseed"
+
+        mseed_name = f"{event.event_id}.mseed"
+
+        if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
+            print(f"{root_path}/{waveform_dir}/{mseed_name} already exists. Skip.")
+            if protocol != "file":
+                if not fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
+                    fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
+            return
+
+        if protocol != "file":
+            if fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
+                print(f"{bucket}/{waveform_dir}/{mseed_name} already exists. Skip.")
+                fs.get(f"{bucket}/{waveform_dir}/{mseed_name}", f"{root_path}/{waveform_dir}/{mseed_name}")
+                return
+
+        print(f"Downloading {mseed_name}: {network}//{station}//{location}//{channel}")
+
+        retry = 0
+        while retry < max_retry:
+            try:
+                stream = client.get_waveforms(
+                    # network=station["network"],
+                    # station=station["station"],
+                    # location=station["location"],
+                    # channel=",".join(set([f"{station['instrument']}{comp}" for comp in station["component"]])),
+                    network=network,
+                    station=station,
+                    location=location,
+                    channel=channel,
+                    starttime=obspy.UTCDateTime(starttime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
+                    endtime=obspy.UTCDateTime(endtime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
+                )
+                stream.merge(fill_value="latest")
+                stream.write(f"{root_path}/{waveform_dir}/{mseed_name}", format="MSEED")
                 if protocol != "file":
-                    if not fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
-                        fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
-                    else:
-                        print(f"{bucket}/{waveform_dir}/{mseed_name} already exists. Skip.")
-                        continue
-                continue
-            else:
-                print(f"Downloading {event.event_id} {key}")
+                    fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
+                break
 
-            retry = 0
-            while retry < max_retry:
-                try:
-                    stream = client.get_waveforms(
-                        network=station["network"],
-                        station=station["station"],
-                        location=station["location"],
-                        channel=",".join(set([f"{station['instrument']}{comp}" for comp in station["component"]])),
-                        starttime=obspy.UTCDateTime(starttime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-                        endtime=obspy.UTCDateTime(endtime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-                    )
-                    stream.merge(fill_value="latest")
-                    stream.write(f"{root_path}/{waveform_dir}/{mseed_name}", format="MSEED")
-                    if protocol != "file":
-                        fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
+            except Exception as err:
+                err = str(err).rstrip("\n")
+                message = "No data available for request"
+                if err[: len(message)] == message:
+                    print(f"{message}: {mseed_name}")
                     break
+                else:
+                    print(f"Error occurred:\n{err}\nRetrying...")
+                retry += 1
+                time.sleep(30)
+                continue
 
-                except Exception as err:
-                    err = str(err).rstrip("\n")
-                    message = "No data available for request"
-                    if err[: len(message)] == message:
-                        print(f"{message}: {key}")
-                        break
-                    # message = "Service responds: Internal server"
-                    # if err[: len(message)] == message:
-                    #     print(f"{message}: {key}")
-                    #     break
-                    else:
-                        print(f"Error occurred:\n{err}\nRetrying...")
-                    retry += 1
-                    time.sleep(30)
-                    continue
-
-            if retry == max_retry:
-                print(f"Failed to download {key} after {max_retry} retries.")
-                os.system(f"touch {str(mseed_name).replace('.mseed', '.failed')}")
+        if retry == max_retry:
+            print(f"Failed to download {mseed_name} after {max_retry} retries.")
+            os.system(f"touch {str(mseed_name).replace('.mseed', '.failed')}")
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)

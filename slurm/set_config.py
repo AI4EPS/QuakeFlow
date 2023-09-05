@@ -24,6 +24,8 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
     config_region = {}
     if "default" in config:
         config_region.update(config["default"])
+    if "kubeflow" in config:
+        config_region.update(config["kubeflow"])
     if "obspy" in config:
         config_region.update(config["obspy"])
     if "region" in config:

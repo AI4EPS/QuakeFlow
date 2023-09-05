@@ -1,4 +1,7 @@
 {
+    "kubeflow": {
+        "num_node": 1
+    },
     "obspy": {
         "degree2km": 111.1949,
         "channel": "HH*,BH*,EH*,HN*",

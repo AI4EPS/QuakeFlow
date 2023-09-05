@@ -1,269 +1,152 @@
-# %%
-import json
-import os
-import re
-from collections import defaultdict
-from pathlib import Path
+from typing import Dict
 
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import matplotlib.pyplot as plt
-import obspy
-import obspy.clients.fdsn
-from obspy.clients.fdsn import header
-import pandas as pd
-from obspy.clients.fdsn.mass_downloader import (
-    CircularDomain,
-    GlobalDomain,
-    MassDownloader,
-    RectangularDomain,
-    Restrictions,
-)
-
-# %%
-region = ""
-config = {}
-config_region = {}
-exec(open("config.py").read())
-
-# %%
-# region = "Kilauea_debug"
-region = "demo"
-config.update(config_region[region])
-
-# %%
-root_path = Path(f"{region}")
-if not root_path.exists():
-    root_path.mkdir()
-result_path = root_path / "obspy"
-if not result_path.exists():
-    result_path.mkdir()
-
-with open(root_path / "config.json", "w") as fp:
-    json.dump(config, fp, indent=4)
-
-# %%
-with open(root_path / "config.json", "r") as fp:
-    config = json.load(fp)
-print(json.dumps(config, indent=4))
-
-# %%
-if ("provider" in config) and (config["provider"] is not None):
-    print("Downloading standard catalog...")
-
-    catalog = obspy.Catalog()
-    for provider in config["provider"]:
-        client = obspy.clients.fdsn.Client(provider)
-        try:
-            events = client.get_events(
-                starttime=config["starttime"],
-                endtime=config["endtime"],
-                minlongitude=config["minlongitude"],
-                maxlongitude=config["maxlongitude"],
-                minlatitude=config["minlatitude"],
-                maxlatitude=config["maxlatitude"],
-            )
-        except header.FDSNNoDataException as e:
-            print(e)
-            events = obspy.Catalog()
-        print(f"Dowloaded {len(events)} events from {provider}")
-        events.write(f"{result_path}/catalog_{provider}.xml", format="QUAKEML")
-        catalog += events
-
-    catalog.write(f"{result_path}/catalog.xml", format="QUAKEML")
-
-# %%
-if ("provider" in config) and (config["provider"] is not None):
-    print("Downloading station response...")
-    inventory = obspy.Inventory()
-    for provider in config["provider"]:
-        client = obspy.clients.fdsn.Client(provider)
-        if ("station" in config) and (config["station"] is not None):
-            stations = client.get_stations(
-                network=config["network"],
-                station=config["station"],
-                starttime=config["starttime"],
-                endtime=config["endtime"],
-                channel=config["channel"],
-                level="response",
-            )
-        else:
-            stations = client.get_stations(
-                starttime=config["starttime"],
-                endtime=config["endtime"],
-                minlatitude=config["minlatitude"],
-                maxlatitude=config["maxlatitude"],
-                minlongitude=config["minlongitude"],
-                maxlongitude=config["maxlongitude"],
-                channel=config["channel"],
-                level="response",
-            )
-
-        print(f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider}")
-        stations.write(f"{result_path}/inventory_{provider}.xml", format="STATIONXML")
-        inventory += stations
-
-    inventory.write(f"{result_path}/inventory.xml", format="STATIONXML")
+from kfp import dsl
 
 
-# %%
-domain = GlobalDomain()
-if ("longitude0" in config) and ("latitude0" in config) and ("maxradius_degree" in config):
-    domain = CircularDomain(
-        longitude=config["longitude0"], latitude=config["latitude0"], minradius=0, maxradius=config["maxradius_degree"]
-    )
-if (
-    ("minlatitude" in config)
-    and ("maxlatitude" in config)
-    and ("minlongitude" in config)
-    and ("maxlongitude" in config)
+@dsl.component(base_image="zhuwq0/quakeflow:latest")
+def download_waveform(
+    root_path: str,
+    region: str,
+    config: Dict,
+    index: int = 0,
+    protocol: str = "file",
+    bucket: str = "",
+    token: Dict = None,
 ):
-    domain = RectangularDomain(
-        minlatitude=config["minlatitude"],
-        maxlatitude=config["maxlatitude"],
-        minlongitude=config["minlongitude"],
-        maxlongitude=config["maxlongitude"],
+    import os
+    from datetime import datetime
+
+    import fsspec
+    import numpy as np
+    import obspy
+    import obspy.clients.fdsn
+    import pandas as pd
+    from obspy.clients.fdsn.mass_downloader import (
+        CircularDomain,
+        GlobalDomain,
+        MassDownloader,
+        RectangularDomain,
+        Restrictions,
     )
-print(f"{domain = }")
 
-restrictions = Restrictions(
-    starttime=obspy.UTCDateTime(config["starttime"]),
-    endtime=obspy.UTCDateTime(config["endtime"]),
-    chunklength_in_sec=3600,
-    network=config["network"],
-    station=config["station"],
-    minimum_interstation_distance_in_m=0,
-    minimum_length=0.1,
-    reject_channels_with_gaps=False,
-    channel_priorities=config["channel_priorities"],
-)
-print(f"{restrictions = }")
+    # %%
+    fs = fsspec.filesystem(protocol, token=token)
 
+    # %%
+    if "num_nodes" in config:
+        num_nodes = config["num_nodes"]
+    else:
+        num_nodes = 1
+    waveform_dir = f"{region}/waveforms"
+    if not os.path.exists(f"{root_path}/{waveform_dir}"):
+        os.makedirs(f"{root_path}/{waveform_dir}")
 
-def get_mseed_storage(network, station, location, channel, starttime, endtime):
-    file_name = f"{result_path}/waveforms/{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
-    if os.path.exists(file_name):
-        return True
-    return file_name
+    DELTATIME = "1H"  # "1D"
+    if DELTATIME == "1H":
+        start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
+        DELTATIME_SEC = 3600
+    elif DELTATIME == "1D":
+        start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
+        DELTATIME_SEC = 3600 * 24
+    starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left")
+    # starttimes = starttimes[index::num_nodes]
+    starttimes = np.array_split(starttimes, num_nodes)[index]
+    if len(starttimes) == 0:
+        return
 
+    # %%
+    domain = GlobalDomain()
+    if ("longitude0" in config) and ("latitude0" in config) and ("maxradius_degree" in config):
+        domain = CircularDomain(
+            longitude=config["longitude0"],
+            latitude=config["latitude0"],
+            minradius=0,
+            maxradius=config["maxradius_degree"],
+        )
+    if (
+        ("minlatitude" in config)
+        and ("maxlatitude" in config)
+        and ("minlongitude" in config)
+        and ("maxlongitude" in config)
+    ):
+        domain = RectangularDomain(
+            minlatitude=config["minlatitude"],
+            maxlatitude=config["maxlatitude"],
+            minlongitude=config["minlongitude"],
+            maxlongitude=config["maxlongitude"],
+        )
+    print(f"{domain = }")
 
-print(f"Downloading waveforms...")
-mdl = MassDownloader(
-    providers=config["provider"],
-)
-mdl.download(
-    domain,
-    restrictions,
-    mseed_storage=get_mseed_storage,
-    stationxml_storage=f"{result_path}/stations",
-    download_chunk_size_in_mb=20,
-    threads_per_client=3,  # default 3
-)
-
-# %%
-catalog = obspy.read_events(f"{result_path}/catalog.xml")
-
-
-def parase_catalog(catalog):
-    events = {}
-    for event in catalog:
-        event_id = re.search(r"eventid=(\d+)$", event.resource_id.id).group(1)
-        events[event_id] = {
-            "time": event.origins[0].time,
-            "magnitude": event.magnitudes[0].mag,
-            "latitude": event.origins[0].latitude,
-            "longitude": event.origins[0].longitude,
-            "depth_km": event.origins[0].depth / 1000,
-        }
-    return events
-
-
-events = parase_catalog(catalog)
-events = pd.DataFrame.from_dict(events, orient="index")
-events.to_csv(result_path / "events.csv", index_label="event_id")
-
-# %%
-mseeds = (result_path / "waveforms").rglob("*.mseed")
-mseed_ids = []
-for mseed in mseeds:
-    mseed_ids.append(mseed.name.split(".mseed")[0][:-1])
-
-# %%
-if os.path.exists(f"{result_path}/response.xml"):
-    inventory = obspy.read_inventory(f"{result_path}/response.xml")
-if os.path.exists(f"{result_path}/stations"):
-    inventory += obspy.read_inventory(f"{result_path}/stations/*xml")
-
-
-def parse_response(inventory, mseed_ids=None):
-    stations = {}
-    num = 0
-    for net in inventory:
-        for sta in net:
-            components = defaultdict(list)
-            channel = {}
-
-            for chn in sta:
-                key = f"{chn.location_code}{chn.code[:-1]}"
-                components[key].append(chn.code[-1])
-
-                if key not in channel:
-                    channel[key] = {
-                        "latitude": chn.latitude,
-                        "longitude": chn.longitude,
-                        "elevation_m": chn.elevation,
-                        "location": chn.location_code,
-                        "device": chn.code[:-1],
-                    }
-
-            for key in components:
-                station_id = f"{net.code}.{sta.code}.{channel[key]['location']}.{channel[key]['device']}"
-                if (mseed_ids is not None) and (station_id not in mseed_ids):
-                    continue
-                num += 1
-                stations[station_id] = {
-                    "network": net.code,
-                    "station": sta.code,
-                    "location": channel[key]["location"],
-                    "component": sorted(components[key]),
-                    "latitude": channel[key]["latitude"],
-                    "longitude": channel[key]["longitude"],
-                    "elevation_m": channel[key]["elevation_m"],
-                }
-
-    print(f"Found {num} stations")
-    return stations
-
-
-# mseed_ids = None
-stations = parse_response(inventory, mseed_ids)
-with open(result_path / "stations.json", "w") as f:
-    json.dump(stations, f, indent=4)
-stations = pd.DataFrame.from_dict(stations, orient="index")
-stations.to_csv(result_path / "stations.csv", index_label="station_id")
-
-# %%
-fig = plt.figure(figsize=(10, 10))
-ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
-ax.set_extent([config["minlongitude"], config["maxlongitude"], config["minlatitude"], config["maxlatitude"]])
-ax.add_feature(cfeature.LAND)
-ax.add_feature(cfeature.OCEAN)
-ax.add_feature(cfeature.COASTLINE)
-ax.add_feature(cfeature.LAKES, alpha=0.5)
-ax.add_feature(cfeature.RIVERS)
-gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=1, color="gray", alpha=0.5, linestyle="--")
-if len(events) > 0:
-    ax.scatter(
-        events.longitude,
-        events.latitude,
-        transform=ccrs.PlateCarree(),
-        s=1e4 / len(events),
-        c="r",
-        marker=".",
-        label="events",
+    restrictions = Restrictions(
+        # starttime=obspy.UTCDateTime(config["starttime"]),
+        # endtime=obspy.UTCDateTime(config["endtime"]),
+        # chunklength_in_sec=3600,
+        starttime=obspy.UTCDateTime(starttimes[0]),
+        endtime=obspy.UTCDateTime(starttimes[-1]) + DELTATIME_SEC,
+        chunklength_in_sec=DELTATIME_SEC,
+        network=config["network"] if "network" in config else None,
+        station=config["station"] if "station" in config else None,
+        minimum_interstation_distance_in_m=0,
+        minimum_length=0.1,
+        reject_channels_with_gaps=False,
+        channel_priorities=config["channel_priorities"],
     )
-ax.scatter(
-    stations.longitude, stations.latitude, transform=ccrs.PlateCarree(), s=100, c="b", marker="^", label="stations"
-)
-ax.legend(scatterpoints=1, markerscale=0.5, fontsize=10)
-plt.savefig(result_path / "stations.png", dpi=300, bbox_inches="tight")
+    print(f"{restrictions = }")
+
+    def get_mseed_storage(network, station, location, channel, starttime, endtime):
+        mseed_name = (
+            f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
+        )
+        if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
+            print(f"{root_path}/{waveform_dir}/{mseed_name} already exists. Skip.")
+            if protocol != "file":
+                if not fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
+                    fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
+            return True
+        if protocol != "file":
+            if fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
+                print(f"{bucket}/{waveform_dir}/{mseed_name} already exists. Skip.")
+                fs.get(f"{bucket}/{waveform_dir}/{mseed_name}", f"{root_path}/{waveform_dir}/{mseed_name}")
+                return True
+        return f"{root_path}/{waveform_dir}/{mseed_name}"
+
+    print(f"Downloading waveforms...")
+    mdl = MassDownloader(
+        providers=config["provider"],
+    )
+    mdl.download(
+        domain,
+        restrictions,
+        mseed_storage=get_mseed_storage,
+        stationxml_storage=f"{root_path}/{waveform_dir}/stations",
+        download_chunk_size_in_mb=20,
+        threads_per_client=3,  # default 3
+    )
+
+    if protocol != "file":
+        fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
+
+
+if __name__ == "__main__":
+    import json
+    import os
+
+    root_path = "local"
+    region = "demo"
+    with open(f"{root_path}/{region}/config.json", "r") as fp:
+        config = json.load(fp)
+
+    download_waveform.python_func(root_path, region=region, config=config)
+
+    # # %%
+    # bucket = "quakeflow_share"
+    # protocol = "gs"
+    # token = None
+    # token_file = "/Users/weiqiang/.config/gcloud/application_default_credentials.json"
+    # if os.path.exists(token_file):
+    #     with open(token_file, "r") as fp:
+    #         token = json.load(fp)
+
+    # download_waveform.python_func(
+    #     root_path, region=region, config=config, protocol=protocol, bucket=bucket, token=token
+    # )

@@ -8,7 +8,10 @@ from kfp.client import Client
 if __name__ == "__main__":
     from download_catalog import download_catalog
     from download_station import download_station
+    from download_waveform import download_waveform
     from download_waveform_event import download_waveform_event
+
+    # from download_waveform_v2 import download_waveform
     from set_config import set_config
 
     bucket = "quakeflow_share"
@@ -25,17 +28,20 @@ if __name__ == "__main__":
     num_nodes = 4
     with open(f"config.json", "r") as fp:
         config = json.load(fp)
-    config["num_nodes"] = num_nodes
+    config["kubeflow"]["num_nodes"] = num_nodes
+    download_mode = "waveform"  # "event" or "waveform
 
     compiler.Compiler().compile(set_config, f"{yaml_path}/set_config.yaml")
     compiler.Compiler().compile(download_catalog, f"{yaml_path}/download_catalog.yaml")
     compiler.Compiler().compile(download_station, f"{yaml_path}/download_station.yaml")
     compiler.Compiler().compile(download_waveform_event, f"{yaml_path}/download_waveform_event.yaml")
+    compiler.Compiler().compile(download_waveform, f"{yaml_path}/download_waveform.yaml")
 
     set_config = components.load_component_from_file(f"{yaml_path}/set_config.yaml")
     download_catalog = components.load_component_from_file(f"{yaml_path}/download_catalog.yaml")
     download_station = components.load_component_from_file(f"{yaml_path}/download_station.yaml")
     download_waveform_event = components.load_component_from_file(f"{yaml_path}/download_waveform_event.yaml")
+    download_waveform = components.load_component_from_file(f"{yaml_path}/download_waveform.yaml")
 
     @dsl.pipeline
     def quakeflow(region: str, config: dict):
@@ -67,18 +73,35 @@ if __name__ == "__main__":
                 size="5Gi",
                 storage_class_name="standard",
             )
-            waveform_event = download_waveform_event(
-                root_path=root_path,
-                region=region,
-                config=config.output,
-                index=index,
-                protocol=protocol,
-                bucket=bucket,
-                token=token,
-            )
-            waveform_event.after(catalog).after(station)
-            kubernetes.mount_pvc(waveform_event, pvc_name=pvc_node.outputs["name"], mount_path=root_path)
-            delete_pvc = kubernetes.DeletePVC(pvc_name=pvc_node.outputs["name"]).after(waveform_event)
+
+            if download_mode == "event":
+                ## Download event waveform
+                waveform = download_waveform_event(
+                    root_path=root_path,
+                    region=region,
+                    config=config.output,
+                    index=index,
+                    protocol=protocol,
+                    bucket=bucket,
+                    token=token,
+                )
+
+            elif download_mode == "waveform":
+                ## Download continuous waveform
+                waveform = download_waveform(
+                    root_path=root_path,
+                    region=region,
+                    config=config.output,
+                    index=index,
+                    protocol=protocol,
+                    bucket=bucket,
+                    token=token,
+                )
+            else:
+                raise ValueError("download_mode must be either 'event' or 'waveform'")
+            waveform.after(catalog).after(station)
+            kubernetes.mount_pvc(waveform, pvc_name=pvc_node.outputs["name"], mount_path=root_path)
+            kubernetes.DeletePVC(pvc_name=pvc_node.outputs["name"]).after(waveform)
 
     compiler.Compiler().compile(quakeflow, f"{yaml_path}/quakeflow.yaml")
     client = Client("https://3a1395ae1e4ad10-dot-us-west1.pipelines.googleusercontent.com")
