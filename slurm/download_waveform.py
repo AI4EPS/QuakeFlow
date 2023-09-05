@@ -99,9 +99,6 @@ def download_waveform(
         )
         if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
             print(f"{root_path}/{waveform_dir}/{mseed_name} already exists. Skip.")
-            if protocol != "file":
-                if not fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
-                    fs.put(f"{root_path}/{waveform_dir}/{mseed_name}", f"{bucket}/{waveform_dir}/{mseed_name}")
             return True
         if protocol != "file":
             if fs.exists(f"{bucket}/{waveform_dir}/{mseed_name}"):
@@ -124,7 +121,8 @@ def download_waveform(
     )
 
     if protocol != "file":
-        fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
+        fs.put(f"{root_path}/{waveform_dir}/", f"{bucket}/{waveform_dir}/", recursive=True)
+        # fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
 
 
 if __name__ == "__main__":
