@@ -25,11 +25,12 @@ if __name__ == "__main__":
     yaml_path = "yaml"
     root_path = "/data"
     region = "demo"
-    num_nodes = 4
+    num_nodes = 16  # NCEDC 8
+    download_mode = "event"  # "event" or "waveform
+
     with open(f"config.json", "r") as fp:
         config = json.load(fp)
     config["kubeflow"]["num_nodes"] = num_nodes
-    download_mode = "waveform"  # "event" or "waveform
 
     compiler.Compiler().compile(set_config, f"{yaml_path}/set_config.yaml")
     compiler.Compiler().compile(download_catalog, f"{yaml_path}/download_catalog.yaml")
@@ -70,7 +71,7 @@ if __name__ == "__main__":
             pvc_node = kubernetes.CreatePVC(
                 pvc_name_suffix="-quakeflow",
                 access_modes=["ReadWriteOnce"],
-                size="5Gi",
+                size="100Gi",
                 storage_class_name="standard",
             )
 
@@ -99,12 +100,14 @@ if __name__ == "__main__":
                 )
             else:
                 raise ValueError("download_mode must be either 'event' or 'waveform'")
+            waveform.set_cpu_request("1100m")
+            waveform.set_retry(3)
             waveform.after(catalog).after(station)
             kubernetes.mount_pvc(waveform, pvc_name=pvc_node.outputs["name"], mount_path=root_path)
             kubernetes.DeletePVC(pvc_name=pvc_node.outputs["name"]).after(waveform)
 
     compiler.Compiler().compile(quakeflow, f"{yaml_path}/quakeflow.yaml")
-    client = Client("https://3a1395ae1e4ad10-dot-us-west1.pipelines.googleusercontent.com")
+    client = Client("https://44fd9d51c7dd4225-dot-us-west1.pipelines.googleusercontent.com")
     run = client.create_run_from_pipeline_func(
         quakeflow,
         arguments={"region": region, "config": config},

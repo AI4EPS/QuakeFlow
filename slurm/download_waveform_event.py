@@ -15,6 +15,7 @@ def download_waveform_event(
 ):
     import json
     import os
+    import random
     import threading
     import time
     from collections import namedtuple
@@ -70,20 +71,22 @@ def download_waveform_event(
         starttime = arrival_time - pd.to_timedelta(time_before, unit="s")
         endtime = arrival_time + pd.to_timedelta(time_after, unit="s")
 
-        merge_code = lambda x: ",".join(sorted(list(set(x))))
-        network = merge_code([station["network"] for station in stations.values()])
-        station = merge_code([station["station"] for station in stations.values()])
-        location = merge_code([station["location"] for station in stations.values()])
-        channel = merge_code(
-            [station["instrument"] + comp for station in stations.values() for comp in station["component"]]
-        )
+        bulk = []
+        for _, station in stations.items():
+            location = "*" if len(station["location"]) == 0 else station["location"]
+            channel = ",".join(set([f"{station['instrument']}{comp}" for comp in station["component"]]))
+            bulk.append(
+                (
+                    station["network"],
+                    station["station"],
+                    location,
+                    channel,
+                    starttime.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                    endtime.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                )
+            )
 
-        # print(f"Downloading {event.event_id} ...")
-        # for key, station in stations.items():
-        # if not os.path.exists(f"{root_path}/{waveform_dir}/{event.event_id}"):
-        #     os.makedirs(f"{root_path}/{waveform_dir}/{event.event_id}")
-        # mseed_name = f"{event.event_id}/{key}.mseed"
-
+        print(f"Downloading {event.event_id} ...")
         mseed_name = f"{event.event_id}.mseed"
 
         if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
@@ -99,23 +102,11 @@ def download_waveform_event(
                 fs.get(f"{bucket}/{waveform_dir}/{mseed_name}", f"{root_path}/{waveform_dir}/{mseed_name}")
                 return
 
-        print(f"Downloading {mseed_name}: {network}//{station}//{location}//{channel}")
-
         retry = 0
         while retry < max_retry:
             try:
-                stream = client.get_waveforms(
-                    # network=station["network"],
-                    # station=station["station"],
-                    # location=station["location"],
-                    # channel=",".join(set([f"{station['instrument']}{comp}" for comp in station["component"]])),
-                    network=network,
-                    station=station,
-                    location=location,
-                    channel=channel,
-                    starttime=obspy.UTCDateTime(starttime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-                    endtime=obspy.UTCDateTime(endtime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-                )
+                stream = client.get_waveforms_bulk(bulk)
+
                 stream.merge(fill_value="latest")
                 stream.write(f"{root_path}/{waveform_dir}/{mseed_name}", format="MSEED")
                 if protocol != "file":
@@ -131,7 +122,7 @@ def download_waveform_event(
                 else:
                     print(f"Error occurred:\n{err}\nRetrying...")
                 retry += 1
-                time.sleep(30)
+                time.sleep(20 ** ((random.random() + 1)))
                 continue
 
         if retry == max_retry:
@@ -153,9 +144,9 @@ def download_waveform_event(
         os.makedirs(f"{root_path}/{waveform_dir}")
 
     if protocol == "file":
-        events = pd.read_csv(f"{root_path}/{data_dir}/events.csv", parse_dates=["time"])
+        events = pd.read_csv(f"{root_path}/{data_dir}/catalog.csv", parse_dates=["time"])
     else:
-        events = pd.read_csv(f"{protocol}://{bucket}/{data_dir}/events.csv", parse_dates=["time"])
+        events = pd.read_csv(f"{protocol}://{bucket}/{data_dir}/catalog.csv", parse_dates=["time"])
     events = events.iloc[index::num_nodes, :]
     for provider in config["provider"]:
         if protocol == "file":
@@ -166,16 +157,14 @@ def download_waveform_event(
                 stations = json.load(f)
         stations = {key: station for key, station in stations.items() if station["provider"] == provider}
 
-        client = obspy.clients.fdsn.Client(provider)
-
-        # for _, event in events.iterrows():
-        #     download_event(event, stations, client, waveform_path)
+        client = obspy.clients.fdsn.Client(provider, timeout=1200)
 
         threads = []
         MAX_THREADS = 1
         TIME_BEFORE = 30
         TIME_AFTER = 90
         lock = threading.Lock()
+        events = events.sort_values(by="time", ignore_index=True, ascending=False)
         for _, event in events.iterrows():
             t = threading.Thread(
                 target=download_event,

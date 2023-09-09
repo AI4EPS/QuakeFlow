@@ -37,16 +37,18 @@ def download_station(
     print(json.dumps(config, indent=4))
 
     proj = pyproj.Proj(
-        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units-km"
+        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
     )
 
     # %%
     if ("provider" in config) and (config["provider"] is not None):
         print("Downloading station response...")
+        inventory = obspy.Inventory()
         for provider in config["provider"]:
             if os.path.exists(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml"):
+                inventory += obspy.read_inventory(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml")
                 continue
-            client = obspy.clients.fdsn.Client(provider)
+            client = obspy.clients.fdsn.Client(provider, timeout=1200)
             max_retry = 10
             retry = 0
             while retry < max_retry:
@@ -77,11 +79,21 @@ def download_station(
                 f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
             )
             stations.write(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
+            if protocol != "file":
+                fs.put(
+                    f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml",
+                    f"{bucket}/{data_dir}/inventory_{provider.lower()}.xml",
+                )
+            inventory += stations
+
+        inventory.write(f"{root_path}/{data_dir}/inventory.xml", format="STATIONXML")
+        if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/inventory.xml", f"{bucket}/{data_dir}/inventory.xml")
 
     # %%
 
     def parse_inventory_json(inventory, mseed_ids=[]):
-        comp = ["3", "2", "1", "E", "N", "Z"]
+        comp = ["3", "2", "1", "U", "V", "E", "N", "Z"]
         order = {key: i for i, key in enumerate(comp)}
         stations = {}
         num = 0
