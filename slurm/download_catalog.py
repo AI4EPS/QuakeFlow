@@ -38,7 +38,7 @@ def download_catalog(
     print(json.dumps(config, indent=4))
 
     proj = pyproj.Proj(
-        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units-km"
+        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
     )
 
     # %%
@@ -47,7 +47,7 @@ def download_catalog(
 
         catalog = obspy.Catalog()
         for provider in config["provider"]:
-            client = obspy.clients.fdsn.Client(provider)
+            client = obspy.clients.fdsn.Client(provider, timeout=1200)
             try:
                 events = client.get_events(
                     starttime=config["starttime"],
@@ -56,6 +56,7 @@ def download_catalog(
                     maxlongitude=config["maxlongitude"],
                     minlatitude=config["minlatitude"],
                     maxlatitude=config["maxlatitude"],
+                    minmagnitude=None if "minmagnitude" not in config else config["minmagnitude"],
                 )
             except header.FDSNNoDataException as e:
                 print(e)
@@ -109,9 +110,9 @@ def download_catalog(
     events[["latitude", "longitude"]] = events[["latitude", "longitude"]].round(5)
     events["depth_km"] = events["depth_km"].round(3)
     events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
-    events.to_csv(f"{root_path}/{data_dir}/events.csv", index=False)
+    events.to_csv(f"{root_path}/{data_dir}/catalog.csv", index=False)
     if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/events.csv", f"{bucket}/{data_dir}/events.csv")
+        fs.put(f"{root_path}/{data_dir}/catalog.csv", f"{bucket}/{data_dir}/catalog.csv")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):
@@ -162,7 +163,8 @@ if __name__ == "__main__":
     import json
 
     root_path = "local"
-    region = "demo"
+    # region = "demo"
+    region = "BayArea"
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
