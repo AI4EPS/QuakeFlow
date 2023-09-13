@@ -35,7 +35,8 @@ def parse_inventory_csv(inventory):
                         "longitude": channel.longitude,
                         "latitude": channel.latitude,
                         "elevation_m": channel.elevation,
-                        "depth_km": -channel.elevation / 1e3,
+                        "local_depth_m": -channel.depth,
+                        "depth_km": -(channel.elevation - channel.depth) / 1000,
                         # "depth_km": channel.depth,
                         "begin_time": channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
                         if channel.start_date is not None
@@ -64,7 +65,7 @@ for network in station_path.glob("*.info"):
         continue
     if (root_path / "station" / f"{network.stem}.csv").exists():
         print(f"Skip {network.stem}")
-        continue
+        # continue
     print(f"Parse {network.stem}")
     inv = obspy.Inventory()
     for xml in (network / f"{network.stem}.FDSN.xml").glob(f"{network.stem}.*.xml"):
@@ -73,5 +74,6 @@ for network in station_path.glob("*.info"):
     if not (root_path / "station").exists():
         (root_path / "station").mkdir(parents=True)
     stations.to_csv(root_path / "station" / f"{network.stem}.csv", index=False)
+
 
 # %%
