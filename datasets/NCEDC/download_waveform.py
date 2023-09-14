@@ -140,6 +140,9 @@ if __name__ == "__main__":
             parse_dates=["phase_time"],
             keep_default_na=False,
         )
+        phases = phases.loc[
+            phases.groupby(["event_id", "network", "station", "location", "instrument"]).phase_time.idxmin()
+        ]
         phases.set_index("event_id", inplace=True)
 
         events = events[events.event_id.isin(phases.index)]
