@@ -171,7 +171,9 @@ def convert(i, year):
                             if index0 > 3000:
                                 del ds
                                 break
-                            ds[i, index0 : index0 + len(t.data)] = t.data[: len(ds[i, index0:])] * 1e6
+                            ds[i, index0 : index0 + len(t.data)] = (t.data - np.mean(t.data))[
+                                : len(ds[i, index0:])
+                            ] * 1e6
                             components.append(t.stats.channel[-1])
                     else:
                         for t in tr:
@@ -187,7 +189,9 @@ def convert(i, year):
                                 del ds
                                 break
                             i = comp2idx[t.stats.channel[-1]]
-                            ds[i, index0 : index0 + len(t.data)] = t.data[: len(ds[i, index0:])] * 1e6
+                            ds[i, index0 : index0 + len(t.data)] = (t.data - np.mean(t.data))[
+                                : len(ds[i, index0:])
+                            ] * 1e6
                             components.append(t.stats.channel[-1])
 
                     if index0 > 3000:
