@@ -50,13 +50,6 @@ def cut_data(event, phases):
             continue
         inv = obspy.read_inventory(str(inv_path))
 
-        # mseed_path = (
-        #     waveform_path
-        #     / f"{pick.network}"
-        #     / f"{arrival_time.year}"
-        #     / f"{arrival_time.year}.{arrival_time.dayofyear:03d}"
-        #     / f"{pick.station}.{pick.network}.{pick.component[:-1]}?.{pick.location}.?.{arrival_time.year}.{arrival_time.dayofyear:03d}"
-        # )
         begin_mseed_path = (
             waveform_path
             / f"{pick.network}"
@@ -72,28 +65,24 @@ def cut_data(event, phases):
             / f"{pick.station}.{pick.network}.{pick.component[:-1]}?.{pick.location}.?.{end_time.year}.{end_time.dayofyear:03d}"
         )
         try:
-            # st = obspy.read(str(mseed_path))
             st = obspy.Stream()
             for mseed_path in set([begin_mseed_path, end_mseed_path]):
                 st += obspy.read(str(mseed_path))
-        except Exception as e:
-            # print(e)
-            continue
-
-        st.trim(obspy.UTCDateTime(begin_time), obspy.UTCDateTime(end_time))
-        try:
-            st.merge(fill_value="latest")
-        except Exception as e:
-            print(e)
-            continue
-        try:
-            st.remove_sensitivity(inv)
         except Exception as e:
             print(e)
             continue
 
         if len(st) == 0:
             # print(f"{event.event_id}.{pick.network}.{pick.station}.{pick.location}.{pick.component[:-1]} is empty")
+            continue
+
+        try:
+            st.merge(fill_value="latest")
+            st.remove_sensitivity(inv)
+            st.detrend("constant")
+            st.trim(obspy.UTCDateTime(begin_time), obspy.UTCDateTime(end_time), pad=True, fill_value=0)
+        except Exception as e:
+            print(e)
             continue
 
         if not outfile_path.exists():
@@ -131,7 +120,7 @@ if __name__ == "__main__":
             tmp.append(event_file)
     event_list = sorted(tmp)[::-1]
 
-    pool = mp.get_context("spawn").Pool(ncpu)
+    # pool = mp.get_context("spawn").Pool(ncpu)
     for event_file in event_list:
         print(event_file)
         events = pd.read_csv(event_file, parse_dates=["event_time"])
@@ -147,22 +136,12 @@ if __name__ == "__main__":
 
         events = events[events.event_id.isin(phases.index)]
         pbar = tqdm(events, total=len(events))
-        # with mp.get_context("spawn").Pool(ncpu) as p:
-        # with mp.Pool(ncpu) as p:
-        # for _, event in events.iterrows():
-        #     p.apply_async(cut_data, args=(event, phases.loc[event.event_id]), callback=lambda _: pbar.update(1))
-        # p.close()
-        # p.join()
-
-        results = []
-        for _, event in events.iterrows():
-            results.append(
-                pool.apply_async(cut_data, args=(event, phases.loc[event.event_id]), callback=lambda _: pbar.update(1))
-            )
-        for result in results:
-            result.get()
-
+        with mp.get_context("spawn").Pool(ncpu) as p:
+            for _, event in events.iterrows():
+                p.apply_async(cut_data, args=(event, phases.loc[event.event_id]), callback=lambda _: pbar.update(1))
+            p.close()
+            p.join()
         pbar.close()
 
         # pool.starmap(cut_data, [(event, phases.loc[event.event_id]) for _, event in events.iterrows()])
-    pool.close()
+    # pool.close()

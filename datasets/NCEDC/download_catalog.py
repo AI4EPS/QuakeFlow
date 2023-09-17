@@ -7,10 +7,19 @@ from collections import namedtuple
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import fsspec
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
+
+# %%
+protocol = "sftp"
+host = "range.geo.berkeley.edu"
+username = "zhuwq"
+keyfile = "/Users/weiqiang/.ssh/id_rsa"
+fs = fsspec.filesystem(protocol, host=host, username=username, key_filename=keyfile)
+fs.ls(".")
 
 # %%
 catalog_path = Path("../catalog/phase2k")

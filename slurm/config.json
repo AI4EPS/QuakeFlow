@@ -1,6 +1,6 @@
 {
     "kubeflow": {
-        "num_node": 1
+        "num_nodes": 1
     },
     "obspy": {
         "degree2km": 111.1949,
@@ -192,23 +192,17 @@
             "degree2km": 111.19492474777779
         },
         "BayArea": {
-            "starttime": "2022-11-01T00:00:00",
+            "starttime": "2009-01-01T00:00:00",
             "endtime": "2023-01-01T00:00:00",
-            "minlatitude": 36.5,
-            "maxlatitude": 37.0,
-            "minlongitude": -121.7,
-            "maxlongitude": -121.2,
-            "provider": [
-                "NCEDC"
-            ],
-            "network": "BK,NC",
-            "degree2km": 111.19492474777779,
-            "channel": "HN*",
-            "level": "channel",
-            "channel_priorities": [
-                "HH[ZNE12]",
-                "BH[ZNE12]"
-            ]
+            "minlatitude": 36,
+            "maxlatitude": 38.6,
+            "minlongitude": -123.5,
+            "maxlongitude": -120.5,
+            "provider": ["NCEDC"],
+            "network": "NC,BK,CE,NP",
+            "channel": "BH*,HH*,EH*,HN*",
+            "level": "response",
+            "minmagnitude": 2.0
         },
         "Mendocino": {
             "starttime": "2014-12-01T00:00:00",
