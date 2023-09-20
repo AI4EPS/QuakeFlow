@@ -163,8 +163,8 @@ if __name__ == "__main__":
     import json
 
     root_path = "local"
-    # region = "demo"
-    region = "BayArea"
+    region = "demo"
+    # region = "BayArea"
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

@@ -28,6 +28,12 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
         config_region.update(config["kubeflow"])
     if "obspy" in config:
         config_region.update(config["obspy"])
+    if "phasenet" in config:
+        config_region["phasenet"] = config["phasenet"]
+    if "gamma" in config:
+        config_region["gamma"] = config["gamma"]
+    if "cctorch" in config:
+        config_region["cctorch"] = config["cctorch"]
     if "region" in config:
         if region in config["region"]:
             config_region.update(config["region"][region])

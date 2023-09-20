@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 from kfp import dsl
 
@@ -12,13 +12,14 @@ def download_waveform(
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
-):
+) -> List:
     # %%
     import json
     import os
     import threading
     import time
     from datetime import datetime
+    from glob import glob
 
     import fsspec
     import numpy as np
@@ -153,6 +154,9 @@ def download_waveform(
                 threads = []
         for t in threads:
             t.join()
+
+        mseed_list = glob(f"{root_path}/{waveform_dir}/**/*.mseed", recursive=True)
+        return mseed_list
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 from kfp import dsl
 
@@ -12,9 +12,10 @@ def download_waveform(
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
-):
+) -> List:
     import os
     from datetime import datetime
+    from glob import glob
 
     import fsspec
     import numpy as np
@@ -37,6 +38,7 @@ def download_waveform(
         num_nodes = config["num_nodes"]
     else:
         num_nodes = 1
+
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
@@ -123,6 +125,9 @@ def download_waveform(
     if protocol != "file":
         fs.put(f"{root_path}/{waveform_dir}/", f"{bucket}/{waveform_dir}/", recursive=True)
         # fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
+
+    mseed_list = glob(f"{root_path}/{waveform_dir}/**/*.mseed", recursive=True)
+    return mseed_list
 
 
 if __name__ == "__main__":

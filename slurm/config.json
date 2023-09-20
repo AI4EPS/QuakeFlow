@@ -2,6 +2,10 @@
     "kubeflow": {
         "num_nodes": 1
     },
+    "gamma": {
+        "zmin_km": 0,
+        "zmax_km": 60
+    },
     "obspy": {
         "degree2km": 111.1949,
         "channel": "HH*,BH*,EH*,HN*",
