@@ -6,7 +6,15 @@
         "zmin_km": 0,
         "zmax_km": 60
     },
+    "cctorch":{
+        "sampling_rate": 100,
+        "time_before": 0.25,
+        "time_after": 1.0,
+        "components": "ENZ123",
+        "component_mapping": {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2}
+    },
     "obspy": {
+        "sampling_rate": 100,
         "degree2km": 111.1949,
         "channel": "HH*,BH*,EH*,HN*",
         "level": "response"

@@ -1,20 +1,25 @@
-FROM ubuntu:20.04
-
+FROM ubuntu:22.04
 
 RUN apt-get update
-RUN apt-get install -y git wget libgeos++-dev
+RUN apt-get install -y git wget
+RUN apt-get install -y libgeos++-dev
 
 ENV PATH="/root/miniconda3/bin:${PATH}"
 ARG PATH="/root/miniconda3/bin:${PATH}"
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+ENV MINICONDA_VERSION=Miniconda3-py39_23.5.2-0-Linux-x86_64.sh
+RUN wget "https://repo.anaconda.com/miniconda/${MINICONDA_VERSION}" && \
     mkdir /root/.conda && \
-    bash Miniconda3-latest-Linux-x86_64.sh -b && \
-    rm -f Miniconda3-latest-Linux-x86_64.sh && \
+    bash $MINICONDA_VERSION -b && \
+    rm -f $MINICONDA_VERSION && \
     conda --version
 
 ENV PYTHONUNBUFFERED=1
+## plotting
+RUN conda install -c conda-forge pygmt
+RUN pip install --no-cache-dir cartopy plotly
+## machine learning
 RUN pip install --no-cache-dir numpy scipy matplotlib pandas scikit-learn
-RUN pip install --no-cache-dir obspy cartopy pyproj
+RUN pip install --no-cache-dir obspy pyproj
 RUN pip install --no-cache-dir fsspec gcsfs
 RUN pip install --no-cache-dir kfp
 RUN pip install --no-cache-dir git+https://github.com/wayneweiqiang/GaMMA.git

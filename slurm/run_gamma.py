@@ -141,7 +141,7 @@ def run_gamma(
     events[["longitude", "latitude"]] = events.apply(
         lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
     )
-    events["depth(m)"] = events["z(km)"].apply(lambda x: x * 1e3)
+    events["depth_km"] = events["z(km)"]
     events.sort_values("time", inplace=True)
     with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
         events.to_csv(
@@ -154,7 +154,8 @@ def run_gamma(
                 "magnitude",
                 "longitude",
                 "latitude",
-                "depth(m)",
+                # "depth(m)",
+                "depth_km",
                 "sigma_time",
                 "sigma_amp",
                 "cov_time_amp",
@@ -200,6 +201,8 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_gamma.python_func(
-        root_path, region=region, config=config, picks_csv=f"{region}/phasenet/phasenet_picks_000.csv"
-    )
+    run_gamma.python_func(root_path, region=region, config=config, picks_csv=f"{region}/phasenet/phasenet_picks.csv")
+
+    if config["num_nodes"] == 1:
+        os.system(f"mv {root_path}/{region}/gamma/gamma_events_000.csv {root_path}/{region}/gamma/gamma_events.csv")
+        os.system(f"mv {root_path}/{region}/gamma/gamma_picks_000.csv {root_path}/{region}/gamma/gamma_picks.csv")
