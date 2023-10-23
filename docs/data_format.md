@@ -1,42 +1,28 @@
 # Standard Data Formats of QuakeFlow
 
 - Raw data: 
-	- Waveform: MSEED
-	- Stations:  JSON
-	- Configuration:  JSON
-- Denoising:
-	- Inputs:
-		- Waveform: MSEED
-		- Configuration:  JSON
-	- Outputs:
-		- Waveform: MSEED
+	- Waveform (MSEED): 
+		- Year/Jday/Hour/Network.Station.Location.Channel.mseed
+	- Station (xml):
+		- Network.Station.xml
+	- Events (CSV):
+		- colums: time, latitude, longitude, depth_km, magnitude, event_id
+	- Picks (CSV)
+		- columns: station_id (network.station.location.channel) phase_time, phase_type, phase_score, event_id
 - Phase picking:
-	- Inputs: 
-		- Waveform: MSEED
-		- Stations: JSON
-		- Configuration:  JSON
-	- Outputs:
-		- Phase picks: CSV
+	- Picks (CSV):
+		- columns: station_id (network.station.location.channel) phase_time, phase_type, phase_score, phase_polarity
 - Phase association:
-	- Inputs: 
-		- Phase picks: CSV
-		- Stations: JSON
-		- Configuration:  JSON
-	- Ouputs:
-		- Associated picks: CSV
-		- Associated events: CSV
+	- Events (CSV):
+		- colums: time, latitude, longitude, depth_km, magnitude, event_id
+	- Picks (CSV):
+		- columns: station_id (network.station.location.channel), phase_time, phase_type, phase_score, phase_polarity, event_id
 - Earthquake location:
-	- Inputs: 
-		- Associated picks: CSV
-		- Stations: JSON
-		- Configuration:  JSON
-	- Ouputs:
-		- Located events: CSV
+	- Events (CSV):
+		- colums: time, latitude, longitude, depth_km, magnitude, event_id
 - Earthquake relocation:
-	- Inputs: 
-		- Associated picks: CSV
-		- Associated/Located events: CSV
-		- Stations: JSON
-		- Configuration:  JSON
-	- Ouputs:
-		- Re-located events: CSV
+	- Events (CSV):
+		- colums: time, latitude, longitude, depth_km, magnitude, event_id
+- Focal mechanism:
+	- Focal mechanism (CSV):
+		- columns: strike1, dip1, rake1, strike2, dip2, rake2, event_id
