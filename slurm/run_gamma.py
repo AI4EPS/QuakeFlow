@@ -149,19 +149,19 @@ def run_gamma(
             index=False,
             float_format="%.3f",
             date_format="%Y-%m-%dT%H:%M:%S.%f",
-            columns=[
-                "time",
-                "magnitude",
-                "longitude",
-                "latitude",
-                # "depth(m)",
-                "depth_km",
-                "sigma_time",
-                "sigma_amp",
-                "cov_time_amp",
-                "event_index",
-                "gamma_score",
-            ],
+            # columns=[
+            #     "time",
+            #     "magnitude",
+            #     "longitude",
+            #     "latitude",
+            #     # "depth(m)",
+            #     "depth_km",
+            #     "sigma_time",
+            #     "sigma_amp",
+            #     "cov_time_amp",
+            #     "event_index",
+            #     "gamma_score",
+            # ],
         )
     # events = events[['time', 'magnitude', 'longitude', 'latitude', 'depth(m)', 'sigma_time', 'sigma_amp', 'gamma_score']]
 
@@ -173,15 +173,15 @@ def run_gamma(
             fp,
             index=False,
             date_format="%Y-%m-%dT%H:%M:%S.%f",
-            columns=[
-                "station_id",
-                "phase_time",
-                "phase_type",
-                "phase_score",
-                "phase_amplitude",
-                "event_index",
-                "gamma_score",
-            ],
+            # columns=[
+            #     "station_id",
+            #     "phase_time",
+            #     "phase_type",
+            #     "phase_score",
+            #     "phase_amplitude",
+            #     "event_index",
+            #     "gamma_score",
+            # ],
         )
 
     if protocol != "file":
