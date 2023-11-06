@@ -16,16 +16,18 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
         os.makedirs(root_path)
     data_dir = f"{region}"
     if not os.path.exists(f"{root_path}/{data_dir}"):
-        os.makedirs(f"{root_path}/{data_dir}")
+        os.makedirs(f"{root_path}/{data_dir}", exist_ok=True)
     for subfolder in ["obspy", "waveforms"]:
         if not os.path.exists(f"{root_path}/{data_dir}/{subfolder}"):
-            os.makedirs(f"{root_path}/{data_dir}/{subfolder}")
+            os.makedirs(f"{root_path}/{data_dir}/{subfolder}", exist_ok=True)
 
     config_region = {}
     if "default" in config:
         config_region.update(config["default"])
     if "kubeflow" in config:
         config_region.update(config["kubeflow"])
+    if "skypilot" in config:
+        config_region.update(config["skypilot"])
     if "obspy" in config:
         config_region.update(config["obspy"])
     if "phasenet" in config:
@@ -49,11 +51,23 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
 
 if __name__ == "__main__":
     import json
+    import os
+    import sys
 
     root_path = "local"
     region = "demo"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
+
     with open("config.json", "r") as fp:
         config = json.load(fp)
+
+    num_nodes = len(os.environ["SKYPILOT_NODE_IPS"].split("\n")) if "SKYPILOT_NODE_IPS" in os.environ else 1
+    if "skypilot" in config:
+        config["skypilot"]["num_nodes"] = num_nodes
+    else:
+        config["skypilot"] = {"num_nodes": num_nodes}
 
     set_config.python_func(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
 

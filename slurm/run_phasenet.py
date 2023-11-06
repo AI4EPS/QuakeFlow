@@ -9,7 +9,7 @@ def run_phasenet(
     root_path: str,
     region: str,
     config: Dict,
-    index: int = 0,
+    rank: int = 0,
     model_path: str = "../PhaseNet/",
     mseed_list: List = None,
     protocol: str = "file",
@@ -53,27 +53,32 @@ def run_phasenet(
         fs.get(f"{bucket}/{region}/obspy/inventory.xml", f"{root_path}/{region}/obspy/inventory.xml")
 
     # %%
-    with open(f"{root_path}/{result_path}/mseed_list_{index:03d}.csv", "w") as fp:
+    with open(f"{root_path}/{result_path}/mseed_list_{rank:03d}.csv", "w") as fp:
         fp.write("fname\n")
         fp.write("\n".join(mseed_list))
 
     # %%
     os.system(
-        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{index:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{index:03d} --batch_size=1"
+        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{rank:03d} --batch_size=1"
     )
 
     if protocol != "file":
         fs.put(f"{root_path}/{result_path}/", f"{bucket}/{result_path}/", recursive=True)
 
-    return f"{result_path}/phasenet_picks_{index:03d}.csv"
+    return f"{result_path}/phasenet_picks_{rank:03d}.csv"
 
 
 if __name__ == "__main__":
     import json
     import os
+    import sys
 
     root_path = "local"
     region = "demo"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
+
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
@@ -84,3 +89,5 @@ if __name__ == "__main__":
         os.system(
             f"mv {root_path}/{region}/phasenet/phasenet_picks_000.csv {root_path}/{region}/phasenet/phasenet_picks.csv"
         )
+
+# %%

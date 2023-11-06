@@ -1,7 +1,16 @@
-ryan/
 yaml/
-
+debug/
+debug_*
 demo
+local
+debug
+figures
+templates
+__pycache__
+2019-185
 BayArea
+*.png
+*.pth
+
 
 

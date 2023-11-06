@@ -1,8 +1,9 @@
 #!/bin/bash
-
+set -x
 WORKING_DIR=$PWD
-region="Kilauea"
-cd $region/hypodd
+root_path="local"
+region="demo"
+cd $root_path/$region/hypodd
 
 if [ ! -d "HypoDD" ]; then
   git clone git@github.com:zhuwq0/HypoDD.git
@@ -112,5 +113,4 @@ if [ ! -f "dt.ct" ]; then
     ./HypoDD/src/ph2dt/ph2dt ph2dt.inp
 fi
 ./HypoDD/src/hypoDD/hypoDD ct.inp
-cp hypodd_ct.reloc hypodd_ct_catalog.txt
 cd $WORKING_DIR

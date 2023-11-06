@@ -8,7 +8,7 @@ def download_waveform_event(
     root_path: str,
     region: str,
     config: Dict,
-    index: int = 0,
+    rank: int = 0,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -147,7 +147,7 @@ def download_waveform_event(
         events = pd.read_csv(f"{root_path}/{data_dir}/catalog.csv", parse_dates=["time"])
     else:
         events = pd.read_csv(f"{protocol}://{bucket}/{data_dir}/catalog.csv", parse_dates=["time"])
-    events = events.iloc[index::num_nodes, :]
+    events = events.iloc[rank::num_nodes, :]
     for provider in config["provider"]:
         if protocol == "file":
             with open(f"{root_path}/{data_dir}/stations.json") as f:

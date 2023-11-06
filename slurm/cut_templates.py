@@ -65,8 +65,10 @@ def cut_templates(
         tmp = mseed_path.split("/")
         year_jday, hour = tmp[-2], tmp[-1]
         begin_time = datetime.strptime(f"{year_jday}T{hour}", "%Y-%jT%H").replace(tzinfo=timezone.utc)
+        # TODO: make timedelta a parameter
         end_time = begin_time + timedelta(hours=1)
-        events_ = events[(events["event_time"] > begin_time) & (events["event_time"] < end_time)]
+        events_ = events[(events["event_time"] >= begin_time) & (events["event_time"] < end_time)]
+        print(year_jday, hour, len(events_))
 
         if len(events_) == 0:
             return 0
@@ -102,8 +104,8 @@ def cut_templates(
 
         # %%
         num_event = 0
-        for ii, event_index in tqdm(
-            enumerate(events_["event_index"]),
+        for ii, event in tqdm(
+            events_.iterrows(),
             total=len(events_),
             desc=f"Cutting event {year_jday}T{hour}",
             position=ibar % 6,
@@ -111,13 +113,15 @@ def cut_templates(
             mininterval=5,
             leave=True,
         ):
-            if event_index not in picks.index:
+            # if event_index not in picks.index:
+            #     continue
+            if event.event_index not in picks.index:
                 continue
 
-            picks_ = picks.loc[[event_index]]
+            picks_ = picks.loc[[event.event_index]]
             picks_ = picks_.set_index("station_component_index")
 
-            event_loc = events_.loc[event_index][["x_km", "y_km", "z_km"]].to_numpy().astype(np.float32)
+            event_loc = event[["x_km", "y_km", "z_km"]].to_numpy().astype(np.float32)
             event_loc = np.hstack((event_loc, [0]))[np.newaxis, :]
             station_loc = stations[["x_km", "y_km", "z_km"]].to_numpy()
 
@@ -135,7 +139,7 @@ def cut_templates(
                     vel={"p": 6.0, "s": 6.0 / 1.73},
                 ).squeeze()
 
-                phase_timestamp_pred = events_.loc[event_index]["event_timestamp"] + traveltime
+                phase_timestamp_pred = event["event_timestamp"] + traveltime
                 # predicted_phase_time = [events_.loc[event_index]["event_time"] + pd.Timedelta(seconds=x) for x in traveltime]
 
                 mean_shift = []
@@ -144,16 +148,13 @@ def cut_templates(
                         ## TODO: check if multiple phases for the same station
                         phase_timestamp = picks_.loc[f"{station_id}.{phase_type}"]["phase_timestamp"]
                         phase_timestamp_pred[j] = phase_timestamp
-                        mean_shift.append(
-                            phase_timestamp - (events_.loc[event_index]["event_timestamp"] + traveltime[j])
-                        )
+                        mean_shift.append(phase_timestamp - (event["event_timestamp"] + traveltime[j]))
 
-                        traveltime[j] = phase_timestamp - events_.loc[event_index]["event_timestamp"]
-                        traveltime_type_[i, j] = 1
+                        traveltime[j] = phase_timestamp - event["event_timestamp"]
+                        traveltime_type_[i, j] = 1  # auto pick
                         arrivaltime_index_[i, j] = int(round(phase_timestamp * config["sampling_rate"]))
-                        # arrivaltime_index_[i, j] = phase_timestamp
                     else:
-                        traveltime_type_[i, j] = 0
+                        traveltime_type_[i, j] = 0  # theoretical pick
 
                 # if len(mean_shift) > 0:
                 #     mean_shift = float(np.median(mean_shift))
@@ -205,18 +206,12 @@ def cut_templates(
                             else:
                                 snr_[c_index, j] = s / n
 
-            # template_array[event_index] = template_
-            # traveltime_array[event_index] = traveltime_
-            # traveltime_index_array[event_index] = np.round(traveltime_ * config["sampling_rate"]).astype(np.int32)
-            # traveltime_type_array[event_index] = traveltime_type_
-            # arrivaltime_index_array[event_index] = arrivaltime_index_
-            # snr_array[event_index] = snr_
-            template_array[ii] = template_
-            traveltime_array[ii] = traveltime_
-            traveltime_index_array[ii] = np.round(traveltime_ * config["sampling_rate"]).astype(np.int32)
-            traveltime_type_array[ii] = traveltime_type_
-            arrivaltime_index_array[ii] = arrivaltime_index_
-            snr_array[ii] = snr_
+            template_array[ii] += template_
+            traveltime_array[ii] += traveltime_
+            traveltime_index_array[ii] += np.round(traveltime_ * config["sampling_rate"]).astype(np.int32)
+            traveltime_type_array[ii] += traveltime_type_
+            arrivaltime_index_array[ii] += arrivaltime_index_
+            snr_array[ii] = +snr_
 
             with lock:
                 template_array.flush()
@@ -238,26 +233,13 @@ def cut_templates(
     # %%
     stations = pd.read_json(f"{root_path}/{region}/obspy/stations.json", orient="index")
     stations["station_id"] = stations.index
-    # stations = stations[
-    #     (stations["longitude"] >= config.xlim_degree[0])
-    #     & (stations["longitude"] =< config.xlim_degree[1])
-    #     & (stations["latitude"] >= config.ylim_degree[0])
-    #     & (stations["latitude"] <= config.ylim_degree[1])
-    # ]
-    # stations["distance_km"] = stations.apply(
-    #     lambda x: math.sqrt((x.latitude - config.latitude0) ** 2 + (x.longitude - config.longitude0) ** 2)
-    #     * config.degree2km,
+    # already set in obspy
+    # stations["x_km"] = stations.apply(
+    #     lambda x: (x.longitude - config["longitude0"]) * np.cos(np.deg2rad(config["latitude0"])) * config["degree2km"],
     #     axis=1,
     # )
-    # stations.sort_values(by="distance_km", inplace=True)
-    # stations.drop(columns=["distance_km"], inplace=True)
-    # stations.sort_values(by="latitude", inplace=True)
-    stations["x_km"] = stations.apply(
-        lambda x: (x.longitude - config["longitude0"]) * np.cos(np.deg2rad(config["latitude0"])) * config["degree2km"],
-        axis=1,
-    )
-    stations["y_km"] = stations.apply(lambda x: (x.latitude - config["latitude0"]) * config["degree2km"], axis=1)
-    stations["z_km"] = stations.apply(lambda x: -x["elevation_m"] / 1e3, axis=1)
+    # stations["y_km"] = stations.apply(lambda x: (x.latitude - config["latitude0"]) * config["degree2km"], axis=1)
+    # stations["z_km"] = stations.apply(lambda x: -x["elevation_m"] / 1e3, axis=1)
 
     # %%
     events = pd.read_csv(f"{root_path}/{region}/gamma/gamma_events.csv", parse_dates=["time"])
@@ -266,12 +248,12 @@ def cut_templates(
     events.rename(columns={"time": "event_time"}, inplace=True)
     events["event_time"] = events["event_time"].apply(lambda x: pd.to_datetime(x, utc=True))
     events["event_timestamp"] = events["event_time"].apply(lambda x: x.timestamp())
-    events["x_km"] = events.apply(
-        lambda x: (x.longitude - config["longitude0"]) * np.cos(np.deg2rad(config["latitude0"])) * config["degree2km"],
-        axis=1,
-    )
-    events["y_km"] = events.apply(lambda x: (x.latitude - config["latitude0"]) * config["degree2km"], axis=1)
-    events["z_km"] = events.apply(lambda x: x.depth_km, axis=1)
+    if "x(km)" in events.columns:
+        events.rename(columns={"x(km)": "x_km"}, inplace=True)
+    if "y(km)" in events.columns:
+        events.rename(columns={"y(km)": "y_km"}, inplace=True)
+    if "z(km)" in events.columns:
+        events.rename(columns={"z(km)": "z_km"}, inplace=True)
 
     # %%
     if "event_index" not in events.columns:
@@ -290,6 +272,12 @@ def cut_templates(
         parse_dates=["phase_time"],
     )
     picks = picks[picks["event_index"] != -1]
+
+    ## debuging
+    tmp = picks[picks["event_index"] == 1528]
+    tmp["event_index"] = 1527
+    picks = pd.concat([picks[picks["event_index"] != 1527], tmp])
+
     picks["phase_timestamp"] = picks["phase_time"].apply(lambda x: x.timestamp())
 
     picks_ = picks.groupby("station_id").size()
@@ -311,10 +299,11 @@ def cut_templates(
     picks = picks.merge(events, on="event_index", suffixes=("_station", "_event"))
 
     # %%
-    events["index"] = events["event_index"]
-    events.set_index("index", inplace=True)
-    picks["index"] = picks["event_index"]
-    picks.set_index("index", inplace=True)
+    # events["index"] = events["event_index"]
+    # events.set_index("index", inplace=True)
+    # picks["index"] = picks["event_index"]
+    # picks.set_index("index", inplace=True)
+    picks.set_index("event_index", inplace=True)
 
     # %%
     nt = int((config["cctorch"]["time_before"] + config["cctorch"]["time_after"]) * config["cctorch"]["sampling_rate"])
@@ -387,9 +376,13 @@ def cut_templates(
 if __name__ == "__main__":
     import json
     import os
+    import sys
 
     root_path = "local"
     region = "demo"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

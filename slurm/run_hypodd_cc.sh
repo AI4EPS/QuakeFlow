@@ -1,11 +1,17 @@
 #!/bin/bash
+set -x
 WORKING_DIR=$PWD
-region="Kilauea_debug"
-cd $region/hypodd
+root_path="local"
+region="demo"
+cp $root_path/$region/cctorch/dt.cc $root_path/$region/hypodd/dt.cc 
 
+cd $root_path/$region/hypodd
 if [ ! -d "HypoDD" ]; then
   git clone git@github.com:zhuwq0/HypoDD.git
+  export PATH=$PATH:$PWD/HypoDD
+  make -C HypoDD/src/
 fi
+
 
 cat <<EOF > cc.inp
 * RELOC.INP:
@@ -24,7 +30,7 @@ stations.dat
 *
 *--- output file selection
 * original locations:
-hypodd.loc
+hypodd_ct.reloc
 * relocations:
 hypodd_cc.reloc
 * station information:
@@ -88,7 +94,5 @@ hypodd.src
 * ID
 EOF
 
-cp ../../results/hypodd_ct_catalog.txt hypodd.loc
-../HypoDD/src/hypoDD/hypoDD cc.inp
-cp hypodd_cc.reloc ../../results/hypodd_cc_catalog.txt
-cd ../../
+./HypoDD/src/hypoDD/hypoDD cc.inp
+cd $WORKING_DIR

@@ -8,7 +8,7 @@ def download_waveform(
     root_path: str,
     region: str,
     config: Dict,
-    index: int = 0,
+    rank: int = 0,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -51,8 +51,8 @@ def download_waveform(
         start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
         DELTATIME_SEC = 3600 * 24
     starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left")
-    # starttimes = starttimes[index::num_nodes]
-    starttimes = np.array_split(starttimes, num_nodes)[index]
+    # starttimes = starttimes[rank::num_nodes]
+    starttimes = np.array_split(starttimes, num_nodes)[rank]
     if len(starttimes) == 0:
         return
 
@@ -91,7 +91,7 @@ def download_waveform(
         minimum_interstation_distance_in_m=0,
         minimum_length=0.1,
         reject_channels_with_gaps=False,
-        channel_priorities=config["channel_priorities"],
+        # channel_priorities=config["channel_priorities"],
     )
     print(f"{restrictions = }")
 
@@ -133,13 +133,20 @@ def download_waveform(
 if __name__ == "__main__":
     import json
     import os
+    import sys
 
     root_path = "local"
     region = "demo"
+    rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
+    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
+
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_waveform.python_func(root_path, region=region, config=config)
+    download_waveform.python_func(root_path, region=region, config=config, rank=rank)
 
     # # %%
     # bucket = "quakeflow_share"

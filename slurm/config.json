@@ -2,6 +2,9 @@
     "kubeflow": {
         "num_nodes": 1
     },
+    "skypilot": {
+        "num_nodes": 1
+    },
     "gamma": {
         "zmin_km": 0,
         "zmax_km": 60
@@ -29,10 +32,9 @@
             "minlongitude": -118.004,
             "maxlongitude": -117.004,
             "starttime": "2019-07-04T17:00:00",
-            "endtime": "2019-07-04T19:00:00",
+            "endtime": "2019-07-05T00:00:00",
             "provider": [
-                "SCEDC",
-                "IRIS"
+                "SCEDC"
             ],
             "network": "CI"
         },
@@ -43,21 +45,11 @@
             ],
             "longitude0": -117.504,
             "latitude0": 35.705,
-            "minlatitude": 34.705,
-            "maxlatitude": 36.705,
-            "minlongitude": -118.504,
-            "maxlongitude": -116.504,
-            "xlim_degree": [
-                -118.504,
-                -116.504
-            ],
-            "ylim_degree": [
-                34.705,
-                36.705
-            ],
             "maxradius_degree": 1.0,
-            "horizontal_degree": 1.0,
-            "vertical_degree": 1.0,
+            "minlatitude": 35.205,
+            "maxlatitude": 36.205,
+            "minlongitude": -118.004,
+            "maxlongitude": -117.004,
             "starttime": "2019-07-04T00:00:00",
             "endtime": "2019-07-10T00:00:00",
             "channel_priorities": [
@@ -67,8 +59,7 @@
                 "BH[321ENZ]"
             ],
             "provider": [
-                "SCEDC",
-                "IRIS"
+                "SCEDC"
             ]
         },
         "Hawaii_Loa": {

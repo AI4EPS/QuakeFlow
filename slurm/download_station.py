@@ -46,6 +46,7 @@ def download_station(
         inventory = obspy.Inventory()
         for provider in config["provider"]:
             if os.path.exists(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml"):
+                print(f"Loading existing {root_path}/{data_dir}/inventory_{provider.lower()}.xml")
                 inventory += obspy.read_inventory(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml")
                 continue
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
@@ -287,9 +288,14 @@ def download_station(
 
 if __name__ == "__main__":
     import json
+    import sys
 
     root_path = "local"
     region = "demo"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
+
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

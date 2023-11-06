@@ -8,7 +8,7 @@ def run_gamma(
     root_path: str,
     region: str,
     config: Dict,
-    index: int = 0,
+    rank: int = 0,
     picks_csv: str = "picks.csv",
     protocol: str = "file",
     bucket: str = "",
@@ -20,7 +20,7 @@ def run_gamma(
     import fsspec
     import numpy as np
     import pandas as pd
-    from gamma.utils import association
+    from gamma.utils import association, estimate_eps
     from pyproj import Proj
 
     # %%
@@ -35,8 +35,8 @@ def run_gamma(
     # station_csv = data_path / "stations.csv"
     station_json = f"{region}/obspy/stations.json"
     # picks_csv = f"{region}/phasenet/{picks_csv}"
-    gamma_events_csv = f"{result_path}/gamma_events_{index:03d}.csv"
-    gamma_picks_csv = f"{result_path}/gamma_picks_{index:03d}.csv"
+    gamma_events_csv = f"{result_path}/gamma_events_{rank:03d}.csv"
+    gamma_picks_csv = f"{result_path}/gamma_picks_{rank:03d}.csv"
 
     # %%
     ## read picks
@@ -72,7 +72,7 @@ def run_gamma(
     config["use_amplitude"] = True
     config["method"] = "BGMM"
     if config["method"] == "BGMM":  ## BayesianGaussianMixture
-        config["oversample_factor"] = 8
+        config["oversample_factor"] = 5
     if config["method"] == "GMM":  ## GaussianMixture
         config["oversample_factor"] = 1
 
@@ -97,7 +97,7 @@ def run_gamma(
     )
 
     # DBSCAN
-    config["dbscan_eps"] = 10  # s
+    config["dbscan_eps"] = estimate_eps(stations, config["vel"]["p"])  # s
     config["dbscan_min_samples"] = 3
 
     ## Eikonal for 1D velocity model
@@ -195,9 +195,13 @@ def run_gamma(
 if __name__ == "__main__":
     import json
     import os
+    import sys
 
     root_path = "local"
     region = "demo"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

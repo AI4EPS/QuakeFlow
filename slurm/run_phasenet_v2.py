@@ -72,7 +72,7 @@ def run_phasenet(
     elif num_gpu == 1:
         cmd = f"python {base_cmd}"
     else:
-        cmd = f"torchrun --standalone --nproc_per_node {num_gpu} "
+        cmd = f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}"
     print(cmd)
     os.system(cmd)
 
@@ -88,6 +88,7 @@ def run_phasenet(
 
     return f"{result_path}/phasenet_picks_{rank:03d}.csv"
 
+
 if __name__ == "__main__":
     import json
     import os
@@ -95,14 +96,17 @@ if __name__ == "__main__":
 
     root_path = "local"
     region = "demo"
+    data_type = "continuous"
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
+    if len(sys.argv) > 3:
+        data_type = sys.argv[3]
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_phasenet.python_func(root_path, region=region, config=config)# , data_type="event")
+    run_phasenet.python_func(root_path, region=region, config=config, data_type=data_type)
 
     if config["num_nodes"] == 1:
         os.system(f"mv {root_path}/{region}/phasenet/mseed_list_000.csv {root_path}/{region}/phasenet/mseed_list.csv")

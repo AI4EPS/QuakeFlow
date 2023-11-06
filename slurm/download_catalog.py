@@ -47,6 +47,11 @@ def download_catalog(
 
         catalog = obspy.Catalog()
         for provider in config["provider"]:
+            if os.path.exists(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml"):
+                print(f"Loading existing {root_path}/{data_dir}/catalog_{provider.lower()}.xml")
+                catalog += obspy.read_events(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml")
+                continue
+
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
             try:
                 events = client.get_events(
@@ -99,6 +104,7 @@ def download_catalog(
                 "latitude": origin.latitude,
                 "longitude": origin.longitude,
                 "depth_km": origin.depth / 1000,
+                "agency": agency_id,
             }
         return events
 
@@ -110,6 +116,7 @@ def download_catalog(
     events[["latitude", "longitude"]] = events[["latitude", "longitude"]].round(5)
     events["depth_km"] = events["depth_km"].round(3)
     events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
+    events.sort_values("time", inplace=True)
     events.to_csv(f"{root_path}/{data_dir}/catalog.csv", index=False)
     if protocol != "file":
         fs.put(f"{root_path}/{data_dir}/catalog.csv", f"{bucket}/{data_dir}/catalog.csv")
@@ -161,10 +168,14 @@ def download_catalog(
 
 if __name__ == "__main__":
     import json
+    import sys
 
     root_path = "local"
     region = "demo"
-    # region = "BayArea"
+    if len(sys.argv) > 1:
+        root_path = sys.argv[1]
+        region = sys.argv[2]
+
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

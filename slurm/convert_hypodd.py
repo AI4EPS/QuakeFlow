@@ -1,14 +1,16 @@
 # %%
+import argparse
+import json
+import os
+from datetime import datetime
 from pathlib import Path
+
 import h5py
+import numpy as np
+import pandas as pd
 import scipy
 from tqdm import tqdm
-import numpy as np
-import json
-import pandas as pd
-from datetime import datetime
-import os
-import argparse
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -16,23 +18,23 @@ def parse_args():
     parser.add_argument("--dt_cc", action="store_true", help="run convert_dtcc.py")
     return parser.parse_args()
 
+
 args = parse_args()
 
 # %%
-region = "Kilauea"
-# region = "Kilauea_debug"
-root_path = Path(region)
-data_path = root_path / "gamma"
-result_path = root_path / "hypodd"
-if not result_path.exists():
-    result_path.mkdir()
+root_path = "local"
+region = "demo"
+
+result_path = f"{region}/hypodd"
+if not os.path.exists(f"{root_path}/{region}"):
+    os.makedirs(f"{root_path}/{region}")
 
 # %%
 ############################################# Station Format ######################################################
-station_json = root_path / "obspy" / "stations.json"
-stations = pd.read_json(station_json, orient="index")
+station_json = f"{region}/obspy/stations.json"
+stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
 
-shift_topo = stations["elevation_m"].max()/1e3
+shift_topo = stations["elevation_m"].max() / 1e3
 # shift_topo = stations["elevation_m"].max()/1e3 + 3.0
 # shift_topo = 0.0 ## prevent air quakes
 # shift_topo = 3.0
@@ -41,7 +43,6 @@ converted_hypoinverse = []
 converted_hypodd = {}
 
 for sta, row in stations.iterrows():
-
     network_code, station_code, comp_code, channel_code = sta.split(".")
     station_weight = " "
     lat_degree = int(row["latitude"])
@@ -56,23 +57,21 @@ for sta, row in stations.iterrows():
 
     # tmp_code = f"{station_code}{channel_code}"
     tmp_code = f"{station_code}"
-    converted_hypodd[
-        tmp_code
-    ] = f"{tmp_code:<8s} {row['latitude']:.3f} {row['longitude']:.3f}\n"
+    converted_hypodd[tmp_code] = f"{tmp_code:<8s} {row['latitude']:.3f} {row['longitude']:.3f}\n"
 
 
-with open(result_path/"stations.dat", "w") as f:
+with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
     for k, v in converted_hypodd.items():
         f.write(v)
 
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = data_path / "gamma_picks.csv"
-catalog_csv = data_path / "gamma_catalog.csv"
+picks_csv = f"{region}/gamma/gamma_picks.csv"
+events_csv = f"{region}/gamma/gamma_events.csv"
 
-picks = pd.read_csv(picks_csv)
-events = pd.read_csv(catalog_csv)
+picks = pd.read_csv(f"{root_path}/{picks_csv}")
+events = pd.read_csv(f"{root_path}/{events_csv}")
 
 events.sort_values("time", inplace=True)
 picks = picks.loc[picks["event_index"].isin(events["event_index"])]
@@ -83,7 +82,8 @@ for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(
     event_time = datetime.strptime(event["time"], "%Y-%m-%dT%H:%M:%S.%f")
     lat = event["latitude"]
     lng = event["longitude"]
-    dep = event["depth(m)"] / 1e3 + shift_topo
+    # dep = event["depth(m)"] / 1e3 + shift_topo
+    dep = event["depth_km"] + shift_topo
     mag = event["magnitude"]
     EH = 0
     EZ = 0
@@ -116,7 +116,7 @@ for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(
         # output_lines.append(pick_line)
         lines.append(pick_line)
 
-with open(result_path / "phase.txt", "w") as fp:
+with open(f"{root_path}/{result_path}/phase.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
