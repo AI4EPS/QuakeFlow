@@ -64,7 +64,6 @@ def cut_templates(
         # TODO: make timedelta a parameter
         end_time = begin_time + timedelta(hours=1)
         events_ = events[(events["event_time"] >= begin_time) & (events["event_time"] < end_time)]
-        print(year_jday, hour, len(events_))
 
         if len(events_) == 0:
             return 0

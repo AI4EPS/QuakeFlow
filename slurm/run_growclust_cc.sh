@@ -1,6 +1,21 @@
 #!/bin/bash
-cd relocation/growclust
+set -x
+WORKING_DIR=$PWD
+root_path="local"
+region="demo"
+
+if [ ! -d "$root_path/$region/growclust" ]; then
+  mkdir -p $root_path/$region/growclust
+fi
+
+cp $root_path/$region/cctorch/dt.cc $root_path/$region/growclust/dt.cc 
+cd $root_path/$region/growclust
 mkdir -p TT OUT
+
+if [ ! -d "GrowClust" ]; then
+  git clone git@github.com:zhuwq0/GrowClust.git
+  make -C GrowClust/SRC/
+fi
 
 cat <<EOF > growclust.inp
 ****  Example GrowClust Control File  *****
@@ -95,6 +110,6 @@ cat <<EOF > vzmodel.txt
 100.0 8.11 0.00
 EOF
 
-../GrowClust/SRC/growclust  growclust.inp
-cp OUT/out.growclust_cc_cat ../../results/growclust_cc_catalog.txt
-cd ../../
+./GrowClust/SRC/growclust  growclust.inp
+cp OUT/out.growclust_cc_cat growclust_cc_catalog.txt
+cd $WORKING_DIR

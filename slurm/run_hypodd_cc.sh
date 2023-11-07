@@ -3,15 +3,19 @@ set -x
 WORKING_DIR=$PWD
 root_path="local"
 region="demo"
-cp $root_path/$region/cctorch/dt.cc $root_path/$region/hypodd/dt.cc 
 
+if [ ! -d "$root_path/$region/hypodd" ]; then
+  mkdir -p $root_path/$region/hypodd
+fi
+
+cp $root_path/$region/cctorch/dt.cc $root_path/$region/hypodd/dt.cc 
 cd $root_path/$region/hypodd
+
 if [ ! -d "HypoDD" ]; then
   git clone git@github.com:zhuwq0/HypoDD.git
   export PATH=$PATH:$PWD/HypoDD
   make -C HypoDD/src/
 fi
-
 
 cat <<EOF > cc.inp
 * RELOC.INP:
@@ -30,7 +34,7 @@ stations.dat
 *
 *--- output file selection
 * original locations:
-hypodd_ct.reloc
+hypodd_cc.loc
 * relocations:
 hypodd_cc.reloc
 * station information:
@@ -72,7 +76,7 @@ hypodd.src
    4      1    1    -9    -9    -9    -9     -9    -9  70
    4      1    1     6    -9    -9    -9     -9    -9  70
    4      1    0.8   3     4    -9    -9     -9    -9  70
-   4      1    0.8   2     2    -9    -9     -9    -9  70
+   4      1    0.8   2     2    -9    -9     -9    -9  70  
 *
 *--- 1D model:
 * NLAY:		number of model layers  
@@ -80,7 +84,7 @@ hypodd.src
 * TOP:		depths of top of layer (km) 
 * VEL: 		layer velocities (km/s)
 * NLAY  RATIO 
-   12     1.82
+   12     1.73
 * TOP 
 0.0 1.0 3.0 5.0 7.0 9.0 11.0 13.0 17.0 21.0 31.00 31.10
 * VEL

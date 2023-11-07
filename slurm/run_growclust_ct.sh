@@ -1,14 +1,19 @@
 #!/bin/bash
 WORKING_DIR=$PWD
-region="Kilauea"
-cd $region/growclust
+root_path="local"
+region="demo"
+
+if [ ! -d "$root_path/$region/growclust" ]; then
+  mkdir -p $root_path/$region/growclust
+fi
+
+cd $root_path/$region/growclust
 mkdir -p TT OUT
 
 if [ ! -d "GrowClust" ]; then
   git clone git@github.com:zhuwq0/GrowClust.git
   make -C GrowClust/SRC/
 fi
-
 
 cat <<EOF > growclust.inp
 ****  Example GrowClust Control File  *****
