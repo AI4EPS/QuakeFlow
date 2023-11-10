@@ -46,6 +46,7 @@ with open(f"{root_path}/{result_path}/stlist.txt", "w") as fp:
 
 # %%
 catalog_file = f"{region}/gamma/gamma_events.csv"
+# catalog_file = f"{region}/cctorch/events.csv"
 catalog_df = pd.read_csv(f"{root_path}/{catalog_file}")
 # catalog_df = catalog_df[catalog_df["gamma_score"] > 10]
 # event_index = [f"{x:06d}" for x in catalog_df["event_index"]]

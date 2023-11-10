@@ -15,8 +15,6 @@ from tqdm import tqdm
 
 # %%
 def extract_picks(pair, data, config, tt_memmap, station_df):
-    # h5, id1, id2 = pair
-    # h5, id1, id2_list = pair
     h5, id1 = pair
 
     x = config["interp"]["x"]
@@ -24,24 +22,26 @@ def extract_picks(pair, data, config, tt_memmap, station_df):
     dt = config["interp"]["dt"]
     dt_interp = config["interp"]["dt_interp"]
     min_cc_score = config["min_cc_score"]
-    min_cc_weight = config["min_cc_weight"]
+    min_cc_diff = config["min_cc_diff"]
     num_channel = config["num_channel"]
     phase_list = config["phase_list"]
 
     with h5py.File(h5, "r") as fp:
         gp = fp[id1]
+        id1 = int(id1)
 
         for id2 in gp:
-            if int(id1) > int(id2):
+            ds = gp[id2]
+            id2 = int(id2)
+            if id1 > id2:
                 continue
 
-            ds = gp[id2]
             cc_score = ds["cc_score"][:]
             cc_index = ds["cc_index"][:]
-            cc_weight = ds["cc_weight"][:]
+            cc_diff = ds["cc_diff"][:]
             neighbor_score = ds["neighbor_score"][:]
 
-            if (np.max(cc_score) < min_cc_score) or (np.max(cc_weight) < min_cc_weight):
+            if np.max(cc_score) < min_cc_score or (np.max(cc_diff) < min_cc_diff):
                 continue
 
             cubic_score = scipy.interpolate.interp1d(x, neighbor_score, axis=-1, kind="quadratic")(x_interp)
@@ -53,22 +53,19 @@ def extract_picks(pair, data, config, tt_memmap, station_df):
             records = []
             for i in range(nch // num_channel):
                 for j in range(nsta):
-                    dt_ct = tt_memmap[int(id1)][i, j] - tt_memmap[int(id2)][i, j]
+                    dt_ct = tt_memmap[id1][i, j] - tt_memmap[id2][i, j]
                     best = np.argmax(cc_score[i * num_channel : (i + 1) * num_channel, j, 0]) + i * num_channel
-                    if cc_score[best, j, 0] > min_cc_score:
-                        # records.append([f"{j:05d}", dt_ct + dt_cc[best, j, 0], cc_score[best, j, 0]*cc_weight[best, j], phase_list[i]])
-                        if cc_weight[best, j] > min_cc_weight:
-                            records.append(
-                                [
-                                    # f"{station_df.iloc[j]['network']}{station_df.iloc[j]['station']:<4}",
-                                    f"{station_df.iloc[j]['station']:<4}",
-                                    # dt_ct,
-                                    dt_ct + dt_cc[best, j, 0],
-                                    # cc_score[best, j, 0] * cc_weight[best, j],
-                                    cc_score[best, j, 0],
-                                    phase_list[i],
-                                ]
-                            )
+                    if cc_score[best, j, 0] >= min_cc_score:
+                        # Shelly (2016) Fluid-faulting evolution in high definition: Connecting fault structure and frequency-magnitude variations during the 2014 Long Valley Caldera, California, earthquake swarm
+                        weight = (0.1 + 3 * cc_diff[best, j]) * cc_score[best, j, 0] ** 2
+                        records.append(
+                            [
+                                f"{station_df.loc[j]['station']:<4}",
+                                dt_ct + dt_cc[best, j, 0],
+                                weight,
+                                phase_list[i],
+                            ]
+                        )
 
             if len(records) > 0:
                 data[key] = records
@@ -91,7 +88,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{cctorch_path}/config.json", "r") as fp:
         config = json.load(fp)
     config["min_cc_score"] = 0.6
-    config["min_cc_weight"] = 0.2
+    config["min_cc_diff"] = 0.0
 
     tt_memmap = np.memmap(
         f"{root_path}/{cctorch_path}/traveltime.dat",
@@ -101,7 +98,10 @@ if __name__ == "__main__":
     )
 
     # %%
-    station_df = pd.read_csv(f"{root_path}/{cctorch_path}/stations_filtered.csv")
+    event_df = pd.read_csv(f"{root_path}/{cctorch_path}/events.csv", index_col=0)
+
+    # %%
+    station_df = pd.read_csv(f"{root_path}/{cctorch_path}/stations.csv", index_col=0)
 
     lines = []
     for i, row in station_df.iterrows():
@@ -146,8 +146,9 @@ if __name__ == "__main__":
         ncpu = max(1, min(8, mp.cpu_count() - 1))
         pbar = tqdm(total=len(pair_list), desc="Extracting pairs")
 
+        ## Debug
         # for pair in pair_list:
-        #     extract_picks(pair, data, config)
+        #     extract_picks(pair, data, config, tt_memmap, station_df)
         #     pbar.update()
 
         with mp.get_context("spawn").Pool(processes=ncpu) as pool:
@@ -166,6 +167,8 @@ if __name__ == "__main__":
     # %%
     with open(f"{root_path}/{cctorch_path}/dt.cc", "w") as fp:
         for key in tqdm(sorted(data.keys()), desc="Writing dt.cc"):
-            fp.write(f"# {key[0]} {key[1]} 0.000\n")
+            event_index0 = event_df.loc[key[0]]["event_index"]
+            event_index1 = event_df.loc[key[1]]["event_index"]
+            fp.write(f"# {event_index0} {event_index1} 0.000\n")
             for record in data[key]:
                 fp.write(f"{record[0]} {record[1]: .4f} {record[2]:.4f} {record[3]}\n")

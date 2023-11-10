@@ -70,16 +70,17 @@ with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
 picks_csv = f"{region}/gamma/gamma_picks.csv"
 events_csv = f"{region}/gamma/gamma_events.csv"
 
-picks = pd.read_csv(f"{root_path}/{picks_csv}")
-events = pd.read_csv(f"{root_path}/{events_csv}")
+picks = pd.read_csv(f"{root_path}/{picks_csv}", parse_dates=["phase_time"])
+events = pd.read_csv(f"{root_path}/{events_csv}", parse_dates=["time"])
 
-events.sort_values("time", inplace=True)
+# events.sort_values("time", inplace=True)
 picks = picks.loc[picks["event_index"].isin(events["event_index"])]
 
 lines = []
 picks_by_event = picks.groupby("event_index").groups
 for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(events)):
-    event_time = datetime.strptime(event["time"], "%Y-%m-%dT%H:%M:%S.%f")
+    # event_time = datetime.strptime(event["time"], "%Y-%m-%dT%H:%M:%S.%f")
+    event_time = event["time"]
     lat = event["latitude"]
     lng = event["longitude"]
     # dep = event["depth(m)"] / 1e3 + shift_topo
@@ -99,7 +100,6 @@ for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(
     )
     event_line = f"# {year:4d} {month:2d} {day:2d} {hour:2d} {min:2d} {sec:5.2f}  {lat:7.4f} {lng:9.4f}   {dep:5.2f} {mag:5.2f} {EH:5.2f} {EZ:5.2f} {RMS:5.2f} {event['event_index']:9d}\n"
 
-    # output_lines.append(event_line)
     lines.append(event_line)
 
     picks_idx = picks_by_event[event["event_index"]]
@@ -109,11 +109,10 @@ for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(
         network_code, station_code, comp_code, channel_code = pick["station_id"].split(".")
         phase_type = pick["phase_type"].upper()
         phase_score = pick["phase_score"]
-        pick_time = (datetime.strptime(pick["phase_time"], "%Y-%m-%dT%H:%M:%S.%f") - event_time).total_seconds()
-        # tmp_code = f"{station_code}{channel_code}"
+        # pick_time = (datetime.strptime(pick["phase_time"], "%Y-%m-%dT%H:%M:%S.%f") - event_time).total_seconds()
+        pick_time = (pick["phase_time"] - event_time).total_seconds()
         tmp_code = f"{station_code}"
         pick_line = f"{tmp_code:<7s}   {pick_time:6.3f}   {phase_score:5.4f}   {phase_type}\n"
-        # output_lines.append(pick_line)
         lines.append(pick_line)
 
 with open(f"{root_path}/{result_path}/phase.txt", "w") as fp:

@@ -9,6 +9,7 @@ templates
 __pycache__
 2019-185
 BayArea
+Shelly2020.txt
 *.png
 *.pth
 

@@ -296,7 +296,7 @@ if routine_exist and (len(routine_catalog) > 0):
     ax[0, 0].scatter(
         routine_catalog["longitude"],
         routine_catalog["latitude"],
-        s=size_factor / len(routine_catalog),
+        s=min(2, size_factor / len(routine_catalog)),
         alpha=1.0,
         linewidth=0,
     )
@@ -308,7 +308,7 @@ if gamma_exist and (len(gamma_catalog) > 0):
     ax[0, 1].scatter(
         gamma_catalog["longitude"],
         gamma_catalog["latitude"],
-        s=size_factor / len(gamma_catalog),
+        s=min(2, size_factor / len(gamma_catalog)),
         alpha=1.0,
         linewidth=0,
     )
@@ -320,7 +320,7 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[1, 0].scatter(
         catalog_ct_hypodd["LON"],
         catalog_ct_hypodd["LAT"],
-        s=size_factor / len(catalog_ct_hypodd),
+        s=min(2, size_factor / len(catalog_ct_hypodd)),
         alpha=1.0,
         linewidth=0,
     )
@@ -333,7 +333,7 @@ if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[1, 1].scatter(
         catalog_cc_hypodd["LON"],
         catalog_cc_hypodd["LAT"],
-        s=size_factor / len(catalog_cc_hypodd),
+        s=min(2, size_factor / len(catalog_cc_hypodd)),
         alpha=1.0,
         linewidth=0,
     )
@@ -343,7 +343,7 @@ if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
     ax[2, 0].scatter(
         growclust_ct_catalog["lonR"],
         growclust_ct_catalog["latR"],
-        s=size_factor / len(growclust_ct_catalog),
+        s=min(2, size_factor / len(growclust_ct_catalog)),
         alpha=1.0,
         linewidth=0,
     )
@@ -353,7 +353,7 @@ if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
     ax[2, 1].scatter(
         growclust_cc_catalog["lonR"],
         growclust_cc_catalog["latR"],
-        s=size_factor / len(growclust_cc_catalog),
+        s=min(2, size_factor / len(growclust_cc_catalog)),
         alpha=1.0,
         linewidth=0,
     )

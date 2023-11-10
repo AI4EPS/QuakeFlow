@@ -29,6 +29,7 @@ def cut_templates(
     import numpy as np
     import obspy
     import pandas as pd
+    from sklearn.neighbors import NearestNeighbors
     from tqdm import tqdm
 
     def extract_template_numpy(
@@ -88,7 +89,7 @@ def cut_templates(
                                 trace.resample(config["sampling_rate"])
                         # trace.detrend("linear")
                         # trace.taper(max_percentage=0.05, type="cosine")
-                        trace.filter("bandpass", freqmin=1.0, freqmax=15.0, corners=4, zerophase=True)
+                        trace.filter("bandpass", freqmin=2.0, freqmax=15.0, corners=4, zerophase=True)
                         waveforms_dict[f"{station_id}{c}"] = trace
                     except Exception as e:
                         print(e)
@@ -184,25 +185,25 @@ def cut_templates(
                             empty_data = False
                             if traveltime_type_[k, j] == 1:  ## only use auto picks
                                 template_[c_index, j, : config["nt"]] = trace_data[: config["nt"]]
-                                ################## debuging ##################
-                                # import matplotlib.pyplot as plt
-                                # import scipy.interpolate
+                            ################## debuging ##################
+                            # import matplotlib.pyplot as plt
+                            # import scipy.interpolate
 
-                                # if (i == 0) and (j in [3, 4, 5]):
-                                #     # template_[c_index, j, 1 : config["nt"]] = trace_data[: config["nt"] - 1]
-                                #     t = np.linspace(0, 1, (config["nt"] - 1) + 1)
-                                #     t_interp = np.linspace(0, 1, (config["nt"] - 1) * 10 + 1)
-                                #     x = trace_data[: config["nt"]]
-                                #     x_interp = scipy.interpolate.interp1d(t, x, kind="cubic")(t_interp)
-                                #     # print(x - x_interp[0::10])
-                                #     # plt.figure()
-                                #     # plt.plot(t, x)
-                                #     # plt.plot(t_interp, x_interp)
-                                #     # plt.plot(t, x_interp[0::10])
-                                #     # plt.savefig("debug.png")
-                                #     # raise
-                                #     template_[c_index, j, :] = np.roll(x_interp, -1)[::10]
-                                ################################################
+                            # if (i == 0) and (j in [3, 4, 5]):
+                            #     # template_[c_index, j, 1 : config["nt"]] = trace_data[: config["nt"] - 1]
+                            #     t = np.linspace(0, 1, (config["nt"] - 1) + 1)
+                            #     t_interp = np.linspace(0, 1, (config["nt"] - 1) * 10 + 1)
+                            #     x = trace_data[: config["nt"]]
+                            #     x_interp = scipy.interpolate.interp1d(t, x, kind="cubic")(t_interp)
+                            #     # print(x - x_interp[0::10])
+                            #     # plt.figure()
+                            #     # plt.plot(t, x)
+                            #     # plt.plot(t_interp, x_interp)
+                            #     # plt.plot(t, x_interp[0::10])
+                            #     # plt.savefig("debug.png")
+                            #     # raise
+                            #     template_[c_index, j, :] = np.roll(x_interp, -1)[::10]
+                            ################################################
 
                             s = np.std(trace_data[-int(config["time_after"] * config["sampling_rate"]) :])
                             n = np.std(trace_data[: int(config["time_before"] * config["sampling_rate"])])
@@ -211,11 +212,11 @@ def cut_templates(
                             else:
                                 snr_[c_index, j] = s / n
 
-            template_array[i] += template_
-            traveltime_array[i] += traveltime_
-            traveltime_index_array[i] += traveltime_index_
-            traveltime_type_array[i] += traveltime_type_
-            snr_array[i] = +snr_
+            template_array[i] = template_
+            traveltime_array[i] = traveltime_
+            traveltime_index_array[i] = traveltime_index_
+            traveltime_type_array[i] = traveltime_type_
+            snr_array[i] = snr_
 
             with lock:
                 template_array.flush()
@@ -223,6 +224,19 @@ def cut_templates(
                 traveltime_index_array.flush()
                 traveltime_type_array.flush()
                 snr_array.flush()
+
+    def generate_pairs(events, min_pair_dist=10):
+        neigh = NearestNeighbors(radius=min_pair_dist, metric="euclidean")
+        event_loc = events[["x_km", "y_km", "z_km"]].values
+        neigh.fit(event_loc)
+
+        event_pairs = []
+        for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
+            neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
+
+            event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
+
+        return event_pairs
 
     # %%
     result_path = f"{region}/cctorch"
@@ -261,7 +275,7 @@ def cut_templates(
     # %%
     events = pd.read_csv(f"{root_path}/{region}/gamma/gamma_events.csv", parse_dates=["time"])
     events = events[events["time"].notna()]
-    events.sort_values(by="time", inplace=True)
+    # events.sort_values(by="time", inplace=True)
     events.rename(columns={"time": "event_time"}, inplace=True)
     events["event_time"] = events["event_time"].apply(lambda x: pd.to_datetime(x, utc=True))
     events["event_timestamp"] = events["event_time"].apply(lambda x: x.timestamp())
@@ -281,6 +295,15 @@ def cut_templates(
     # events.loc[mask, "event_timestamp"] = events.loc[mask, "event_time"].apply(lambda x: x.timestamp())
     # print(events[events["event_index"] == 1528], events[events["event_index"] == 1527])
     ################################################
+
+    ##
+    # event_pairs = generate_pairs(events, config["min_pair_dist"])
+    event_pairs = generate_pairs(events, config["cctorch"]["min_pair_dist_km"])
+    event_pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
+    with open(event_pair_fname, "w") as f:
+        for id1, id2 in event_pairs:
+            f.write(f"{id1},{id2}\n")
+    config["cctorch"]["event_pair_file"] = event_pair_fname
 
     # %%
     event_index_fname = f"{root_path}/{result_path}/event_index.txt"

@@ -50,7 +50,8 @@ if args.dtct_pair:
 
 else:
     num_gpu = torch.cuda.device_count()
-    base_cmd = f"../CCTorch/run.py --data_list1={root_path}/{region}/cctorch/event_index.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch}  --result_path={root_path}/{region}/cctorch/ccpairs"
+    # base_cmd = f"../CCTorch/run.py --data_list1={root_path}/{region}/cctorch/event_index.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch}  --result_path={root_path}/{region}/cctorch/ccpairs"
+    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/cctorch/event_pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch}  --result_path={root_path}/{region}/cctorch/ccpairs"
     if num_gpu == 0:
         if os.uname().sysname == "Darwin":
             os.system(f"python {base_cmd} --device=mps")

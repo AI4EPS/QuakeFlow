@@ -109,8 +109,10 @@ hypodd.src
 * ID
 EOF
 
-if [ ! -f "dt.ct" ]; then
-    ./HypoDD/src/ph2dt/ph2dt ph2dt.inp
-fi
+# if [ ! -f "dt.ct" ]; then
+#     ./HypoDD/src/ph2dt/ph2dt ph2dt.inp
+# fi
+
+./HypoDD/src/ph2dt/ph2dt ph2dt.inp
 ./HypoDD/src/hypoDD/hypoDD ct.inp
 cd $WORKING_DIR
