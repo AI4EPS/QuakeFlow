@@ -52,6 +52,7 @@ def download_station(
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
             max_retry = 10
             retry = 0
+            stations = None
             while retry < max_retry:
                 try:
                     stations = client.get_stations(
@@ -68,6 +69,10 @@ def download_station(
                     )
                     break
                 except Exception as e:
+                    message = "The current client does not have a station service."
+                    if str(e)[: len(message)] == message:
+                        print(f"{provider} failed: {e}")
+                        break
                     print(e)
                     retry += 1
                     time.sleep(10)
@@ -76,16 +81,17 @@ def download_station(
                 print(f"Failed to download {provider} after {max_retry} retries.")
                 continue
 
-            print(
-                f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
-            )
-            stations.write(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
-            if protocol != "file":
-                fs.put(
-                    f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml",
-                    f"{bucket}/{data_dir}/inventory_{provider.lower()}.xml",
+            if stations is not None:
+                print(
+                    f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
                 )
-            inventory += stations
+                stations.write(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
+                if protocol != "file":
+                    fs.put(
+                        f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml",
+                        f"{bucket}/{data_dir}/inventory_{provider.lower()}.xml",
+                    )
+                inventory += stations
 
         inventory.write(f"{root_path}/{data_dir}/inventory.xml", format="STATIONXML")
         if protocol != "file":
@@ -205,13 +211,14 @@ def download_station(
             )
 
         stations = parse_inventory_json(inventory)
-        with open(f"{root_path}/{data_dir}/stations_{provider.lower()}.json", "w") as f:
-            json.dump(stations, f, indent=4)
-        if protocol != "file":
-            fs.put(
-                f"{root_path}/{data_dir}/stations_{provider.lower()}.json",
-                f"{bucket}/{data_dir}/stations_{provider.lower()}.json",
-            )
+        if len(stations) > 0:
+            with open(f"{root_path}/{data_dir}/stations_{provider.lower()}.json", "w") as f:
+                json.dump(stations, f, indent=4)
+            if protocol != "file":
+                fs.put(
+                    f"{root_path}/{data_dir}/stations_{provider.lower()}.json",
+                    f"{bucket}/{data_dir}/stations_{provider.lower()}.json",
+                )
 
     # %% merge stations
     stations = []
@@ -234,11 +241,12 @@ def download_station(
             if key not in stations:
                 stations[key] = value
                 stations[key]["provider"] = provider
-    print(f"Merged {len(stations)} stations")
-    with open(f"{root_path}/{data_dir}/stations.json", "w") as f:
-        json.dump(stations, f, indent=4)
-    if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/stations.json", f"{bucket}/{data_dir}/stations.json")
+    if len(stations) > 0:
+        print(f"Merged {len(stations)} stations")
+        with open(f"{root_path}/{data_dir}/stations.json", "w") as f:
+            json.dump(stations, f, indent=4)
+        if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/stations.json", f"{bucket}/{data_dir}/stations.json")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):

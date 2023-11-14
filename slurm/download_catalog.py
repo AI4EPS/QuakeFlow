@@ -53,6 +53,7 @@ def download_catalog(
                 continue
 
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
+            events = None
             try:
                 events = client.get_events(
                     starttime=config["starttime"],
@@ -63,23 +64,27 @@ def download_catalog(
                     maxlatitude=config["maxlatitude"],
                     minmagnitude=None if "minmagnitude" not in config else config["minmagnitude"],
                 )
-            except header.FDSNNoDataException as e:
-                print(e)
-                events = obspy.Catalog()
-            print(f"Dowloaded {len(events)} events from {provider.lower()}")
-            events.write(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml", format="QUAKEML")
-            if protocol != "file":
-                fs.put(
-                    f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml",
-                    f"{bucket}/{data_dir}/catalog_{provider.lower()}.xml",
-                )
-            catalog += events
+            except Exception as e:
+                print(f"{provider} failed: {e}")
+            if events is not None:
+                print(f"Dowloaded {len(events)} events from {provider.lower()}")
+                events.write(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml", format="QUAKEML")
+                if protocol != "file":
+                    fs.put(
+                        f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml",
+                        f"{bucket}/{data_dir}/catalog_{provider.lower()}.xml",
+                    )
+                catalog += events
 
-        catalog.write(f"{root_path}/{data_dir}/catalog.xml", format="QUAKEML")
-        if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/catalog.xml", f"{bucket}/{data_dir}/catalog.xml")
+        if len(catalog) > 0:
+            catalog.write(f"{root_path}/{data_dir}/catalog.xml", format="QUAKEML")
+            if protocol != "file":
+                fs.put(f"{root_path}/{data_dir}/catalog.xml", f"{bucket}/{data_dir}/catalog.xml")
 
     # %%
+    if not os.path.exists(f"{root_path}/{data_dir}/catalog.xml"):  # no events
+        return 0
+
     catalog = obspy.read_events(f"{root_path}/{data_dir}/catalog.xml")
 
     def parase_catalog(catalog):
@@ -109,17 +114,17 @@ def download_catalog(
         return events
 
     events = parase_catalog(catalog)
-    events = pd.DataFrame.from_dict(events, orient="index")
-
-    events[["x_km", "y_km"]] = events.apply(lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1)
-    events["z_km"] = events["depth_km"]
-    events[["latitude", "longitude"]] = events[["latitude", "longitude"]].round(5)
-    events["depth_km"] = events["depth_km"].round(3)
-    events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
-    events.sort_values("time", inplace=True)
-    events.to_csv(f"{root_path}/{data_dir}/catalog.csv", index=False)
-    if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/catalog.csv", f"{bucket}/{data_dir}/catalog.csv")
+    if len(events) > 0:
+        events = pd.DataFrame.from_dict(events, orient="index")
+        events[["x_km", "y_km"]] = events.apply(lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1)
+        events["z_km"] = events["depth_km"]
+        events[["latitude", "longitude"]] = events[["latitude", "longitude"]].round(5)
+        events["depth_km"] = events["depth_km"].round(3)
+        events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
+        events.sort_values("time", inplace=True)
+        events.to_csv(f"{root_path}/{data_dir}/catalog.csv", index=False)
+        if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/catalog.csv", f"{bucket}/{data_dir}/catalog.csv")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):

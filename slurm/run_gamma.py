@@ -61,6 +61,10 @@ def run_gamma(
         with fs.open(f"{bucket}/{station_json}", "r") as fp:
             stations = pd.read_json(fp, orient="index")
     stations["id"] = stations.index
+    if "longitude0" not in config:
+        config["longitude0"] = (config["minlongitude"] + config["maxlongitude"]) / 2
+    if "latitude0" not in config:
+        config["latitude0"] = (config["minlatitude"] + config["maxlatitude"]) / 2
     proj = Proj(f"+proj=sterea +lon_0={config['longitude0']} +lat_0={config['latitude0']} +units=km")
     stations[["x(km)", "y(km)"]] = stations.apply(
         lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
@@ -88,7 +92,7 @@ def run_gamma(
         np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
         * config["degree2km"]
     )
-    config["z(km)"] = (0, 20)
+    config["z(km)"] = (0, 30)
     config["bfgs_bounds"] = (
         (config["x(km)"][0] - 1, config["x(km)"][1] + 1),  # x
         (config["y(km)"][0] - 1, config["y(km)"][1] + 1),  # y
@@ -131,62 +135,70 @@ def run_gamma(
     events, assignments = association(picks, stations, config, event_idx0, config["method"])
     event_idx0 += len(events)
 
-    ## create catalog
-    events = pd.DataFrame(
-        events,
-        columns=["time"]
-        + config["dims"]
-        + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
-    )
-    events[["longitude", "latitude"]] = events.apply(
-        lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
-    )
-    events["depth_km"] = events["z(km)"]
-    events.sort_values("time", inplace=True)
-    with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
-        events.to_csv(
-            fp,
-            index=False,
-            float_format="%.3f",
-            date_format="%Y-%m-%dT%H:%M:%S.%f",
-            # columns=[
-            #     "time",
-            #     "magnitude",
-            #     "longitude",
-            #     "latitude",
-            #     # "depth(m)",
-            #     "depth_km",
-            #     "sigma_time",
-            #     "sigma_amp",
-            #     "cov_time_amp",
-            #     "event_index",
-            #     "gamma_score",
-            # ],
+    if len(events) > 0:
+        ## create catalog
+        events = pd.DataFrame(
+            events,
+            columns=["time"]
+            + config["dims"]
+            + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
         )
-    # events = events[['time', 'magnitude', 'longitude', 'latitude', 'depth(m)', 'sigma_time', 'sigma_amp', 'gamma_score']]
-
-    ## add assignment to picks
-    assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
-    picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({"event_index": int})
-    with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
-        picks.to_csv(
-            fp,
-            index=False,
-            date_format="%Y-%m-%dT%H:%M:%S.%f",
-            # columns=[
-            #     "station_id",
-            #     "phase_time",
-            #     "phase_type",
-            #     "phase_score",
-            #     "phase_amplitude",
-            #     "event_index",
-            #     "gamma_score",
-            # ],
+        events[["longitude", "latitude"]] = events.apply(
+            lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
         )
+        events["depth_km"] = events["z(km)"]
+        events.sort_values("time", inplace=True)
+        with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
+            events.to_csv(
+                fp,
+                index=False,
+                float_format="%.3f",
+                date_format="%Y-%m-%dT%H:%M:%S.%f",
+                # columns=[
+                #     "time",
+                #     "magnitude",
+                #     "longitude",
+                #     "latitude",
+                #     # "depth(m)",
+                #     "depth_km",
+                #     "sigma_time",
+                #     "sigma_amp",
+                #     "cov_time_amp",
+                #     "event_index",
+                #     "gamma_score",
+                # ],
+            )
+        # events = events[['time', 'magnitude', 'longitude', 'latitude', 'depth(m)', 'sigma_time', 'sigma_amp', 'gamma_score']]
 
-    if protocol != "file":
-        fs.put(f"{root_path}/{gamma_events_csv}", f"{bucket}/{gamma_events_csv}")
-        fs.put(f"{root_path}/{gamma_picks_csv}", f"{bucket}/{gamma_picks_csv}")
+        ## add assignment to picks
+        assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
+        picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({"event_index": int})
+        with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
+            picks.to_csv(
+                fp,
+                index=False,
+                date_format="%Y-%m-%dT%H:%M:%S.%f",
+                # columns=[
+                #     "station_id",
+                #     "phase_time",
+                #     "phase_type",
+                #     "phase_score",
+                #     "phase_amplitude",
+                #     "event_index",
+                #     "gamma_score",
+                # ],
+            )
+
+        if protocol != "file":
+            fs.put(f"{root_path}/{gamma_events_csv}", f"{bucket}/{gamma_events_csv}")
+            fs.put(f"{root_path}/{gamma_picks_csv}", f"{bucket}/{gamma_picks_csv}")
+
+    else:
+        print(f"No events associated in {picks_csv}")
+        with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
+            pass
+        with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
+            pass
 
     outputs = NamedTuple("outputs", events=str, picks=str)
     return outputs(events=gamma_events_csv, picks=gamma_picks_csv)
