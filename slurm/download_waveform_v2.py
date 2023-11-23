@@ -158,9 +158,13 @@ def download_waveform(
 
                 except Exception as err:
                     err = str(err).rstrip("\n")
-                    message = "No data available for request"
-                    if err[: len(message)] == message:
-                        print(f"{message} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
+                    message1 = "No data available for request"
+                    message2 = "The current client does not have a dataselect service"
+                    if err[: len(message1)] == message1:
+                        print(f"{message1} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
+                        break
+                    elif err[: len(message2)] == message2:
+                        print(f"{message2} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
                         break
                     else:
                         print(f"Error occurred from {client.base_url}:{err}. Retrying...")
