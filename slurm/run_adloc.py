@@ -1,76 +1,39 @@
-from typing import Dict, List, NamedTuple
+import argparse
+import os
+import sys
+from glob import glob
+from pathlib import Path
 
-from kfp import dsl
-
-
-@dsl.component(base_image="zhuwq0/quakeflow:latest")
-def run_gamma(
-    root_path: str,
-    region: str,
-    config: Dict,
-    index: int = 0,
-    picks_csv: str = "picks.csv",
-    events_csv: str = "events.csv",
-    protocol: str = "file",
-    bucket: str = "",
-    token: Dict = None,
-) -> NamedTuple("outputs", events=str, picks=str):
-    import json
-    import os
-
-    import fsspec
-    import numpy as np
-    import pandas as pd
-    from pyproj import Proj
-
-    # %%
-    fs = fsspec.filesystem(protocol=protocol, token=token)
-
-    # %%
-    result_path = f"{region}/gamma"
-    if not os.path.exists(f"{root_path}/{result_path}"):
-        os.makedirs(f"{root_path}/{result_path}")
-
-    # %%
-    station_json = f"{region}/obspy/stations.json"
-    # gamma_events_csv = f"{root_path}/gamma/gamma_events_{index:03d}.csv"
-    # gamma_picks_csv = f"{root_path}/gamma/gamma_picks_{index:03d}.csv"
-
-    ## read picks
-    if protocol == "file":
-        picks = pd.read_csv(f"{root_path}/{picks_csv}")
-    else:
-        picks = pd.read_csv(f"{protocol}://{bucket}/{picks_csv}")
-
-    ## read stations
-    if protocol == "file":
-        stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
-    else:
-        with fs.open(f"{bucket}/{station_json}", "r") as fp:
-            stations = pd.read_json(fp, orient="index")
+import torch
 
 
-if __name__ == "__main__":
-    # import fire
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root_path", type=str, default="local", help="root path")
+    parser.add_argument("--region", type=str, default="demo", help="region")
+    return parser.parse_args()
 
-    # fire.Fire(run_gamma)
 
-    import json
-    import os
-    import sys
+args = parse_args()
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
-    with open(f"{root_path}/{region}/config.json", "r") as fp:
-        config = json.load(fp)
+# %%
+root_path = args.root_path
+region = args.region
 
-    run_gamma.python_func(
-        root_path,
-        region=region,
-        config=config,
-        picks_csv=f"{region}/gamma/gamma_picks.csv",
-        events_csv=f"{region}/gamma/gamma_events.csv",
-    )
+result_path = f"{region}/adloc"
+if not os.path.exists(f"{root_path}/{result_path}"):
+    os.makedirs(f"{root_path}/{result_path}")
+
+batch = 100
+
+base_cmd = f"../ADLoc/run.py --config {root_path}/{region}/config.json --stations {root_path}/{region}/obspy/stations.json --events {root_path}/{region}/gamma/gamma_events.csv --picks {root_path}/{region}/gamma/gamma_picks.csv --result_path {root_path}/{region}/adloc --batch_size {batch}"
+os.system(f"python {base_cmd} --device=cpu --epochs=1")
+
+# num_gpu = torch.cuda.device_count()
+# if num_gpu == 0:
+#     if os.uname().sysname == "Darwin":
+#         os.system(f"python {base_cmd} --device=mps")
+#     else:
+#         os.system(f"python {base_cmd} --device=cpu")
+# else:
+#     os.system(f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}")

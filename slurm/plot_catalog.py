@@ -47,6 +47,15 @@ if os.path.exists(gamma_file):
     gamma_catalog = pd.read_csv(gamma_file, parse_dates=["time"])
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
 
+
+# %%
+adloc_file = f"{root_path}/{region}/adloc/adloc_events.csv"
+adloc_exist = False
+if os.path.exists(adloc_file):
+    adloc_exist = True
+    adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
+    # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
+
 # %%
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
 hypodd_ct_exist = False
@@ -311,10 +320,23 @@ if gamma_exist and (len(gamma_catalog) > 0):
         s=min(2, size_factor / len(gamma_catalog)),
         alpha=1.0,
         linewidth=0,
+        label=f"GaMMA: {len(gamma_catalog)}",
     )
     ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
     # xlim = ax[0, 1].get_xlim()
     # ylim = ax[0, 1].get_ylim()
+
+if adloc_exist and (len(adloc_catalog) > 0):
+    ax[0, 1].scatter(
+        adloc_catalog["longitude"],
+        adloc_catalog["latitude"],
+        s=min(2, size_factor / len(adloc_catalog)),
+        alpha=1.0,
+        linewidth=0,
+        label=f"AdLoc: {len(adloc_catalog)}",
+    )
+    ax[0, 1].legend()
+    # ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[1, 0].scatter(
@@ -378,6 +400,7 @@ if gamma_exist and (len(gamma_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
+        label=f"GaMMA: {len(gamma_catalog)}",
     )
     ax[0, 0].set_title(f"GaMMA: {len(gamma_catalog)}")
     ax[0, 0].invert_yaxis()
@@ -386,6 +409,24 @@ if gamma_exist and (len(gamma_catalog) > 0):
 else:
     xlim = None
     ylim = None
+
+if adloc_exist and (len(adloc_catalog) > 0):
+    ax[0, 0].scatter(
+        adloc_catalog["longitude"],
+        adloc_catalog["depth_km"],
+        # c=adloc_catalog["depth_km"],
+        s=8000 / len(adloc_catalog),
+        alpha=1.0,
+        linewidth=0,
+        # vmin=cmin,
+        # vmax=cmax,
+        # cmap="viridis_r",
+        label=f"AdLoc: {len(adloc_catalog)}",
+    )
+    ax[0, 0].legend()
+    # ax[0, 0].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[1, 0].set_xlim(xlim)
+    ax[1, 0].set_ylim(ylim)
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[1, 0].scatter(
         catalog_ct_hypodd["LON"],
@@ -458,6 +499,7 @@ if gamma_exist and (len(gamma_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
+        label=f"GaMMA: {len(gamma_catalog)}",
     )
     ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
     ax[0, 1].invert_yaxis()
@@ -466,6 +508,23 @@ if gamma_exist and (len(gamma_catalog) > 0):
 else:
     xlim = None
     ylim = None
+if adloc_exist and (len(adloc_catalog) > 0):
+    ax[0, 1].scatter(
+        adloc_catalog["latitude"],
+        adloc_catalog["depth_km"],
+        # c=adloc_catalog["depth_km"],
+        s=8000 / len(adloc_catalog),
+        alpha=1.0,
+        linewidth=0,
+        # vmin=cmin,
+        # vmax=cmax,
+        # cmap="viridis_r",
+        label=f"AdLoc: {len(adloc_catalog)}",
+    )
+    ax[0, 1].legend()
+    # ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[0, 1].set_xlim(xlim)
+    ax[0, 1].set_ylim(ylim)
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[1, 1].scatter(
         catalog_ct_hypodd["LAT"],
@@ -534,6 +593,9 @@ fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10))
 if gamma_exist:
     ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
     ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
+if adloc_exist:
+    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
 if hypodd_ct_exist:
     ax[0, 0].plot(
         catalog_ct_hypodd["time"], catalog_ct_hypodd["MAG"], "o", markersize=2, alpha=0.5, label="HypoDD (CT)"
@@ -562,6 +624,9 @@ bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
 if gamma_exist:
     ax[0, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
     ax[1, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
+if adloc_exist:
+    ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
+    ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
 if hypodd_ct_exist:
     ax[0, 0].hist(catalog_ct_hypodd["MAG"], bins=bins, alpha=0.5, label="HypoDD (CT)")
 if hypodd_cc_exist:
@@ -641,6 +706,15 @@ if plot3d:
             f"{root_path}/{result_path}/earthquake_location_gamma.html",
         )
 
+    if adloc_exist and len(adloc_catalog) > 0:
+        plot3d(
+            adloc_catalog["longitude"],
+            adloc_catalog["latitude"],
+            # gamma_catalog["depth(m)"] / 1e3,
+            adloc_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{result_path}/earthquake_location_adloc.html",
+        )
     if hypodd_ct_exist and len(catalog_ct_hypodd) > 0:
         plot3d(
             catalog_ct_hypodd["LON"],
