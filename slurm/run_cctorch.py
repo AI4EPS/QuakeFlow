@@ -28,13 +28,10 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 
 
 ## based on GPU memory
-# batch = 2048
-# block_size1 = 1000
-# block_size2 = 1000
 
-batch = 100
-block_size1 = 10
-block_size2 = 10
+batch = 1_024
+block_size1 = 10_000
+block_size2 = 10_000  # ~7GB
 
 if args.dtct_pair:
     dt_ct = f"{root_path}/{region}/hypodd/dt.ct"
