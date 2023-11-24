@@ -230,12 +230,19 @@ def cut_templates(
         event_loc = events[["x_km", "y_km", "z_km"]].values
         neigh.fit(event_loc)
 
+        # event_pairs = []
+        # for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
+        #     neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
+
+        #     event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
+
+        neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
+        assert len(neigh_ind) == len(events)
         event_pairs = []
-        for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
-            neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
-
-            event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
-
+        for i, neighs in enumerate(tqdm(neigh_ind)):
+            for j in neighs:
+                if i < j:
+                    event_pairs.append([i, j])
         return event_pairs
 
     # %%
@@ -359,7 +366,7 @@ def cut_templates(
 
     # %%
     dirs = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??"))
-    ncpu = mp.cpu_count()
+    ncpu = min(32, mp.cpu_count())
     lock = mp.Lock()
 
     # with mp.get_context("spawn").Pool(ncpu) as pool:

@@ -26,8 +26,8 @@ root_path = "local"
 region = "demo"
 
 result_path = f"{region}/hypodd"
-if not os.path.exists(f"{root_path}/{region}"):
-    os.makedirs(f"{root_path}/{region}")
+if not os.path.exists(f"{root_path}/{result_path}"):
+    os.makedirs(f"{root_path}/{result_path}")
 
 # %%
 ############################################# Station Format ######################################################

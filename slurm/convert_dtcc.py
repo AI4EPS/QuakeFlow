@@ -1,6 +1,7 @@
 # %%
 import json
 import multiprocessing as mp
+import os
 import sys
 from datetime import datetime
 from glob import glob
@@ -11,6 +12,8 @@ import numpy as np
 import pandas as pd
 import scipy
 from tqdm import tqdm
+
+os.environ["OMP_NUM_THREADS"] = "8"
 
 
 # %%
@@ -128,7 +131,8 @@ if __name__ == "__main__":
     config["phase_list"] = phase_list
 
     # %%
-    with mp.Manager() as manager:
+    ctx = mp.get_context("spawn")
+    with ctx.Manager() as manager:
         data = manager.dict()
         pair_list = []
         num_pair = 0
@@ -151,7 +155,7 @@ if __name__ == "__main__":
         #     extract_picks(pair, data, config, tt_memmap, station_df)
         #     pbar.update()
 
-        with mp.get_context("spawn").Pool(processes=ncpu) as pool:
+        with ctx.Pool(processes=ncpu) as pool:
             # with mp.Pool(processes=ncpu) as pool:
             for pair in pair_list:
                 pool.apply_async(

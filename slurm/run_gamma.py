@@ -209,6 +209,8 @@ if __name__ == "__main__":
     import os
     import sys
 
+    os.environ["OMP_NUM_THREADS"] = "8"
+
     root_path = "local"
     region = "demo"
     if len(sys.argv) > 1:
