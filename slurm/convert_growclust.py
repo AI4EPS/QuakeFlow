@@ -15,7 +15,8 @@ from tqdm import tqdm
 # %%
 def parse_args():
     parser = argparse.ArgumentParser()
-    ## true
+    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
+    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
     parser.add_argument("--dtct", action="store_true")
     args, unknown = parser.parse_known_args()
     return args
@@ -24,8 +25,8 @@ def parse_args():
 args = parse_args()
 
 # %%
-root_path = "local"
-region = "demo"
+root_path = args.root_path
+region = args.region
 result_path = f"{region}/growclust"
 if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")

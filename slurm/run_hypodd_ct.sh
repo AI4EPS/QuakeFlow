@@ -1,8 +1,18 @@
 #!/bin/bash
 set -x
 WORKING_DIR=$PWD
-root_path="local"
-region="demo"
+if [ $# -eq 2 ]; then
+  root_path=$1
+  region=$2
+else
+  root_path="local"
+  region="demo"
+fi
+
+if [ ! -d "$root_path/$region/hypodd" ]; then
+  mkdir -p $root_path/$region/hypodd
+fi
+
 cd $root_path/$region/hypodd
 
 if [ ! -d "HypoDD" ]; then

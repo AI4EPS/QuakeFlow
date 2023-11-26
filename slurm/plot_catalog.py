@@ -1,4 +1,5 @@
 # %%
+import argparse
 import json
 import os
 from datetime import datetime
@@ -9,9 +10,20 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+
 # %%
-root_path = "local"
-region = "demo"
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
+    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
+    return parser.parse_args()
+
+
+args = parse_args()
+
+# %%
+root_path = args.root_path
+region = args.region
 
 result_path = f"{region}/results"
 figure_path = f"{region}/figures"

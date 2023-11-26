@@ -14,7 +14,8 @@ from tqdm import tqdm
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    ## true
+    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
+    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
     parser.add_argument("--dt_cc", action="store_true", help="run convert_dtcc.py")
     return parser.parse_args()
 
@@ -22,8 +23,8 @@ def parse_args():
 args = parse_args()
 
 # %%
-root_path = "local"
-region = "demo"
+root_path = args.root_path
+region = args.region
 
 result_path = f"{region}/hypodd"
 if not os.path.exists(f"{root_path}/{result_path}"):

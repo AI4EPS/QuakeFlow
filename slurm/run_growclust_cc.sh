@@ -1,8 +1,13 @@
 #!/bin/bash
 set -x
 WORKING_DIR=$PWD
-root_path="local"
-region="demo"
+if [ $# -eq 2 ]; then
+  root_path=$1
+  region=$2
+else
+  root_path="local"
+  region="demo"
+fi
 
 if [ ! -d "$root_path/$region/growclust" ]; then
   mkdir -p $root_path/$region/growclust
@@ -64,7 +69,7 @@ TT/tt.sg
 * vpvs_factor  rayparam_min (-1 = default)
   1.732             0.0
 * tt_dep0  tt_dep1  tt_ddep
-   0.        31.       1.
+   0.        71.       1.
 * tt_del0  tt_del1  tt_ddel
    0.        500.      2.
 *
