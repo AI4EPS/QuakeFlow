@@ -300,12 +300,12 @@ if __name__ == "__main__":
     ################################################
 
     # %%
-    # event_pairs = generate_pairs(events, config["cctorch"]["min_pair_dist_km"])
-    # event_pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
-    # with open(event_pair_fname, "w") as f:
-    #     for id1, id2 in event_pairs:
-    #         f.write(f"{id1},{id2}\n")
-    # config["cctorch"]["event_pair_file"] = event_pair_fname
+    event_pairs = generate_pairs(events, config["cctorch"]["min_pair_dist_km"])
+    event_pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
+    with open(event_pair_fname, "w") as f:
+        for id1, id2 in event_pairs:
+            f.write(f"{id1},{id2}\n")
+    config["cctorch"]["event_pair_file"] = event_pair_fname
 
     # %%
     event_index_fname = f"{root_path}/{result_path}/event_index.txt"
