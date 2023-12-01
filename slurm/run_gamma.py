@@ -137,12 +137,13 @@ def run_gamma(
 
     if len(events) > 0:
         ## create catalog
-        events = pd.DataFrame(
-            events,
-            columns=["time"]
-            + config["dims"]
-            + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
-        )
+        # events = pd.DataFrame(
+        #     events,
+        #     columns=["time"]
+        #     + config["dims"]
+        #     + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
+        # )
+        events = pd.DataFrame(events)
         events[["longitude", "latitude"]] = events.apply(
             lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
         )

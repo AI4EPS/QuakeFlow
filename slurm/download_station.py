@@ -223,7 +223,7 @@ def download_station(
     # %% merge stations
     stations = []
     for provider in config["provider"]:
-        tmp = pd.read_csv(f"{root_path}/{data_dir}/stations_{provider.lower()}.csv")
+        tmp = pd.read_csv(f"{root_path}/{data_dir}/stations_{provider.lower()}.csv", dtype={"location": str})
         tmp["provider"] = provider
         stations.append(tmp)
     stations = pd.concat(stations)
