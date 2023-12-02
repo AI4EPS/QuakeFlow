@@ -9,7 +9,7 @@ from tqdm import tqdm
 from glob import glob
 
 # %%
-root_path = "data"
+root_path = "./"
 waveform_path = f"{root_path}/waveform"
 catalog_path = f"{root_path}/catalog"
 station_path = f"{root_path}/station"

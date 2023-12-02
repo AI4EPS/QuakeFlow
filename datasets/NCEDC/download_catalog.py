@@ -9,14 +9,13 @@ from datetime import datetime, timedelta
 from glob import glob
 from pathlib import Path
 
-import fsspec
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
 # %%
-root_path = "data"
+root_path = "./"
 catalog_path = f"{root_path}/catalog/phase2k/"
 station_path = f"{root_path}/station"
 waveform_path = f"{root_path}/waveform"
@@ -170,14 +169,14 @@ def read_event_line(line):
 
     if event["seconds"] < 60:
         event[
-            "event_time"
+            "time"
         ] = f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}:{event['seconds']:06.3f}"
     else:
         tmp = datetime.fromisoformat(
             f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}"
         )
         tmp += timedelta(seconds=event["seconds"])
-        event["event_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        event["time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
     event["latitude"] = round(event["latitude_deg"] + event["latitude_min"] / 60, 6)
     event["longitude"] = round(-(event["longitude_deg"] + event["longitude_min"] / 60), 6)
@@ -289,15 +288,16 @@ def process(year):
         if len(phases) == 0:
             continue
         phases = pd.concat(phases)
-        events = events[["event_id", "event_time", "latitude", "longitude", "depth_km", "magnitude", "magnitude_type"]]
+        events = events[["event_id", "time", "latitude", "longitude", "depth_km", "magnitude", "magnitude_type"]]
         events["event_id"] = events["event_id"].apply(lambda x: "nc" + x)
-        events["event_time"] = events["event_time"].apply(lambda x: x + "+00:00")
+        events["time"] = events["time"].apply(lambda x: x + "+00:00")
         phases = phases[
             [
                 "event_id",
                 "network",
                 "station",
                 "location",
+                "instrument",
                 "component",
                 "phase_type",
                 "phase_time",
@@ -321,26 +321,32 @@ def process(year):
 
         # %%
         phases_ps = []
+        event_ids = []
         for (event_id, network, station), picks in phases.groupby(["event_id", "network", "station"]):
             if len(picks) >= 2:
                 phase_type = picks["phase_type"].unique()
                 if ("P" in phase_type) and ("S" in phase_type):
                     phases_ps.append(picks)
+                    event_ids.append(event_id)
             if len(picks) >= 3:
                 print(event_id, network, station, len(picks))
         if len(phases_ps) == 0:
             continue
         phases_ps = pd.concat(phases_ps)
-        phases = phases_ps
+        events = events[events.event_id.isin(event_ids)]
+        phases = phases[phases.event_id.isin(event_ids)]
 
         # %%
         events.to_csv(f"{result_path}/catalog/{phase_filename[:-2-6]}.event.csv", index=False)
+        phases_ps.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}_ps.csv", index=False)
         phases.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}.csv", index=False)
+        
 
 
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")
     years = range(1966, 2023)[::-1]
-    ncpu = len(years)
+    # ncpu = len(years)
+    ncpu = 16
     with ctx.Pool(processes=ncpu) as pool:
         pool.map(process, years)
