@@ -18,7 +18,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
 root_path = "dataset"
-waveform_path = f"{root_path}/waveform"
+waveform_path = f"{root_path}/waveform_mseed"
 catalog_path = f"{root_path}/catalog"
 station_path = f"{root_path}/station"
 result_path = f"dataset/waveform_h5"
@@ -315,3 +315,17 @@ if __name__ == "__main__":
     ctx = mp.get_context("spawn")
     with ctx.Pool(ncpu) as pool:
         pool.starmap(convert, [x for x in enumerate(years)])
+
+    # # check hdf5
+    # with h5py.File("dataset/waveform_h5/2022.h5", "r") as fp:
+    #     for event_id in fp:
+    #         print(event_id)
+    #         for k in sorted(fp[event_id].attrs.keys()):
+    #             print(k, fp[event_id].attrs[k])
+    #         for station_id in fp[event_id]:
+    #             print(station_id)
+    #             print(fp[event_id][station_id].shape)
+    #             for k in sorted(fp[event_id][station_id].attrs.keys()):
+    #                 print(k, fp[event_id][station_id].attrs[k])
+    #         raise
+    # raise

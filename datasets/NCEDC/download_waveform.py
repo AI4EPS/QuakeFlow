@@ -40,7 +40,7 @@ def cut_data(event, phases):
         #     / f"{event.time.year}.{event.time.dayofyear:03d}"
         #     / f"{event.event_id}"
         # )
-        outfile_path = f"{dataset_path}/waveform/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}"
+        outfile_path = f"{dataset_path}/waveform_mseed/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}"
 
         # if (outfile_path / f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.mseed").exists():
         #     continue
