@@ -12,6 +12,7 @@ import obspy
 import pandas as pd
 from tqdm import tqdm
 from glob import glob
+import matplotlib.pyplot as plt
 
 # warnings.filterwarnings("error")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
@@ -85,7 +86,7 @@ def extract_pick(picks, begin_time, sampling_rate):
             phase_type.append(idx[1])
             phase_index.append(int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
             phase_score.append(pick.phase_score)
-            phase_time.append(pick.phase_time.isoformat())
+            phase_time.append(pick.phase_time.strftime("%Y-%m-%dT%H:%M:%S.%f"))
             phase_remark.append(pick.remark)
             phase_polarity.append(pick.phase_polarity)
             event_id.append(pick.event_id)
@@ -136,7 +137,7 @@ def convert(i, year):
             for event_id in event_ids:
                 gp = fp.create_group(event_id)
                 gp.attrs["event_id"] = event_id
-                gp.attrs["event_time"] = events.loc[event_id, "time"].isoformat()
+                gp.attrs["event_time"] = events.loc[event_id, "time"].strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["latitude"] = events.loc[event_id, "latitude"]
                 gp.attrs["longitude"] = events.loc[event_id, "longitude"]
                 gp.attrs["depth_km"] = events.loc[event_id, "depth_km"]
@@ -159,7 +160,7 @@ def convert(i, year):
                 begin_time = arrival_time - pd.Timedelta(seconds=30)
                 end_time = arrival_time + pd.Timedelta(seconds=90)
                 gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
-                gp.attrs["end_time"] = end_time.isoformat()
+                gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["event_time_index"] = int(
                     (events.loc[event_id, "time"] - begin_time).total_seconds() * 100
                 )
@@ -246,15 +247,15 @@ def convert(i, year):
                     if (event_id, station_id, "P") not in phases.index:
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location} not in P index")
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location} not in P index")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location} not in P index")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location} not in P index")
                         continue
 
                     if (event_id, station_id, "S") not in phases.index:
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"] 
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location} not in S index")
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location} not in S index")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location} not in S index")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location} not in S index")
                         continue
 
                     p_picks = phases_by_station.loc[[(station_id, "P")]]
@@ -266,7 +267,7 @@ def convert(i, year):
                     # s_picks = s_picks.loc[s_picks.groupby("event_id")["phase_score"].idxmin()]
 
                     if len(p_picks[p_picks["event_id"] == event_id]) == 0:
-                        print(f"{jday.name}.{event_id}.{network}.{station}.{location}: no picks")
+                        print(f"{jday}.{event_id}.{network}.{station}.{location}: no picks")
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
@@ -283,7 +284,7 @@ def convert(i, year):
                         )
 
                     if max(snr) == 0:
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location}: snr={snr}")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location}: snr={snr}")
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
@@ -307,7 +308,7 @@ def convert(i, year):
                     ds.attrs["phase_remark"] = phase_remark
                     ds.attrs["phase_polarity"] = phase_polarity
                     ds.attrs["event_id"] = phase_event_id
-
+            # return 
 
 if __name__ == "__main__":
     # years = sorted(list(waveform_path.glob("*")), reverse=True)
@@ -318,6 +319,7 @@ if __name__ == "__main__":
 
     # for x in enumerate(years):
     #     convert(*x)
+    #     break
 
     # # # # check hdf5
     # with h5py.File("dataset/waveform_ps_h5/2022.h5", "r") as fp:
@@ -332,6 +334,13 @@ if __name__ == "__main__":
     #             for k in sorted(fp[event_id][station_id].attrs.keys()):
     #                 print(k, fp[event_id][station_id].attrs[k])
     #         print("=============")
+
+    #         plt.figure()
+    #         plt.plot(fp[event_id][station_id][0, :])
+    #         for (phase_index, phase_type) in zip(fp[event_id][station_id].attrs["phase_index"], fp[event_id][station_id].attrs["phase_type"]):
+    #             color = "r" if phase_type == "P" else "b"
+    #             plt.axvline(phase_index, color=color)
+    #         plt.savefig("debug.png")
     #         raise
 
     ncpu = len(years)

@@ -13,6 +13,8 @@ import pandas as pd
 from tqdm import tqdm
 from glob import glob
 
+import matplotlib.pyplot as plt
+
 # warnings.filterwarnings("error")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
@@ -137,7 +139,7 @@ def convert(i, year):
             for event_id in event_ids:
                 gp = fp.create_group(event_id)
                 gp.attrs["event_id"] = event_id
-                gp.attrs["event_time"] = events.loc[event_id, "time"].isoformat()
+                gp.attrs["event_time"] = events.loc[event_id, "time"].strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["latitude"] = events.loc[event_id, "latitude"]
                 gp.attrs["longitude"] = events.loc[event_id, "longitude"]
                 gp.attrs["depth_km"] = events.loc[event_id, "depth_km"]
@@ -159,8 +161,8 @@ def convert(i, year):
                 arrival_time = phases.loc[event_id, "phase_time"].min()
                 begin_time = arrival_time - pd.Timedelta(seconds=30)
                 end_time = arrival_time + pd.Timedelta(seconds=90)
-                gp.attrs["begin_time"] = begin_time.isoformat()
-                gp.attrs["end_time"] = end_time.isoformat()
+                gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
+                gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["event_time_index"] = int(
                     (events.loc[event_id, "time"] - begin_time).total_seconds() * 100
                 )
@@ -245,7 +247,7 @@ def convert(i, year):
                     picks_ = phases_by_station.loc[[station_id]]
                     picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
                     if len(picks_[picks_["event_id"] == event_id]) == 0:
-                        print(f"{jday.name}.{event_id}.{network}.{station}.{location}: no picks")
+                        print(f"{jday}.{event_id}.{network}.{station}.{location}: no picks")
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
@@ -262,7 +264,7 @@ def convert(i, year):
                         )
 
                     if max(snr) == 0:
-                        # print(f"{jday.name}.{event_id}.{network}.{station}.{location}: snr={snr}")
+                        # print(f"{jday}.{event_id}.{network}.{station}.{location}: snr={snr}")
                         # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
@@ -286,6 +288,15 @@ def convert(i, year):
                     ds.attrs["phase_polarity"] = phase_polarity
                     ds.attrs["event_id"] = phase_event_id
 
+                    if len(np.array(phase_type)[(np.array(phase_event_id) == event_id) & (np.array(phase_type) == "S")]) > 0:
+                        ds.attrs["phase_status"] = "manual"
+                    else:
+                        ds.attrs["phase_status"] = "automatic"
+
+                    
+                    
+            
+            # return
 
 if __name__ == "__main__":
     # years = sorted(list(waveform_path.glob("*")), reverse=True)
@@ -296,6 +307,7 @@ if __name__ == "__main__":
 
     # for x in enumerate(years):
     #     convert(*x)
+    #     break
 
     # # check hdf5
     # with h5py.File("dataset/waveform_h5/2022.h5", "r") as fp:
@@ -308,6 +320,14 @@ if __name__ == "__main__":
     #             print(fp[event_id][station_id].shape)
     #             for k in sorted(fp[event_id][station_id].attrs.keys()):
     #                 print(k, fp[event_id][station_id].attrs[k])
+
+            
+    #         plt.figure()
+    #         plt.plot(fp[event_id][station_id][0, :])
+    #         for (phase_index, phase_type) in zip(fp[event_id][station_id].attrs["phase_index"], fp[event_id][station_id].attrs["phase_type"]):
+    #             color = "r" if phase_type == "P" else "b"
+    #             plt.axvline(phase_index, color=color)
+    #         plt.savefig("debug.png")
     #         raise
     # raise
 

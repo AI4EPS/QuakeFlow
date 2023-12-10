@@ -90,6 +90,7 @@ event_columns = {
     "qdds_version_number": (162, 163),
     "origin_instance_version_number": (163, 164),
 }
+
 event_decimal_number = {
     "seconds": 100,
     "latitude_deg": 1,
@@ -249,8 +250,6 @@ def read_phase_line(line):
 
 
 # %%
-
-
 # for year in range(1966, 2024)[::-1]:
 def process(year):
     for phase_file in sorted(glob(f"{catalog_path}/{year}/*.phase.Z"))[::-1]:
@@ -265,16 +264,17 @@ def process(year):
         catalog = {}
         event_id = None
         for line in tqdm(lines, desc=phase_filename):
-            if len(line) > (180 + 114) / 2:
+            if len(line) > (180 + 114) / 2: # event_line
                 if event_id is not None:
                     assert event["event_id"] == event_id
                     catalog[event_id] = {"event": event, "picks": picks}
                 event = read_event_line(line)
                 picks = []
-            elif len(line) > (73 + 114) / 2:
+            elif len(line) > (73 + 114) / 2: # phase_line
                 picks.extend(read_phase_line(line))
             else:
                 event_id = line.strip().split(" ")[-1]
+        catalog[event_id] = {"event": event, "picks": picks} # last event
 
         events = []
         phases = []
@@ -346,7 +346,6 @@ def process(year):
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")
     years = range(1966, 2023)[::-1]
-    # ncpu = len(years)
     ncpu = 16
     with ctx.Pool(processes=ncpu) as pool:
         pool.map(process, years)
