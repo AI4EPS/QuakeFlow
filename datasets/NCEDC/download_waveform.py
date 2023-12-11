@@ -13,7 +13,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 matplotlib.use("Agg")
-
+warnings.filterwarnings("ignore")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
