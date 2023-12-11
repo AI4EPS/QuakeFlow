@@ -4,48 +4,65 @@ import os
 import warnings
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from glob import glob
 from pathlib import Path
 
+import fsspec
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
-from glob import glob
-
-import matplotlib.pyplot as plt
 
 # warnings.filterwarnings("error")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
-root_path = "dataset"
-waveform_path = f"{root_path}/waveform_mseed"
+protocol = "gs"
+token = "/home/zhuwq/.config/gcloud/application_default_credentials.json"
+bucket = "quakeflow_dataset"
+
+# root_path = "dataset"
+root_path = f"{bucket}/NC"
+mseed_path = f"{root_path}/waveform_mseed"
 catalog_path = f"{root_path}/catalog"
 station_path = f"{root_path}/station"
-result_path = f"dataset/waveform_h5"
+result_path = f"waveform_h5"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
 
 # %%
+fs = fsspec.filesystem(protocol=protocol, token=token)
+
+# %%
 comp = ["3", "2", "1", "U", "V", "E", "N", "Z"]
 order = {key: i for i, key in enumerate(comp)}
-comp2idx = {"3": 0, "2": 1, "1": 2, "U": 0, "V": 1, "E": 0, "N": 1, "Z": 2}  ## only for cases less than 3 components
+comp2idx = {
+    "3": 0,
+    "2": 1,
+    "1": 2,
+    "U": 0,
+    "V": 1,
+    "E": 0,
+    "N": 1,
+    "Z": 2,
+}  ## only for cases less than 3 components
 
 sampling_rate = 100
 
 # %%
 stations = []
-# for csv in fs.glob(f"{bucket}/station/*.csv"):
-for csv in glob(f"{station_path}/*.csv"):
-    stations.append(
-        pd.read_csv(
-            csv,
-            parse_dates=["begin_time", "end_time"],
-            date_format="%Y-%m-%dT%H:%M:%S",
-            dtype={"network": str, "station": str, "location": str, "instrument": str},
+for csv in fs.glob(f"{station_path}/*.csv"):
+    with fs.open(csv, "rb") as f:
+        stations.append(
+            pd.read_csv(
+                f,
+                parse_dates=["begin_time", "end_time"],
+                date_format="%Y-%m-%dT%H:%M:%S",
+                dtype={"network": str, "station": str, "location": str, "instrument": str},
+            )
         )
-    )
 stations = pd.concat(stations)
 stations["location"] = stations["location"].fillna("")
 stations.set_index(["network", "station", "location", "instrument"], inplace=True)
@@ -82,7 +99,7 @@ def extract_pick(picks, begin_time, sampling_rate):
     phase_polarity = []
     phase_remark = []
     event_id = []
-    for idx, pick in picks.iterrows():
+    for idx, pick in picks.sort_values("phase_time").iterrows():
         phase_type.append(pick.phase_type)
         phase_index.append(int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
         phase_score.append(pick.phase_score)
@@ -98,43 +115,36 @@ def extract_pick(picks, begin_time, sampling_rate):
 def convert(i, year):
     # %%
     with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
-        jdays = sorted(glob(f"{waveform_path}/{year}/*"))[::-1]
+        jdays = sorted(fs.ls(f"{mseed_path}/{year}"))[::-1]
         jdays = [x.split("/")[-1] for x in jdays]
-        for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i):
+        for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i, leave=True):
             tmp = datetime.strptime(jday, "%Y.%j")
 
-            events = pd.read_csv(
-                f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.event.csv", parse_dates=["time"])
+            with fs.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.event.csv", "rb") as f:
+                events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f")
+            events["time"] = pd.to_datetime(events["time"])
             events.set_index("event_id", inplace=True)
+            with fs.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.phase.csv", "rb") as f:
+                phases = pd.read_csv(
+                    f,
+                    parse_dates=["phase_time"],
+                    date_format="%Y-%m-%dT%H:%M:%S.%f",
+                    dtype={"location": str},
+                )
 
-            # phases = pd.read_csv(
-            #     f"{protocol}://{bucket}/catalog/{tmp.year:04d}.{tmp.month:02d}.phase.csv",
-            #     parse_dates=["phase_time"],
-            #     date_format="%Y-%m-%dT%H:%M:%S.%f",
-            #     dtype={"location": str},
-            # )
-
-            phases = pd.read_csv(
-                f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.phase.csv",
-                parse_dates=["phase_time"],
-                date_format="%Y-%m-%dT%H:%M:%S.%f",
-                dtype={"location": str},
-            )
             phases["phase_time"] = pd.to_datetime(phases["phase_time"])
             phases["phase_polarity"] = phases["phase_polarity"].fillna("N")
             phases["location"] = phases["location"].fillna("")
             phases["station_id"] = phases["network"] + "." + phases["station"] + "." + phases["location"]
             phases.sort_values(["event_id", "phase_time"], inplace=True)
             phases_by_station = phases.copy()
-            # phases_by_station.set_index(["station_id", "phase_type"], inplace=True)
             phases_by_station.set_index(["station_id"], inplace=True)
             phases_by_event = phases.copy()
             phases_by_event.set_index(["event_id"], inplace=True)
-            # phases.set_index(["event_id", "station_id", "phase_type"], inplace=True)
             phases.set_index(["event_id", "station_id"], inplace=True)
             phases = phases.sort_index()
 
-            event_ids = sorted(glob(f"{waveform_path}/{year}/{jday}/*"))[::-1]
+            event_ids = sorted(fs.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
             event_ids = [x.split("/")[-1] for x in event_ids]
             for event_id in event_ids:
                 gp = fp.create_group(event_id)
@@ -147,36 +157,25 @@ def convert(i, year):
                 gp.attrs["magnitude_type"] = events.loc[event_id, "magnitude_type"]
                 gp.attrs["source"] = "NC"
 
-                # st = obspy.read(str(event_id / "*.mseed"))
-                # st = obspy.Stream()
-                # for file in fs.glob(f"{bucket}/waveform_mseed/{year}/{jday}/{event_id}/*.mseed"):
-                # for f in glob(f"{waveform_path}/{year}/{jday}/{event_id}/*.mseed"):
-                    # with fs.open(file, "rb") as f:
-                    # st += obspy.read(f)
-                st = obspy.read(f"{waveform_path}/{year}/{jday}/{event_id}/*.mseed")
-                # begin_time = min([tr.stats.starttime for tr in st]).datetime
-                # begin_time = begin_time.replace(tzinfo=timezone.utc)
-                # end_time = max([tr.stats.endtime for tr in st]).datetime
-                # end_time = end_time.replace(tzinfo=timezone.utc)
+                mseed_list = sorted(list(fs.glob(f"{mseed_path}/{year}/{jday}/{event_id}/*.mseed")))
+                st = obspy.Stream()
+                for file in mseed_list:
+                    with fs.open(file, "rb") as f:
+                        st += obspy.read(f)
                 arrival_time = phases.loc[event_id, "phase_time"].min()
                 begin_time = arrival_time - pd.Timedelta(seconds=30)
                 end_time = arrival_time + pd.Timedelta(seconds=90)
                 gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["event_time_index"] = int(
-                    (events.loc[event_id, "time"] - begin_time).total_seconds() * 100
+                    round((events.loc[event_id, "time"] - begin_time).total_seconds() * 100)
                 )
                 gp.attrs["sampling_rate"] = sampling_rate
                 gp.attrs["nt"] = 12000  # default 120s
-                # gp.attrs["nx"] = len(list(event_id.glob("*")))
-                # gp.attrs["nx"] = len(fs.ls(f"{bucket}/waveform_mseed/{year}/{jday}/{event_id}/"))
-                gp.attrs["nx"] = len(glob(f"{waveform_path}/{year}/{jday}/{event_id}/*"))
+                gp.attrs["nx"] = len(mseed_list)
                 gp.attrs["delta"] = 1 / sampling_rate
 
-                # for station_channel_ids in event_id.glob("*"):
-                # station_channel_ids = fs.glob(f"{bucket}/waveform_mseed/{year}/{jday}/{event_id}/*.mseed")
-                station_channel_ids = glob(f"{waveform_path}/{year}/{jday}/{event_id}/*.mseed")
-                station_channel_ids = [x.split("/")[-1].replace(".mseed", "") for x in station_channel_ids]
+                station_channel_ids = [x.split("/")[-1].replace(".mseed", "") for x in mseed_list]
                 for station_channel_id in station_channel_ids:
                     ds = gp.create_dataset(station_channel_id, (3, gp.attrs["nt"]), dtype=np.float32)
                     tr = st.select(id=station_channel_id + "?")
@@ -190,9 +189,7 @@ def convert(i, year):
                     for i, t in enumerate(tr):
                         index0 = int(
                             round(
-                                (
-                                    t.stats.starttime.datetime.replace(tzinfo=timezone.utc) - begin_time
-                                ).total_seconds()
+                                (t.stats.starttime.datetime.replace(tzinfo=timezone.utc) - begin_time).total_seconds()
                                 * sampling_rate
                             )
                         )
@@ -204,7 +201,7 @@ def convert(i, year):
                         if index0 > 0:
                             it1 = 0
                             it2 = index0
-                            ll =  min(len(t.data), len(ds[i, it2:]))
+                            ll = min(len(t.data), len(ds[i, it2:]))  # data length
                         elif index0 < 0:
                             it1 = -index0
                             it2 = 0
@@ -243,7 +240,6 @@ def convert(i, year):
 
                     station_id = f"{network}.{station}.{location}"
 
-
                     picks_ = phases_by_station.loc[[station_id]]
                     picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
                     if len(picks_[picks_["event_id"] == event_id]) == 0:
@@ -252,7 +248,7 @@ def convert(i, year):
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
 
-                    pick = picks_[picks_["event_id"] == event_id].iloc[0] # after sort_value
+                    pick = picks_[picks_["event_id"] == event_id].iloc[0]  # after sort_value
                     ds.attrs["azimuth"] = pick.azimuth
                     ds.attrs["distance_km"] = pick.distance_km
                     ds.attrs["takeoff_angle"] = pick.takeoff_angle
@@ -288,48 +284,23 @@ def convert(i, year):
                     ds.attrs["phase_polarity"] = phase_polarity
                     ds.attrs["event_id"] = phase_event_id
 
-                    if len(np.array(phase_type)[(np.array(phase_event_id) == event_id) & (np.array(phase_type) == "S")]) > 0:
+                    if (
+                        len(
+                            np.array(phase_type)[(np.array(phase_event_id) == event_id) & (np.array(phase_type) == "S")]
+                        )
+                        > 0
+                    ):
                         ds.attrs["phase_status"] = "manual"
                     else:
                         ds.attrs["phase_status"] = "automatic"
 
-                    
-                    
-            
             # return
 
+
 if __name__ == "__main__":
-    # years = sorted(list(waveform_path.glob("*")), reverse=True)
-    # years = sorted(fs.ls(f"{bucket}/waveform_mseed/"), reverse=True)
-    years = sorted(glob(f"{waveform_path}/*"))[::-1]
+    # %%
+    years = sorted(fs.ls(mseed_path), reverse=True)
     years = [x.split("/")[-1] for x in years]
-    # years = [x for x in years if x in ["1990"]]
-
-    # for x in enumerate(years):
-    #     convert(*x)
-    #     break
-
-    # # check hdf5
-    # with h5py.File("dataset/waveform_h5/2022.h5", "r") as fp:
-    #     for event_id in fp:
-    #         print(event_id)
-    #         for k in sorted(fp[event_id].attrs.keys()):
-    #             print(k, fp[event_id].attrs[k])
-    #         for station_id in fp[event_id]:
-    #             print(station_id)
-    #             print(fp[event_id][station_id].shape)
-    #             for k in sorted(fp[event_id][station_id].attrs.keys()):
-    #                 print(k, fp[event_id][station_id].attrs[k])
-
-            
-    #         plt.figure()
-    #         plt.plot(fp[event_id][station_id][0, :])
-    #         for (phase_index, phase_type) in zip(fp[event_id][station_id].attrs["phase_index"], fp[event_id][station_id].attrs["phase_type"]):
-    #             color = "r" if phase_type == "P" else "b"
-    #             plt.axvline(phase_index, color=color)
-    #         plt.savefig("debug.png")
-    #         raise
-    # raise
 
     ncpu = len(years)
     ctx = mp.get_context("spawn")
@@ -337,7 +308,7 @@ if __name__ == "__main__":
         pool.starmap(convert, [x for x in enumerate(years)])
 
     # # check hdf5
-    # with h5py.File("dataset/waveform_h5/2022.h5", "r") as fp:
+    # with h5py.File("2000.h5", "r") as fp:
     #     for event_id in fp:
     #         print(event_id)
     #         for k in sorted(fp[event_id].attrs.keys()):
