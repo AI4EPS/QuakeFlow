@@ -181,7 +181,7 @@ if __name__ == "__main__":
         # %%
         df["datetime"] = df.apply(
             lambda x: datetime.strptime(
-                f"{x['Year']}-{x['Month']}-{x['Day']} {x['Hour']}:{x['Minute']}:{x['Seconds']}", "%Y-%m-%d %H:%M:%S.%f"
+                f"{x['Year']}-{x['Month']}-{x['Day']} {x['Hour']}:{x['Minute']}:{x['Seconds']}", "%Y-%m-%dT%H:%M:%S.%f"
             ),
             axis=1,
         )
