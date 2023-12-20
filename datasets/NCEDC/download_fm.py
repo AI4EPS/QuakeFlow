@@ -136,7 +136,7 @@ colnames = [
     "x_error",
     "z_error",
     "hypoinverse_code",
-    "strike",
+    "dip_direction",
     "dip",
     "rake",
     "misfit",
@@ -181,18 +181,19 @@ if __name__ == "__main__":
         # %%
         df["datetime"] = df.apply(
             lambda x: datetime.strptime(
-                f"{x['Year']}-{x['Month']}-{x['Day']} {x['Hour']}:{x['Minute']}:{x['Seconds']}", "%Y-%m-%dT%H:%M:%S.%f"
+                f"{x['Year']}-{x['Month']}-{x['Day']}T{x['Hour']}:{x['Minute']}:{x['Seconds']}", "%Y-%m-%dT%H:%M:%S.%f"
             ),
             axis=1,
         )
         df["Longitude"] = df.apply(
-            lambda x: round(float(x["Longitude (deg)"]) + float(x["Longitude (min)"]) / 60.0, 5), axis=1
+            lambda x: -round(float(x["Longitude (deg)"]) + float(x["Longitude (min)"]) / 60.0, 5), axis=1
         )
         df["Latitude"] = df.apply(
-            lambda x: -round(float(x["Latitude (deg)"]) + float(x["Latitude (min)"]) / 60.0, 5), axis=1
+            lambda x: round(float(x["Latitude (deg)"]) + float(x["Latitude (min)"]) / 60.0, 5), axis=1
         )
         df["Latitude"] = df.apply(lambda x: -1 * x["Latitude"] if x["South"] == "S" else x["Latitude"], axis=1)
         df["Longitude"] = df.apply(lambda x: -1 * x["Longitude"] if x["East"] == "E" else x["Longitude"], axis=1)
+        df["strike"] = df.apply(lambda x: (float(x["dip_direction"]) - 90) % 360, axis=1)
         df.drop(
             columns=[
                 "Year",
@@ -207,9 +208,10 @@ if __name__ == "__main__":
                 "Longitude (min)",
                 "South",
                 "East",
+                "dip_direction",
             ],
             inplace=True,
         )
         df["event_id"] = df.apply(lambda x: f"nc{x['event_id']}", axis=1)
 
-        df.to_csv(os.path.join(result_path, f"{year}.csv"), index=False)
+        df.to_csv(os.path.join(result_path, f"{year}.csv"), index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
