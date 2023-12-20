@@ -1,0 +1,56 @@
+# This Service manifest defines:
+# - a load balancer for pods matching label "app: python-hello-world"
+# - exposing the application to the public Internet (type:LoadBalancer)
+# - routes port 80 of the load balancer to the port 8080 of the Pods.
+# Syntax reference https://kubernetes.io/docs/concepts/configuration/overview/
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: quakeflow-external
+# spec:
+#   type: LoadBalancer
+#   selector:
+#     app: quakeflow-hub
+#   ports:
+#   - name: http
+#     port: 80
+#     targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: picking-api
+spec:
+  type: LoadBalancer
+  selector:
+    app: picking-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: association-api
+spec:
+  type: LoadBalancer
+  selector:
+    app: association-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: location-api
+spec:
+  type: LoadBalancer
+  selector:
+    app: location-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

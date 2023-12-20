@@ -1,15 +1,45 @@
-apiVersion: skaffold/v4beta2
+# apiVersion: skaffold/v4beta2
+# kind: Config
+# metadata:
+#   name: quakeflow
+# build:
+#   artifacts:
+#   - image: phasenet-api
+#     context: PhaseNet
+#   - image: gamma-api
+#     context: GaMMA
+#   - image: deepdenoiser-api
+#     context: DeepDenoiser
+# manifests:
+#   rawYaml:
+#     - kubernetes/quakeflow-local.yaml
+
+
+apiVersion: skaffold/v2beta19
 kind: Config
-metadata:
-  name: quakeflow
 build:
+  tagPolicy:
+    sha256: {}
+  # defines where to find the code at build time and where to push the resulting image
   artifacts:
-  - image: phasenet-api
-    context: PhaseNet
-  - image: gamma-api
-    context: GaMMA
-  - image: deepdenoiser-api
-    context: DeepDenoiser
-manifests:
-  rawYaml:
-    - kubernetes/quakeflow-local.yaml
+  - context: quakeflow/demo/hub
+    image: zhuwq0/quakeflow-hub
+  - context: quakeflow/demo/data
+    image: zhuwq0/quakeflow-data
+  - context: quakeflow/demo/picking
+    image: zhuwq0/picking-api
+  - context: quakeflow/demo/association
+    image: zhuwq0/association-api
+  - context: quakeflow/demo/location
+    image: zhuwq0/location-api
+# defines the Kubernetes manifests to deploy on each run
+deploy:
+  kubectl:
+    manifests:
+    - quakeflow/deployment.yaml
+    - quakeflow/service.yaml
+# use the cloudbuild profile to build images using Google Cloud Build
+profiles:
+- name: cloudbuild
+  build:
+    googleCloudBuild: {}

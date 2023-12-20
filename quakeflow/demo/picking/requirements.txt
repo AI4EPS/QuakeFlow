@@ -1,0 +1,4 @@
+fastapi
+obspy
+uvicorn
+pandas
