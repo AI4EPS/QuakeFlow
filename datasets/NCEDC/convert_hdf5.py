@@ -198,6 +198,9 @@ def convert(i, year):
                             del fp[f"{event_id}/{station_channel_id}"]
                             break
 
+                        if len(chn) != 3:
+                            i = comp2idx[t.stats.channel[-1]]
+
                         if index0 > 0:
                             it1 = 0
                             it2 = index0
@@ -211,8 +214,6 @@ def convert(i, year):
                             it2 = 0
                             ll = min(len(t.data), len(ds[i, :]))
 
-                        if len(chn) != 3:
-                            i = comp2idx[t.stats.channel[-1]]
                         ds[i, it2 : it2 + ll] = (t.data - np.mean(t.data))[it1 : it1 + ll] * 1e6
                         components.append(t.stats.channel[-1])
 
