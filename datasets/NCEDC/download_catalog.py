@@ -154,6 +154,10 @@ phase_decimal_number = {
     "second_of_p_arrival": 100,
     "second_of_s_arrival": 100,
     "distance_km": 10,
+    "p_travel_time_residual": 100,
+    "s_travel_time_residual": 100,
+    "normalized_p_weight_actually_used": 100,
+    "s_weight_actually_used": 100,
 }
 
 
@@ -198,11 +202,17 @@ def read_phase_line(line):
     if len(line[start:end].strip()) > 0:
         p_phase = {}
         for key, (start, end) in phase_columns.items():
+            ######## filter strange data ############
+            if key == "p_travel_time_residual":
+                if line[start : end + 3] == " " * 3 + "0" + " " * 2 + "0":
+                    # print(f"strange data: {line}")
+                    return []
+            #########################################
             if key in phase_decimal_number:
                 if len(line[start:end].strip()) == 0:
                     p_phase[key] = ""
                 else:
-                    p_phase[key] = float(line[start:end]) / phase_decimal_number[key]
+                    p_phase[key] = float(line[start:end].strip()) / phase_decimal_number[key]
             else:
                 p_phase[key] = line[start:end]
         if (p_phase["second_of_p_arrival"] < 60) and (p_phase["second_of_p_arrival"] >= 0):
@@ -219,6 +229,8 @@ def read_phase_line(line):
         p_phase["remark"] = p_phase["p_remark"]
         p_phase["phase_score"] = p_phase["p_weight_code"]
         p_phase["phase_type"] = "P"
+        p_phase["location_residual_s"] = p_phase["p_travel_time_residual"]
+        p_phase["location_weight"] = p_phase["normalized_p_weight_actually_used"]
         phases.append(p_phase)
     start, end = phase_columns["s_remark"]
     if len(line[start:end].strip()) > 0:
@@ -228,7 +240,7 @@ def read_phase_line(line):
                 if len(line[start:end].strip()) == 0:
                     s_phase[key] = ""
                 else:
-                    s_phase[key] = float(line[start:end]) / phase_decimal_number[key]
+                    s_phase[key] = float(line[start:end].strip()) / phase_decimal_number[key]
             else:
                 s_phase[key] = line[start:end]
         if (s_phase["second_of_s_arrival"] < 60) and (s_phase["second_of_s_arrival"] >= 0):
@@ -244,6 +256,8 @@ def read_phase_line(line):
         s_phase["remark"] = s_phase["s_remark"]
         s_phase["phase_score"] = s_phase["s_weight_code"]
         s_phase["phase_type"] = "S"
+        s_phase["location_residual_s"] = s_phase["s_travel_time_residual"]
+        s_phase["location_weight"] = s_phase["s_weight_actually_used"]
         phases.append(s_phase)
 
     return phases
@@ -264,17 +278,17 @@ def process(year):
         catalog = {}
         event_id = None
         for line in tqdm(lines, desc=phase_filename):
-            if len(line) > (180 + 114) / 2: # event_line
+            if len(line) > (180 + 114) / 2:  # event_line
                 if event_id is not None:
                     assert event["event_id"] == event_id
                     catalog[event_id] = {"event": event, "picks": picks}
                 event = read_event_line(line)
                 picks = []
-            elif len(line) > (73 + 114) / 2: # phase_line
+            elif len(line) > (73 + 114) / 2:  # phase_line
                 picks.extend(read_phase_line(line))
             else:
                 event_id = line.strip().split(" ")[-1]
-        catalog[event_id] = {"event": event, "picks": picks} # last event
+        catalog[event_id] = {"event": event, "picks": picks}  # last event
 
         events = []
         phases = []
@@ -307,6 +321,8 @@ def process(year):
                 "distance_km",
                 "azimuth",
                 "takeoff_angle",
+                "location_residual_s",
+                "location_weight",
             ]
         ]
         phases["event_id"] = phases["event_id"].apply(lambda x: "nc" + x)
@@ -317,6 +333,7 @@ def process(year):
         phases["azimuth"] = phases["azimuth"].str.strip()
         phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
         phases = phases[phases["distance_km"] != ""]
+        phases = phases[phases["location_residual_s"].abs() < 9.99]
         phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
 
         # %%
@@ -340,7 +357,6 @@ def process(year):
         events.to_csv(f"{result_path}/catalog/{phase_filename[:-2-6]}.event.csv", index=False)
         phases_ps.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}_ps.csv", index=False)
         phases.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}.csv", index=False)
-        
 
 
 if __name__ == "__main__":
