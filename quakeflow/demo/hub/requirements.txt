@@ -1,0 +1,9 @@
+numpy
+redis
+fsspec
+gcsfs
+fastapi
+requests
+uvicorn
+pandas
+debugpy # Required for debugging
