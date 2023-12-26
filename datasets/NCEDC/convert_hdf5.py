@@ -21,6 +21,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "2"
 # %%
 protocol = "gs"
 token = "/home/zhuwq/.config/gcloud/application_default_credentials.json"
+# token = "cloud"
 bucket = "quakeflow_dataset"
 
 # root_path = "dataset"
@@ -50,6 +51,7 @@ comp2idx = {
 }  ## only for cases less than 3 components
 
 sampling_rate = 100
+NT = 12000  # 120 s
 
 # %%
 stations = []
@@ -171,7 +173,7 @@ def convert(i, year):
                     round((events.loc[event_id, "time"] - begin_time).total_seconds() * 100)
                 )
                 gp.attrs["sampling_rate"] = sampling_rate
-                gp.attrs["nt"] = 12000  # default 120s
+                gp.attrs["nt"] = NT  # default 120s
                 gp.attrs["nx"] = len(mseed_list)
                 gp.attrs["delta"] = 1 / sampling_rate
 
@@ -194,7 +196,6 @@ def convert(i, year):
                             )
                         )
                         if index0 > 3000:
-                            # del ds
                             del fp[f"{event_id}/{station_channel_id}"]
                             break
 
@@ -244,8 +245,6 @@ def convert(i, year):
                     picks_ = phases_by_station.loc[[station_id]]
                     picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
                     if len(picks_[picks_["event_id"] == event_id]) == 0:
-                        print(f"{jday}.{event_id}.{network}.{station}.{location}: no picks")
-                        # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
 
@@ -253,16 +252,14 @@ def convert(i, year):
                     ds.attrs["azimuth"] = pick.azimuth
                     ds.attrs["distance_km"] = pick.distance_km
                     ds.attrs["takeoff_angle"] = pick.takeoff_angle
-                    snr = calc_snr(ds[:, :], int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
-                    tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
-                    if ((tmp - 300) < 0) or ((tmp + 300) > 12000):
-                        print(
-                            f"{jday}.{event_id}.{network}.{station}.{location}: tmp={tmp}, {pick.phase_time}, {begin_time}"
-                        )
 
+                    tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
+                    if (tmp - 300 < 0) or (tmp + 300 >= NT):
+                        del fp[f"{event_id}/{station_channel_id}"]
+                        continue
+
+                    snr = calc_snr(ds[:, :], int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
                     if max(snr) == 0:
-                        # print(f"{jday}.{event_id}.{network}.{station}.{location}: snr={snr}")
-                        # del ds
                         del fp[f"{event_id}/{station_channel_id}"]
                         continue
                     ds.attrs["snr"] = snr
