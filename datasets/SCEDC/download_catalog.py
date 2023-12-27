@@ -1,5 +1,6 @@
 # %%
 import multiprocessing as mp
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -8,19 +9,20 @@ import pandas as pd
 from tqdm import tqdm
 
 # %%
-protocol = "s3"
-bucket = "scedc-pds"
-fs = fsspec.filesystem(protocol, anon=True)
+input_protocol = "s3"
+input_bucket = "scedc-pds"
+input_fs = fsspec.filesystem(input_protocol, anon=True)
+
+output_protocol = "gs"
+output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+output_bucket = "quakeflow_dataset"
+output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
 # %%
-catalog_path = "event_phases"
-station_path = "FDSNstationXML"
-waveform_path = "continuous_waveforms/"
-dataset_path = Path("./dataset")
-if not dataset_path.exists():
-    dataset_path.mkdir()
-if not (dataset_path / "catalog").exists():
-    (dataset_path / "catalog").mkdir()
+catalog_path = f"{input_bucket}/event_phases"
+station_path = f"{input_bucket}/FDSNstationXML"
+waveform_path = f"{input_bucket}/continuous_waveforms/"
+dataset_path = f"{output_bucket}/SC/catalog"
 
 # %%
 ## https://scedc.caltech.edu/data/stp/STP_Manual_v1.01.pdf
@@ -95,65 +97,78 @@ def parse_phase_pick(line, event_id, event_time):
     return phase_pick
 
 
-# %%
+# %% NCEDC
 def parse(jday):
-    phases_ps = []
     events = []
-    for file in fs.glob(f"{jday}/*.phase"):
-        with fs.open(file, "r") as f:
-            event_line = f.readline().strip()
+    event_ids = []
+    phases = []
+    phases_ps = []
+
+    for file in input_fs.glob(f"{jday}/*.phase"):
+        with input_fs.open(file, "r") as fp:
+            event_line = fp.readline().strip()
             nan_case = "0       1970/01/01,00:00:00.000"
             if event_line.startswith(nan_case):
                 continue
 
             event = parse_event_info(event_line)
-            phases = [parse_phase_pick(line.strip(), event["event_id"], event["event_time"]) for line in f]
-            if len(phases) == 0:
+            phases_ = [parse_phase_pick(line.strip(), event["event_id"], event["event_time"]) for line in fp]
+            if len(phases_) == 0:
                 continue
 
         events.append(event)
-        phases = pd.DataFrame(phases)
-        phases = phases[phases["phase_type"].isin(["P", "S"])]
+        phases_ = pd.DataFrame(phases_)
+        phases_ = phases_[phases_["phase_type"].isin(["P", "S"])]
 
         ## keep best picks
-        phases = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
+        phases_ = phases_.loc[phases_.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
+        phases.append(phases_)
+
         ## keep P/S pairs
-        for (event_id, network, station), picks in phases.groupby(["event_id", "network", "station"]):
+        for (event_id, network, station), picks in phases_.groupby(["event_id", "network", "station"]):
             if len(picks) >= 2:
                 phase_type = picks["phase_type"].unique()
                 if "P" in phase_type and "S" in phase_type:
                     phases_ps.append(picks)
+                    event_ids.append(event_id)
 
             if len(picks) >= 3:
                 print(jday, event_id, network, station, len(picks))
-                print(picks)
 
     if len(phases_ps) == 0:
         return 0
+
     phases_ps = pd.concat(phases_ps)
     events = pd.DataFrame(events)
-
-    if not (dataset_path / f"catalog/{jday.split('/')[-2]}").exists():
-        (dataset_path / f"catalog/{jday.split('/')[-2]}").mkdir()
+    phases = pd.concat(phases)
+    events = events[events.event_id.isin(event_ids)]
+    phases = phases[phases.event_id.isin(event_ids)]
 
     # add timezone utc to phase_time
-    phases_ps["phase_time"] = phases_ps["phase_time"].dt.tz_localize("UTC")
     events["event_time"] = events["event_time"].dt.tz_localize("UTC")
-    phases_ps.to_csv(dataset_path / f"catalog/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv", index=False)
-    events.to_csv(dataset_path / f"catalog/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv", index=False)
+    phases["phase_time"] = phases["phase_time"].dt.tz_localize("UTC")
+    phases_ps["phase_time"] = phases_ps["phase_time"].dt.tz_localize("UTC")
+
+    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv", "w") as fp:
+        events.to_csv(fp, index=False)
+    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv", "w") as fp:
+        phases.to_csv(fp, index=False)
+    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_ps.csv", "w") as fp:
+        phases_ps.to_csv(fp, index=False)
 
 
 # %%
 if __name__ == "__main__":
     file_list = []
-    for year in tqdm(fs.glob(f"{bucket}/{catalog_path}/????")):
+    for year in tqdm(input_fs.glob(f"{catalog_path}/????")):
         if year.endswith("done"):
             continue
 
-        for jday in fs.glob(f"{year}/????_???"):
+        for jday in input_fs.glob(f"{year}/????_???"):
             file_list.append(jday)
 
     file_list = sorted(file_list, reverse=True)
+
     ncpu = mp.cpu_count()
     pbar = tqdm(total=len(file_list))
     with mp.get_context("spawn").Pool(ncpu) as pool:
