@@ -202,12 +202,12 @@ def read_phase_line(line):
     if len(line[start:end].strip()) > 0:
         p_phase = {}
         for key, (start, end) in phase_columns.items():
-            ######## filter strange data ############
-            if key == "p_travel_time_residual":
-                if line[start : end + 3] == " " * 3 + "0" + " " * 2 + "0":
-                    # print(f"strange data: {line}")
-                    return []
-            #########################################
+            # ######## filter strange data ############
+            # if key == "p_travel_time_residual":
+            #     if line[start : end + 3] == " " * 3 + "0" + " " * 2 + "0":
+            #         # print(f"strange data: {line}")
+            #         return []
+            # #########################################
             if key in phase_decimal_number:
                 if len(line[start:end].strip()) == 0:
                     p_phase[key] = ""
@@ -334,6 +334,7 @@ def process(year):
         phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
         phases = phases[phases["distance_km"] != ""]
         phases = phases[phases["location_residual_s"].abs() < 9.99]
+        phases = phases[~((phases["location_weight"] == 0) & (phases["location_residual_s"] == 0))]
         phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
 
         # %%
@@ -361,7 +362,8 @@ def process(year):
 
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")
-    years = range(1966, 2023)[::-1]
+    # years = range(2023, 2024)[::-1]
+    years = range(1966, 2024)[::-1]
     ncpu = 16
     with ctx.Pool(processes=ncpu) as pool:
         pool.map(process, years)
