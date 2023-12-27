@@ -27,13 +27,16 @@ def run(h5_file):
                 gp = fout.create_group(event)
                 for key in fin[event].attrs.keys():
                     gp.attrs[key] = fin[event].attrs[key]
+                num_station = 0
                 for station in fin[event].keys():
                     if "S" in fin[event][station].attrs["phase_type"]:
                         ds = gp.create_dataset(station, data=fin[event][station])
                         for key in fin[event][station].attrs.keys():
                             ds.attrs[key] = fin[event][station].attrs[key]
+                        num_station += 1
                     else:
                         continue
+                gp["nx"] = num_station
 
 
 # %%
