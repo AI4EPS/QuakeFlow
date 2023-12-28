@@ -37,7 +37,7 @@ def cut_data(event, phases):
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     for _, pick in phases.loc[event.event_id].iterrows():
-        outfile_path = f"{result_path}/waveform_mseed2/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}_{event.time.strftime('%Y%m%d%H%M%S')}"
+        outfile_path = f"{result_path}/waveform_mseed2/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}_{begin_time.strftime('%Y%m%d%H%M%S')}"
         outfile_name = f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.mseed"
         if fs.exists(f"{outfile_path}/{outfile_name}"):
             continue
