@@ -21,9 +21,12 @@ root_path = "."
 catalog_path = f"dataset/catalog"
 station_path = f"{root_path}/station"
 waveform_path = f"{root_path}/waveform"
+# catalog_path = "/quakeflow_dataset/NC/catalog"
+# station_path = "/quakeflow_dataset/NC/FDSNstationXML"
+# waveform_path = "/ncedc-pds/continuous_waveforms"
 
 protocol = "gs"
-token = "/home/gcl/WZ/zhuwq/.config/gcloud/application_default_credentials.json"
+token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
 bucket = "quakeflow_dataset"
 result_path = f"{bucket}/NC"
 
@@ -92,7 +95,7 @@ def cut_data(event, phases):
 
 # %%
 if __name__ == "__main__":
-    ncpu = 32
+    ncpu = min(mp.cpu_count() * 4, 32)
     event_list = sorted(list(glob(f"{catalog_path}/*.event.csv")))[::-1]
     start_year = "1967"
     end_year = "2023"

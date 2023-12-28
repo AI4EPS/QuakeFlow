@@ -19,6 +19,11 @@ root_path = "./"
 catalog_path = f"{root_path}/catalog/phase2k/"
 station_path = f"{root_path}/station"
 waveform_path = f"{root_path}/waveform"
+# root_path = "/ncedc-pds"
+# catalog_path = f"{root_path}/event_phases"
+# station_path = "./station"
+# waveform_path = f"{root_path}/waveform"
+
 result_path = "dataset"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
