@@ -116,17 +116,20 @@ def extract_pick(picks, begin_time, sampling_rate):
 # %%
 def convert(i, year):
     # %%
+    fs_ = fsspec.filesystem(protocol=protocol, token=token)
+
+    # %%
     with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
-        jdays = sorted(fs.ls(f"{mseed_path}/{year}"))[::-1]
+        jdays = sorted(fs_.ls(f"{mseed_path}/{year}"), reverse=False)
         jdays = [x.split("/")[-1] for x in jdays]
         for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i, leave=True):
             tmp = datetime.strptime(jday, "%Y.%j")
 
-            with fs.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.event.csv", "rb") as f:
+            with fs_.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.event.csv", "rb") as f:
                 events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f")
             events["time"] = pd.to_datetime(events["time"])
             events.set_index("event_id", inplace=True)
-            with fs.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.phase.csv", "rb") as f:
+            with fs_.open(f"{catalog_path}/{tmp.year:04d}.{tmp.month:02d}.phase.csv", "rb") as f:
                 phases = pd.read_csv(
                     f,
                     parse_dates=["phase_time"],
@@ -146,9 +149,12 @@ def convert(i, year):
             phases.set_index(["event_id", "station_id"], inplace=True)
             phases = phases.sort_index()
 
-            event_ids = sorted(fs.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
+            event_ids = sorted(fs_.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
             event_ids = [x.split("/")[-1] for x in event_ids]
             for event_id in event_ids:
+                if event_id not in events.index:
+                    continue
+
                 gp = fp.create_group(event_id)
                 gp.attrs["event_id"] = event_id
                 gp.attrs["event_time"] = events.loc[event_id, "time"].strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -159,10 +165,10 @@ def convert(i, year):
                 gp.attrs["magnitude_type"] = events.loc[event_id, "magnitude_type"]
                 gp.attrs["source"] = "NC"
 
-                mseed_list = sorted(list(fs.glob(f"{mseed_path}/{year}/{jday}/{event_id}/*.mseed")))
+                mseed_list = sorted(list(fs_.glob(f"{mseed_path}/{year}/{jday}/{event_id}/*.mseed")))
                 st = obspy.Stream()
                 for file in mseed_list:
-                    with fs.open(file, "rb") as f:
+                    with fs_.open(file, "rb") as f:
                         st += obspy.read(f)
                 arrival_time = phases.loc[event_id, "phase_time"].min()
                 begin_time = arrival_time - pd.Timedelta(seconds=30)
@@ -177,6 +183,7 @@ def convert(i, year):
                 gp.attrs["nx"] = len(mseed_list)
                 gp.attrs["delta"] = 1 / sampling_rate
 
+                has_station = False
                 station_channel_ids = [x.split("/")[-1].replace(".mseed", "") for x in mseed_list]
                 for station_channel_id in station_channel_ids:
                     ds = gp.create_dataset(station_channel_id, (3, gp.attrs["nt"]), dtype=np.float32)
@@ -241,7 +248,9 @@ def convert(i, year):
                     ds.attrs["depth_km"] = sta["depth_km"]
 
                     station_id = f"{network}.{station}.{location}"
-
+                    if station_id not in phases_by_station.index:
+                        del fp[f"{event_id}/{station_channel_id}"]
+                        continue
                     picks_ = phases_by_station.loc[[station_id]]
                     picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
                     if len(picks_[picks_["event_id"] == event_id]) == 0:
@@ -292,16 +301,23 @@ def convert(i, year):
                     else:
                         ds.attrs["phase_status"] = "automatic"
 
+                    has_station = True
+
+                if not has_station:
+                    print(f"{event_id} has no station")
+                    del fp[event_id]
+
             # return
 
 
 if __name__ == "__main__":
     # %%
-    years = sorted(fs.ls(mseed_path), reverse=True)
+    years = sorted(fs.ls(mseed_path), reverse=False)
     years = [x.split("/")[-1] for x in years]
 
     ncpu = len(years)
     ctx = mp.get_context("spawn")
+    # ctx = mp.get_context("fork")
     with ctx.Pool(ncpu) as pool:
         pool.starmap(convert, [x for x in enumerate(years)])
 
