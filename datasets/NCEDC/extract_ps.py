@@ -10,7 +10,7 @@ h5_dir = "waveform_h5"
 h5_files = os.listdir(h5_dir)
 
 # %%
-result_path = "waveform_ps"
+result_path = "waveform_ps_h5"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
 
@@ -36,7 +36,7 @@ def run(h5_file):
                         num_station += 1
                     else:
                         continue
-                gp["nx"] = num_station
+                gp.attrs["nx"] = num_station
 
 
 # %%
