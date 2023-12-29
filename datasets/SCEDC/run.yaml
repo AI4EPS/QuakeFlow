@@ -56,4 +56,5 @@ setup: |
 
 run: |
   echo "Begin run." 
-  python download_catalog.py
+  # python download_catalog.py
+  python download_waveform.py

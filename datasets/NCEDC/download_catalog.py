@@ -231,7 +231,7 @@ def read_phase_line(line):
             tmp += timedelta(seconds=p_phase["second_of_p_arrival"])
             p_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
         p_phase["phase_polarity"] = p_phase["p_polarity"]
-        p_phase["remark"] = p_phase["p_remark"]
+        p_phase["phase_remark"] = p_phase["p_remark"]
         p_phase["phase_score"] = p_phase["p_weight_code"]
         p_phase["phase_type"] = "P"
         p_phase["location_residual_s"] = p_phase["p_travel_time_residual"]
@@ -258,7 +258,7 @@ def read_phase_line(line):
             )
             tmp += timedelta(seconds=s_phase["second_of_s_arrival"])
             s_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        s_phase["remark"] = s_phase["s_remark"]
+        s_phase["phase_remark"] = s_phase["s_remark"]
         s_phase["phase_score"] = s_phase["s_weight_code"]
         s_phase["phase_type"] = "S"
         s_phase["location_residual_s"] = s_phase["s_travel_time_residual"]
@@ -322,7 +322,7 @@ def process(year):
                 "phase_time",
                 "phase_score",
                 "phase_polarity",
-                "remark",
+                "phase_remark",
                 "distance_km",
                 "azimuth",
                 "takeoff_angle",
@@ -363,6 +363,13 @@ def process(year):
         events.to_csv(f"{result_path}/catalog/{phase_filename[:-2-6]}.event.csv", index=False)
         phases_ps.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}_ps.csv", index=False)
         phases.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}.csv", index=False)
+
+        # year, month = phase_filename.split("/")[-1].split(".")[0:2]
+        # if not os.path.exists(f"{result_path}/catalog/{year}"):
+        #     os.makedirs(f"{result_path}/catalog/{year}")
+        # events.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.event.csv", index=False)
+        # phases_ps.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.phase_ps.csv", index=False)
+        # phases.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.phase.csv", index=False)
 
 
 if __name__ == "__main__":
