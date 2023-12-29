@@ -21,9 +21,12 @@ root_path = "."
 catalog_path = f"dataset/catalog"
 station_path = f"{root_path}/station"
 waveform_path = f"{root_path}/waveform"
+# catalog_path = "/quakeflow_dataset/NC/catalog"
+# station_path = "/quakeflow_dataset/NC/FDSNstationXML"
+# waveform_path = "/ncedc-pds/continuous_waveforms"
 
 protocol = "gs"
-token = "/home/gcl/WZ/zhuwq/.config/gcloud/application_default_credentials.json"
+token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
 bucket = "quakeflow_dataset"
 result_path = f"{bucket}/NC"
 
@@ -37,7 +40,7 @@ def cut_data(event, phases):
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     for _, pick in phases.loc[event.event_id].iterrows():
-        outfile_path = f"{result_path}/waveform_mseed/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}"
+        outfile_path = f"{result_path}/waveform_mseed2/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}_{begin_time.strftime('%Y%m%d%H%M%S')}"
         outfile_name = f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.mseed"
         if fs.exists(f"{outfile_path}/{outfile_name}"):
             continue
@@ -69,6 +72,10 @@ def cut_data(event, phases):
             print(e)
             continue
 
+        # float64 to float32
+        for tr in st:
+            tr.data = tr.data.astype("float32")
+
         if not fs.exists(outfile_path):
             fs.makedirs(outfile_path)
 
@@ -88,10 +95,10 @@ def cut_data(event, phases):
 
 # %%
 if __name__ == "__main__":
-    ncpu = 32
+    ncpu = min(mp.cpu_count() * 4, 32)
     event_list = sorted(list(glob(f"{catalog_path}/*.event.csv")))[::-1]
-    start_year = "1966"
-    end_year = "2022"
+    start_year = "1967"
+    end_year = "2023"
     tmp = []
     for event_file in event_list:
         if (
@@ -99,7 +106,7 @@ if __name__ == "__main__":
             and event_file.split("/")[-1].split(".")[0] <= end_year
         ):
             tmp.append(event_file)
-    event_list = sorted(tmp)[::-1]
+    event_list = sorted(tmp, reverse=True)
 
     for event_file in event_list:
         print(event_file)
