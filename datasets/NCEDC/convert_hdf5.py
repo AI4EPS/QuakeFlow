@@ -106,7 +106,7 @@ def extract_pick(picks, begin_time, sampling_rate):
         phase_index.append(int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
         phase_score.append(pick.phase_score)
         phase_time.append(pick.phase_time.strftime("%Y-%m-%dT%H:%M:%S.%f"))
-        phase_remark.append(pick.remark)
+        phase_remark.append(pick.phase_remark)
         phase_polarity.append(pick.phase_polarity)
         event_id.append(pick.event_id)
 
