@@ -23,7 +23,7 @@ resources:
 
   # disk_tier: high
 
-  use_spot: True
+  # use_spot: True
 
   # spot_recovery: FAILOVER
 
