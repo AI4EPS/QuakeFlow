@@ -1,6 +1,7 @@
 # %%
 import multiprocessing as mp
 import os
+import time
 import warnings
 from glob import glob
 
@@ -32,10 +33,12 @@ waveform_path = f"continuous_waveforms"
 
 
 # %%
-def cut_data(event, phases):
-    input_fs = fsspec.filesystem(input_protocol, anon=True)
-    output_fs = fsspec.filesystem(output_protocol, token=output_token)
+input_fs = fsspec.filesystem(input_protocol, anon=True)
+output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
+
+# %%
+def cut_data(event, phases):
     if event.event_id not in phases.index:
         return 0
 
@@ -61,7 +64,7 @@ def cut_data(event, phases):
         ########### SCEDC ###########
         inv_path = f"{input_bucket}/{station_path}/{pick.network}/{pick.network}_{pick.station}.xml"
         if not input_fs.exists(inv_path):
-            inv_path = f"{input_bucket}/{station_path}/unauthoritative-XML/{pick.network}.{pick.station}.xml"
+            inv_path = f"{input_bucket}/{station_path}/unauthoritative-XML/{pick.network}_{pick.station}.xml"
         if not input_fs.exists(inv_path):
             # print(f"{inv_path} not exists")
             continue
@@ -120,12 +123,15 @@ def cut_data(event, phases):
 
 # %%
 if __name__ == "__main__":
+    mp.set_start_method("spawn")
+
     ncpu = min(mp.cpu_count() * 2, 32)
     # event_list = sorted(list(glob(f"{catalog_path}/*.event.csv")))[::-1]
-    fs = fsspec.filesystem(output_protocol, token=output_token)
-    event_list = sorted(list(fs.glob(f"{result_path}/catalog/????/*.event.csv")), reverse=True)
+    # fs = fsspec.filesystem(output_protocol, token=output_token)
+    fs = output_fs
+    event_list = sorted(list(fs.glob(f"{result_path}/catalog/????/*.event.csv")), reverse=False)
     start_year = "1967"
-    end_year = "2023"
+    end_year = "2022"
     tmp = []
     for event_file in event_list:
         if (
@@ -158,8 +164,13 @@ if __name__ == "__main__":
 
         events = events[events.event_id.isin(phases.index)]
 
+        # for _, event in events.iterrows():
+        #     cut_data(event, phases.loc[event.event_id])
+        # raise
+
         pbar = tqdm(events, total=len(events))
-        with mp.get_context("spawn").Pool(ncpu) as p:
+        # with mp.get_context("spawn").Pool(ncpu) as p:
+        with mp.Pool(ncpu) as p:
             for _, event in events.iterrows():
                 p.apply_async(cut_data, args=(event, phases.loc[event.event_id]), callback=lambda _: pbar.update(1))
             p.close()
