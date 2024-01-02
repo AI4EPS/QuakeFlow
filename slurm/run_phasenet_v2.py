@@ -66,7 +66,7 @@ def run_phasenet(
         folder_depth = 1
     num_gpu = torch.cuda.device_count()
     print(f"num_gpu = {num_gpu}")
-    base_cmd = f"../EQNet/predict.py --model phasenet --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
+    base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
     if num_gpu == 0:
         cmd = f"python {base_cmd} --device=cpu"
     elif num_gpu == 1:
@@ -77,10 +77,10 @@ def run_phasenet(
     os.system(cmd)
 
     os.system(
-        f"cp {root_path}/{result_path}/picks_phasenet.csv {root_path}/{result_path}/phasenet_picks_{rank:03d}.csv"
+        f"cp {root_path}/{result_path}/picks_phasenet_plus.csv {root_path}/{result_path}/phasenet_picks_{rank:03d}.csv"
     )
     os.system(
-        f"cp {root_path}/{result_path}/events_phasenet.csv {root_path}/{result_path}/phasenet_events_{rank:03d}.csv",
+        f"cp {root_path}/{result_path}/events_phasenet_plus.csv {root_path}/{result_path}/phasenet_events_{rank:03d}.csv",
     )
 
     if protocol != "file":
