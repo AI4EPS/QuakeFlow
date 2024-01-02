@@ -274,9 +274,9 @@ def process(year):
     for phase_file in sorted(glob(f"{catalog_path}/{year}/*.phase.Z"))[::-1]:
         phase_filename = phase_file.split("/")[-1]
 
-        if not os.path.exists(f"{result_path}/catalog_raw/{phase_filename[:-2]}"):
-            shutil.copy(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
-            os.system(f"uncompress {result_path}/catalog_raw/{phase_filename}")
+        # if not os.path.exists(f"{result_path}/catalog_raw/{phase_filename[:-2]}"):
+        shutil.copy(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
+        os.system(f"uncompress -f {result_path}/catalog_raw/{phase_filename}")
 
         with open(f"{result_path}/catalog_raw/{phase_filename[:-2]}") as f:
             lines = f.readlines()
