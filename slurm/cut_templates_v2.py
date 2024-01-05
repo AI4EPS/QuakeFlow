@@ -29,7 +29,6 @@ def extract_template_numpy(
     picks,
     config,
     lock,
-    ibar=0,
 ):
     template_array = np.memmap(template_fname, dtype=np.float32, mode="r+", shape=tuple(config["template_shape"]))
     traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"]))
@@ -50,7 +49,7 @@ def extract_template_numpy(
     events_ = events[(events["event_time"] >= begin_time) & (events["event_time"] < end_time)]
 
     if len(events_) == 0:
-        return 0
+        return mseed_path
 
     # %%
     waveforms_dict = {}
@@ -366,6 +365,9 @@ if __name__ == "__main__":
     pbar = tqdm(total=len(dirs), desc="Cutting templates")
 
     def pbar_update(x):
+        """
+        x is the return value of extract_template_numpy
+        """
         pbar.update()
         pbar.set_description(f"Cutting templates: {'/'.join(x.split('/')[-2:])}")
 
@@ -373,7 +375,7 @@ if __name__ == "__main__":
     with ctx.Manager() as manager:
         lock = manager.Lock()
         with ctx.Pool(ncpu) as pool:
-            for i, d in enumerate(dirs):
+            for d in dirs:
                 pool.apply_async(
                     extract_template_numpy,
                     (

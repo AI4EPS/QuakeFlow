@@ -24,12 +24,12 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
     config_region = {}
     if "default" in config:
         config_region.update(config["default"])
-    if "kubeflow" in config:
-        config_region.update(config["kubeflow"])
-    if "skypilot" in config:
-        config_region.update(config["skypilot"])
     if "obspy" in config:
         config_region.update(config["obspy"])
+    if "skypilot" in config:
+        config_region["skypilot"] = config["skypilot"]
+    if "kubeflow" in config:
+        config_region["kubeflow"] = config["kubeflow"]
     if "phasenet" in config:
         config_region["phasenet"] = config["phasenet"]
     if "gamma" in config:

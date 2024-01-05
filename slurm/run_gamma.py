@@ -222,6 +222,6 @@ if __name__ == "__main__":
 
     run_gamma.python_func(root_path, region=region, config=config, picks_csv=f"{region}/phasenet/phasenet_picks.csv")
 
-    if config["num_nodes"] == 1:
+    if config["kubeflow"]["num_nodes"] == 1:
         os.system(f"mv {root_path}/{region}/gamma/gamma_events_000.csv {root_path}/{region}/gamma/gamma_events.csv")
         os.system(f"mv {root_path}/{region}/gamma/gamma_picks_000.csv {root_path}/{region}/gamma/gamma_picks.csv")

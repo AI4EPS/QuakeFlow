@@ -18,6 +18,7 @@ def download_waveform(
     import os
     import threading
     import time
+    from concurrent.futures import ThreadPoolExecutor
     from datetime import datetime
     from glob import glob
 
@@ -153,7 +154,7 @@ def download_waveform(
                     for tr in stream:
                         tr.write(f"{root_path}/{mseed_dir}/{tr.id}.mseed", format="MSEED")
                     if protocol != "file":
-                        fs.put(f"{root_path}/{mseed_dir}/", f"{bucket}/{mseed_dir}/", recursive=True)
+                        fs.put(f"{root_path}/{mseed_dir}/{tr.id}.mseed", f"{bucket}/{mseed_dir}/{tr.id}.mseed")
                     break
 
                 except Exception as err:
@@ -179,10 +180,8 @@ def download_waveform(
     fs = fsspec.filesystem(protocol=protocol, token=token)
     # %%
     data_dir = f"{region}/obspy"
-    if "num_nodes" in config:
-        num_nodes = config["num_nodes"]
-    else:
-        num_nodes = 1
+    num_nodes = config["kubeflow"]["num_nodes"] if "num_nodes" in config["kubeflow"] else 1
+    print(f"{num_nodes = }, {rank = }")
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
@@ -214,13 +213,12 @@ def download_waveform(
             cloud_config = None
 
         skip_list = []
-        threads = []
         MAX_THREADS = 3
         lock = threading.Lock()
-        for ii, starttime in enumerate(starttimes):
-            t = threading.Thread(
-                target=download,
-                args=(
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for ii, starttime in enumerate(starttimes):
+                executor.submit(
+                    download,
                     client,
                     starttime,
                     stations,
@@ -230,17 +228,8 @@ def download_waveform(
                     skip_list,
                     lock,
                     cloud_config,
-                ),
-            )
-            t.start()
-            threads.append(t)
-            time.sleep(1)
-            if (len(threads) - 1) % MAX_THREADS == MAX_THREADS - 1:
-                for t in threads:
-                    t.join()
-                threads = []
-        for t in threads:
-            t.join()
+                )
+                time.sleep(1)
 
     mseed_list = glob(f"{root_path}/{waveform_dir}/????-???/??/*.mseed", recursive=True)
     return mseed_list

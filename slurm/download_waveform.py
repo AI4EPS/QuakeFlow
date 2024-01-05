@@ -34,10 +34,7 @@ def download_waveform(
     fs = fsspec.filesystem(protocol, token=token)
 
     # %%
-    if "num_nodes" in config:
-        num_nodes = config["num_nodes"]
-    else:
-        num_nodes = 1
+    num_nodes = config["kubeflow"]["num_nodes"] if "kubeflow" in config else 1
 
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):

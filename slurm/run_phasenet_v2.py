@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     run_phasenet.python_func(root_path, region=region, config=config, data_type=data_type)
 
-    if config["num_nodes"] == 1:
+    if config["kubeflow"]["num_nodes"] == 1:
         os.system(f"mv {root_path}/{region}/phasenet/mseed_list_000.csv {root_path}/{region}/phasenet/mseed_list.csv")
         os.system(
             f"mv {root_path}/{region}/phasenet/phasenet_picks_000.csv {root_path}/{region}/phasenet/phasenet_picks.csv"

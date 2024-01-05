@@ -1,12 +1,12 @@
 # %%
+import argparse
 import json
 import os
 from typing import Dict, List
 
+from google.cloud import aiplatform
 from kfp import compiler, components, dsl, kubernetes
 from kfp.client import Client
-from google.cloud import aiplatform
-import argparse
 
 
 def parse_args():
@@ -19,9 +19,7 @@ def parse_args():
     parser.add_argument("--bucket", type=str, default="quakeflow_share")
     parser.add_argument("--protocol", type=str, default="gs")
     parser.add_argument("--yaml_path", type=str, default="yaml")
-    parser.add_argument(
-        "--token_file", type=str, default="/Users/weiqiang/.config/gcloud/application_default_credentials.json"
-    )
+    parser.add_argument("--token_file", type=str, default="application_default_credentials.json")
     args = parser.parse_args()
     return args
 
@@ -140,7 +138,7 @@ if __name__ == "__main__":
         if platform == "kubeflow":
             kubernetes.mount_pvc(station_, pvc_name=pvc.outputs["name"], mount_path=root_path)
 
-        with dsl.ParallelFor(items=list(range(num_nodes)), parallelism=num_nodes) as index:
+        with dsl.ParallelFor(items=list(range(num_nodes)), parallelism=num_nodes) as rank:
             if platform == "kubeflow":
                 pvc_node = kubernetes.CreatePVC(
                     pvc_name_suffix="-quakeflow",
@@ -156,7 +154,7 @@ if __name__ == "__main__":
                     root_path=root_path,
                     region=region,
                     config=config_.output,
-                    index=index,
+                    rank=rank,
                     protocol=protocol,
                     bucket=bucket,
                     token=token,
@@ -168,7 +166,7 @@ if __name__ == "__main__":
                     root_path=root_path,
                     region=region,
                     config=config_.output,
-                    index=index,
+                    rank=rank,
                     protocol=protocol,
                     bucket=bucket,
                     token=token,
@@ -185,7 +183,7 @@ if __name__ == "__main__":
                 root_path=root_path,
                 region=region,
                 config=config_.output,
-                index=index,
+                rank=rank,
                 model_path="./",
                 mseed_list=waveform_.output,
                 protocol=protocol,
@@ -202,8 +200,8 @@ if __name__ == "__main__":
                 root_path=root_path,
                 region=region,
                 config=config_.output,
-                index=index,
-                pick_file=phasenet_.output,
+                rank=rank,
+                picks_csv=phasenet_.output,
                 protocol=protocol,
                 bucket=bucket,
                 token=token,
@@ -217,33 +215,33 @@ if __name__ == "__main__":
             if platform == "kubeflow":
                 kubernetes.DeletePVC(pvc_name=pvc_node.outputs["name"]).after(gamma_)
 
-        merge_gamma_picks_ = merge_op(
-            file_list=dsl.Collected(gamma_.outputs["picks"]),
-            folder="gamma",
-            fname="gamma_picks",
-            region=region,
-            config=config_.output,
-            protocol=protocol,
-            bucket=bucket,
-            token=token,
-        )
-        merge_gamma_picks_.set_display_name("merge_gamma_picks")
-        merge_gamma_events_ = merge_op(
-            file_list=dsl.Collected(gamma_.outputs["events"]),
-            folder="gamma",
-            fname="gamma_events",
-            region=region,
-            config=config_.output,
-            protocol=protocol,
-            bucket=bucket,
-            token=token,
-        )
-        merge_gamma_events_.set_display_name("merge_gamma_events")
+        # merge_gamma_picks_ = merge_op(
+        #     file_list=dsl.Collected(gamma_.outputs["picks"]),
+        #     folder="gamma",
+        #     fname="gamma_picks",
+        #     region=region,
+        #     config=config_.output,
+        #     protocol=protocol,
+        #     bucket=bucket,
+        #     token=token,
+        # )
+        # merge_gamma_picks_.set_display_name("merge_gamma_picks")
+        # merge_gamma_events_ = merge_op(
+        #     file_list=dsl.Collected(gamma_.outputs["events"]),
+        #     folder="gamma",
+        #     fname="gamma_events",
+        #     region=region,
+        #     config=config_.output,
+        #     protocol=protocol,
+        #     bucket=bucket,
+        #     token=token,
+        # )
+        # merge_gamma_events_.set_display_name("merge_gamma_events")
 
     compiler.Compiler().compile(quakeflow, f"{yaml_path}/quakeflow.yaml")
 
     if platform == "kubeflow":
-        client = Client("https://44fd9d51c7dd4225-dot-us-west1.pipelines.googleusercontent.com")
+        client = Client("https://1905603a921594b6-dot-us-central1.pipelines.googleusercontent.com")
         run = client.create_run_from_pipeline_func(
             quakeflow,
             arguments={"token": token},

@@ -135,10 +135,7 @@ def download_waveform_event(
     data_dir = f"{region}/obspy"
     # with open(f"{root_path}/{region}/config.json") as f:
     #     config = json.load(f)
-    if "num_nodes" in config:
-        num_nodes = config["num_nodes"]
-    else:
-        num_nodes = 1
+    num_nodes = config["kubeflow"]["num_nodes"] if "num_nodes" in config["kubeflow"] else 1
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
