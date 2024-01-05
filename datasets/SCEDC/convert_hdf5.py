@@ -1,42 +1,71 @@
 # %%
 import multiprocessing as mp
 import os
+import warnings
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from glob import glob
 from pathlib import Path
 
+import fsspec
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
+# warnings.filterwarnings("error")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
-root_path = Path("dataset")
-waveform_path = root_path / "waveform"
-catalog_path = root_path / "catalog"
-station_path = root_path / "station"
+protocol = "gs"
+token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+# token = "cloud"
+bucket = "quakeflow_dataset"
+
+# root_path = "dataset"
+region = "SC"
+root_path = f"{bucket}/{region}"
+mseed_path = f"{root_path}/waveform_mseed"
+catalog_path = f"{root_path}/catalog"
+station_path = f"{root_path}/station"
+result_path = f"waveform_h5"
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
+
+# %%
+fs = fsspec.filesystem(protocol=protocol, token=token)
 
 # %%
 comp = ["3", "2", "1", "U", "V", "E", "N", "Z"]
 order = {key: i for i, key in enumerate(comp)}
-comp2idx = {"3": 0, "2": 1, "1": 2, "U": 0, "V": 1, "E": 0, "N": 1, "Z": 2}  ## only for cases less than 3 components
+comp2idx = {
+    "3": 0,
+    "2": 1,
+    "1": 2,
+    "U": 0,
+    "V": 1,
+    "E": 0,
+    "N": 1,
+    "Z": 2,
+}  ## only for cases less than 3 components
 
 sampling_rate = 100
-
+NT = 12000  # 120 s
 
 # %%
 stations = []
-for csv in station_path.glob("*.csv"):
-    stations.append(
-        pd.read_csv(
-            csv,
-            parse_dates=["begin_time", "end_time"],
-            dtype={"network": str, "station": str, "location": str, "instrument": str},
+for csv in fs.glob(f"{station_path}/*.csv"):
+    with fs.open(csv, "rb") as f:
+        stations.append(
+            pd.read_csv(
+                f,
+                parse_dates=["begin_time", "end_time"],
+                date_format="%Y-%m-%dT%H:%M:%S",
+                dtype={"network": str, "station": str, "location": str, "instrument": str},
+            )
         )
-    )
 stations = pd.concat(stations)
 stations["location"] = stations["location"].fillna("")
 stations.set_index(["network", "station", "location", "instrument"], inplace=True)
@@ -73,84 +102,102 @@ def extract_pick(picks, begin_time, sampling_rate):
     phase_polarity = []
     phase_remark = []
     event_id = []
-    for picks_ in picks:
-        for idx, pick in picks_.iterrows():
-            phase_type.append(idx[1])
-            phase_index.append(int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
-            phase_score.append(pick.phase_score)
-            phase_time.append(pick.phase_time.isoformat())
-            phase_remark.append(pick.phase_remark)
-            phase_polarity.append(pick.phase_polarity)
-            event_id.append(pick.event_id)
+    for idx, pick in picks.sort_values("phase_time").iterrows():
+        phase_type.append(pick.phase_type)
+        phase_index.append(int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
+        phase_score.append(pick.phase_score)
+        phase_time.append(pick.phase_time.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+        phase_remark.append(pick.phase_remark)
+        phase_polarity.append(pick.phase_polarity)
+        event_id.append(pick.event_id)
 
     return phase_type, phase_index, phase_score, phase_time, phase_remark, phase_polarity, event_id
 
 
 # %%
-# for year in sorted(list(waveform_path.glob("*")), reverse=True)[1:]:
 def convert(i, year):
     # %%
-    with h5py.File(root_path / f"{year.name}.h5", "w") as fp:
-        jdays = sorted(list(year.glob("*")))
-        for jday in tqdm(jdays, total=len(jdays), desc=f"{year.name}", position=i):
-            # tmp = pd.Timestamp(datetime.strptime(jday.name, "%Y.%j"))
-            year, dayofyear = jday.name.split(".")
+    fs_ = fsspec.filesystem(protocol=protocol, token=token)
 
-            # events = pd.read_csv(catalog_path / f"{tmp.year:04d}.{tmp.month:02d}.event.csv", parse_dates=["event_time"])
-            events = pd.read_csv(
-                catalog_path / f"{year}" / f"{year}_{dayofyear}.event.csv",
-                parse_dates=["event_time"],
-            )
+    # %%
+    with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
+        jdays = sorted(fs_.ls(f"{mseed_path}/{year}"))[::-1]
+        jdays = [x.split("/")[-1] for x in jdays]
+        for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i, leave=True):
+            ## NCEDC
+            # tmp = datetime.strptime(jday, "%Y.%j")
+            # with fs.open(f"{catalog_path}/{tmp.year:04d}/{tmp.year:04d}_{tmp.jday:02d}.event.csv", "rb") as f:
+            ## SCEDC
+            year, dayofyear = jday.split(".")
+            with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.event.csv", "rb") as f:
+                events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f")
+
+            events["time"] = pd.to_datetime(events["time"])
             events.set_index("event_id", inplace=True)
 
-            # phases = pd.read_csv(
-            #     catalog_path / f"{tmp.year:04d}.{tmp.month:02d}.phase.csv",
-            #     parse_dates=["phase_time"],
-            #     dtype={"location": str},
-            # )
-            phases = pd.read_csv(
-                catalog_path / f"{year}" / f"{year}_{dayofyear}.phase.csv",
-                parse_dates=["phase_time"],
-                dtype={"location": str},
-            )
+            ## NCEDC
+            # with fs.open(f"{catalog_path}/{tmp.year:04d}/{tmp.year:04d}_{tmp.jday:02d}.phase.csv", "rb") as f:
+            ## SCEDC
+            with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.phase.csv", "rb") as f:
+                phases = pd.read_csv(
+                    f,
+                    parse_dates=["phase_time"],
+                    date_format="%Y-%m-%dT%H:%M:%S.%f",
+                    dtype={"location": str},
+                )
+
+            phases["phase_time"] = pd.to_datetime(phases["phase_time"])
             phases["phase_polarity"] = phases["phase_polarity"].fillna("N")
             phases["location"] = phases["location"].fillna("")
             phases["station_id"] = phases["network"] + "." + phases["station"] + "." + phases["location"]
             phases.sort_values(["event_id", "phase_time"], inplace=True)
             phases_by_station = phases.copy()
-            phases_by_station.set_index(["station_id", "phase_type"], inplace=True)
-            phases.set_index(["event_id", "station_id", "phase_type"], inplace=True)
+            phases_by_station.set_index(["station_id"], inplace=True)
+            phases_by_event = phases.copy()
+            phases_by_event.set_index(["event_id"], inplace=True)
+            phases.set_index(["event_id", "station_id"], inplace=True)
             phases = phases.sort_index()
 
-            for event_id in sorted(list(jday.glob("*"))):
-                gp = fp.create_group(event_id.name)
-                gp.attrs["event_id"] = event_id.name
-                gp.attrs["event_time"] = events.loc[event_id.name, "event_time"].isoformat()
-                gp.attrs["latitude"] = events.loc[event_id.name, "latitude"]
-                gp.attrs["longitude"] = events.loc[event_id.name, "longitude"]
-                gp.attrs["depth_km"] = events.loc[event_id.name, "depth_km"]
-                gp.attrs["magnitude"] = events.loc[event_id.name, "magnitude"]
-                gp.attrs["magnitude_type"] = events.loc[event_id.name, "magnitude_type"]
-                gp.attrs["source"] = "NC"
+            event_ids = sorted(fs_.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
+            event_fnames = [x.split("/")[-1] for x in event_ids]
+            event_ids = [x.split("/")[-1].split("_")[0] for x in event_ids]
+            for event_id, event_fname in zip(event_ids, event_fnames):
+                if event_id not in events.index:
+                    continue
 
-                st = obspy.read(str(event_id / "*.mseed"))
-                begin_time = min([tr.stats.starttime for tr in st]).datetime
-                begin_time = begin_time.replace(tzinfo=timezone.utc)
-                end_time = max([tr.stats.endtime for tr in st]).datetime
-                end_time = end_time.replace(tzinfo=timezone.utc)
-                gp.attrs["begin_time"] = begin_time.isoformat()
-                gp.attrs["end_time"] = end_time.isoformat()
+                gp = fp.create_group(event_id)
+                gp.attrs["event_id"] = event_id
+                gp.attrs["event_time"] = events.loc[event_id, "time"].strftime("%Y-%m-%dT%H:%M:%S.%f")
+                gp.attrs["latitude"] = events.loc[event_id, "latitude"]
+                gp.attrs["longitude"] = events.loc[event_id, "longitude"]
+                gp.attrs["depth_km"] = events.loc[event_id, "depth_km"]
+                gp.attrs["magnitude"] = events.loc[event_id, "magnitude"]
+                gp.attrs["magnitude_type"] = events.loc[event_id, "magnitude_type"]
+                gp.attrs["source"] = region
+
+                mseed_list = sorted(list(fs_.glob(f"{mseed_path}/{year}/{jday}/{event_fname}/*.mseed")))
+                st = obspy.Stream()
+                for file in mseed_list:
+                    with fs_.open(file, "rb") as f:
+                        st += obspy.read(f)
+                arrival_time = phases.loc[event_id, "phase_time"].min()
+                begin_time = arrival_time - pd.Timedelta(seconds=30)
+                end_time = arrival_time + pd.Timedelta(seconds=90)
+                gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
+                gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                 gp.attrs["event_time_index"] = int(
-                    (events.loc[event_id.name, "event_time"] - begin_time).total_seconds() * 100
+                    round((events.loc[event_id, "time"] - begin_time).total_seconds() * 100)
                 )
                 gp.attrs["sampling_rate"] = sampling_rate
-                gp.attrs["nt"] = 12000  # default 120s
-                gp.attrs["nx"] = len(list(event_id.glob("*")))
+                gp.attrs["nt"] = NT  # default 120s
+                gp.attrs["nx"] = len(mseed_list)
                 gp.attrs["delta"] = 1 / sampling_rate
 
-                for station_id in event_id.glob("*"):
-                    ds = gp.create_dataset(station_id.stem, (3, gp.attrs["nt"]), dtype=np.float32)
-                    tr = st.select(id=station_id.stem + "?")
+                has_station = False
+                station_channel_ids = [x.split("/")[-1].replace(".mseed", "") for x in mseed_list]
+                for station_channel_id in station_channel_ids:
+                    ds = gp.create_dataset(station_channel_id, (3, gp.attrs["nt"]), dtype=np.float32)
+                    tr = st.select(id=station_channel_id + "?")
                     for t in tr:
                         if t.stats.sampling_rate != sampling_rate:
                             t.resample(sampling_rate)
@@ -158,45 +205,39 @@ def convert(i, year):
                     chn = [tr.stats.channel for tr in tr]
                     chn = sorted(chn, key=lambda x: order[x[-1]])
                     components = []
-                    if len(chn) == 3:
-                        for i, t in enumerate(tr):
-                            index0 = int(
-                                round(
-                                    (
-                                        t.stats.starttime.datetime.replace(tzinfo=timezone.utc) - begin_time
-                                    ).total_seconds()
-                                    * sampling_rate
-                                )
+                    for i, t in enumerate(tr):
+                        index0 = int(
+                            round(
+                                (t.stats.starttime.datetime.replace(tzinfo=timezone.utc) - begin_time).total_seconds()
+                                * sampling_rate
                             )
-                            if index0 > 3000:
-                                del ds
-                                break
-                            ds[i, index0 : index0 + len(t.data)] = (t.data - np.mean(t.data))[
-                                : len(ds[i, index0:])
-                            ] * 1e6
-                            components.append(t.stats.channel[-1])
-                    else:
-                        for t in tr:
-                            index0 = int(
-                                round(
-                                    (
-                                        t.stats.starttime.datetime.replace(tzinfo=timezone.utc) - begin_time
-                                    ).total_seconds()
-                                    * sampling_rate
-                                )
-                            )
-                            if index0 > 3000:
-                                del ds
-                                break
+                        )
+                        if index0 > 3000:
+                            del fp[f"{event_id}/{station_channel_id}"]
+                            break
+
+                        if len(chn) != 3:
                             i = comp2idx[t.stats.channel[-1]]
-                            ds[i, index0 : index0 + len(t.data)] = (t.data - np.mean(t.data))[
-                                : len(ds[i, index0:])
-                            ] * 1e6
-                            components.append(t.stats.channel[-1])
+
+                        if index0 > 0:
+                            it1 = 0
+                            it2 = index0
+                            ll = min(len(t.data), len(ds[i, it2:]))  # data length
+                        elif index0 < 0:
+                            it1 = -index0
+                            it2 = 0
+                            ll = min(len(t.data[it1:]), len(ds[i, :]))
+                        else:
+                            it1 = 0
+                            it2 = 0
+                            ll = min(len(t.data), len(ds[i, :]))
+
+                        ds[i, it2 : it2 + ll] = (t.data - np.mean(t.data))[it1 : it1 + ll] * 1e6
+                        components.append(t.stats.channel[-1])
 
                     if index0 > 3000:
                         continue
-                    network, station, location, instrument = station_id.stem.split(".")
+                    network, station, location, instrument = station_channel_id.split(".")
                     ds.attrs["network"] = network
                     ds.attrs["station"] = station
                     ds.attrs["location"] = location
@@ -217,51 +258,33 @@ def convert(i, year):
                     ds.attrs["depth_km"] = sta["depth_km"]
 
                     station_id = f"{network}.{station}.{location}"
-                    # p_picks = phases.loc[[(event_id.name, station_id, "P")]].sort_values("phase_score").iloc[0]
-                    # s_picks = phases.loc[[(event_id.name, station_id, "S")]].sort_values("phase_score").iloc[0]
-
-                    ## pick not exist
-                    if (event_id.name, station_id, "P") not in phases.index:
-                        del ds
-                        # print(f"{jday.name}.{event_id.name}.{network}.{station}.{location} not in P index")
+                    if station_id not in phases_by_station.index:
+                        del fp[f"{event_id}/{station_channel_id}"]
                         continue
-                    if (event_id.name, station_id, "S") not in phases.index:
-                        del ds
-                        # print(f"{jday.name}.{event_id.name}.{network}.{station}.{location} not in S index")
+                    picks_ = phases_by_station.loc[[station_id]]
+                    picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
+                    if len(picks_[picks_["event_id"] == event_id]) == 0:
+                        del fp[f"{event_id}/{station_channel_id}"]
                         continue
 
-                    p_picks = phases_by_station.loc[[(station_id, "P")]]
-                    p_picks = p_picks[(p_picks["phase_time"] > begin_time) & (p_picks["phase_time"] < end_time)]
-                    p_picks = p_picks.loc[p_picks.groupby("event_id")["phase_score"].idxmin()]
-
-                    s_picks = phases_by_station.loc[[(station_id, "S")]]
-                    s_picks = s_picks[(s_picks["phase_time"] > begin_time) & (s_picks["phase_time"] < end_time)]
-                    s_picks = s_picks.loc[s_picks.groupby("event_id")["phase_score"].idxmin()]
-
-                    if len(p_picks[p_picks["event_id"] == event_id.name]) == 0:
-                        print(f"{jday.name}.{event_id.name}.{network}.{station}.{location}: no picks")
-                        del ds
-                        continue
-
-                    pick = p_picks[p_picks["event_id"] == event_id.name].iloc[0]
-
-                    if "distance_km" in pick.index:
+                    pick = picks_[picks_["event_id"] == event_id].iloc[0]  # after sort_value
+                    if "azimuth" in pick:
+                        ds.attrs["azimuth"] = pick.azimuth
+                    if "takeoff_angle" in pick:
                         ds.attrs["distance_km"] = pick.distance_km
-                    if "back_azimuth" in pick.index:
-                        ds.attrs["back_azimuth"] = pick.back_azimuth
-                    if "takeoff_angle" in pick.index:
+                    if "takeoff_angle" in pick:
                         ds.attrs["takeoff_angle"] = pick.takeoff_angle
-                    snr = calc_snr(ds[:, :], int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
-                    tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
-                    if ((tmp - 300) < 0) or ((tmp + 300) > 12000):
-                        print(
-                            f"{jday.name}.{event_id.name}.{network}.{station}.{location}: tmp={tmp}, {pick.phase_time}, {begin_time}"
-                        )
 
-                    if max(snr) == 0:
-                        # print(f"{jday.name}.{event_id.name}.{network}.{station}.{location}: snr={snr}")
-                        del ds
+                    tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
+                    if (tmp - 300 < 0) or (tmp + 300 >= NT):
+                        del fp[f"{event_id}/{station_channel_id}"]
                         continue
+
+                    snr = calc_snr(ds[:, :], int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
+                    if max(snr) == 0:
+                        del fp[f"{event_id}/{station_channel_id}"]
+                        continue
+                    ds.attrs["snr"] = snr
 
                     (
                         phase_type,
@@ -271,7 +294,7 @@ def convert(i, year):
                         phase_remark,
                         phase_polarity,
                         phase_event_id,
-                    ) = extract_pick([p_picks, s_picks], begin_time, sampling_rate)
+                    ) = extract_pick(picks_, begin_time, sampling_rate)
 
                     ds.attrs["phase_type"] = phase_type
                     ds.attrs["phase_index"] = phase_index
@@ -281,15 +304,44 @@ def convert(i, year):
                     ds.attrs["phase_polarity"] = phase_polarity
                     ds.attrs["event_id"] = phase_event_id
 
+                    if (
+                        len(
+                            np.array(phase_type)[(np.array(phase_event_id) == event_id) & (np.array(phase_type) == "S")]
+                        )
+                        > 0
+                    ):
+                        ds.attrs["phase_status"] = "manual"
+                    else:
+                        ds.attrs["phase_status"] = "automatic"
+
+                    has_station = True
+
+                if not has_station:
+                    print(f"{event_id} has no station")
+                    del fp[event_id]
+            # return
+
 
 if __name__ == "__main__":
-    years = sorted(list(waveform_path.glob("*")), reverse=True)
-    # select years in [2013, 2014, 2015]
-    years = [x for x in years if x.name in ["2021", "2020", "2019", "2018"]]
-
-    # for x in enumerate(years):
-    #     convert(*x)
+    # %%
+    years = sorted(fs.ls(mseed_path), reverse=True)
+    years = [x.split("/")[-1] for x in years]
 
     ncpu = len(years)
-    with mp.get_context("spawn").Pool(ncpu) as pool:
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(ncpu) as pool:
         pool.starmap(convert, [x for x in enumerate(years)])
+
+    # # check hdf5
+    # with h5py.File("2000.h5", "r") as fp:
+    #     for event_id in fp:
+    #         print(event_id)
+    #         for k in sorted(fp[event_id].attrs.keys()):
+    #             print(k, fp[event_id].attrs[k])
+    #         for station_id in fp[event_id]:
+    #             print(station_id)
+    #             print(fp[event_id][station_id].shape)
+    #             for k in sorted(fp[event_id][station_id].attrs.keys()):
+    #                 print(k, fp[event_id][station_id].attrs[k])
+    #         raise
+    # raise

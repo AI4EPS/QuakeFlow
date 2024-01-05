@@ -1,27 +1,24 @@
 # %%
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+import os
+from datetime import timezone
 
 import fsspec
-import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
 # %%
-protocol = "s3"
-bucket = "scedc-pds"
-fs = fsspec.filesystem(protocol, anon=True)
+input_protocol = "s3"
+input_bucket = "scedc-pds"
+input_fs = fsspec.filesystem(input_protocol, anon=True)
+
+output_protocol = "gs"
+output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+output_bucket = "quakeflow_dataset/SC"
+output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
 # %%
-catalog_path = "event_phases"
-station_path = "FDSNstationXML"
-waveform_path = "continuous_waveforms/"
-dataset_path = Path("./dataset")
-if not dataset_path.exists():
-    dataset_path.mkdir()
-if not (dataset_path / "statioin").exists():
-    (dataset_path / "station").mkdir()
+station_path = f"{input_bucket}/FDSNstationXML"
 
 
 # %%
@@ -72,17 +69,17 @@ def parse_inventory_csv(inventory):
 
 # %%
 inv = obspy.Inventory()
-for network in fs.glob(f"{bucket}/{station_path}/*"):
+for network in input_fs.glob(f"{station_path}/*"):
     print(f"Parse {network}")
-    # inv = obspy.Inventory()
-    for xml in tqdm(fs.glob(f"{network}/*.xml")):
-        with fs.open(xml) as f:
+    for xml in tqdm(input_fs.glob(f"{network}/*.xml")):
+        with input_fs.open(xml) as f:
             inv += obspy.read_inventory(f)
 
 stations = parse_inventory_csv(inv)
-# stations.to_csv(dataset_path / "station" / f"{network.split('/')[-1]}.csv", index=False)
 
 for network, sta in stations.groupby(["network"]):
-    print(network, sta)
-    sta.to_csv(dataset_path / "station" / f"{network}.csv", index=False)
+    print(network)
+    with output_fs.open(f"{output_bucket}/station/{network}.csv", "wb") as f:
+        sta.to_csv(f, index=False)
+
 # %%

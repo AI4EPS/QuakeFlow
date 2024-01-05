@@ -12,6 +12,7 @@ BayArea
 Shelly2020.txt
 *.png
 *.pth
-
+*.csv
+*.txt
 
 

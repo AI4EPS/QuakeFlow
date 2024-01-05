@@ -2,8 +2,10 @@
 import multiprocessing as mp
 import os
 import warnings
+from glob import glob
 from pathlib import Path
 
+import fsspec
 import matplotlib
 import matplotlib.pyplot as plt
 import obspy
@@ -11,59 +13,45 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 matplotlib.use("Agg")
-
 warnings.filterwarnings("ignore")
-
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
-catalog_path = Path("dataset/catalog")
-station_path = Path("../station")
-waveform_path = Path("../waveform/")
-dataset_path = Path("./dataset")
-if not dataset_path.exists():
-    dataset_path.mkdir()
+root_path = "."
+catalog_path = f"dataset/catalog"
+station_path = f"{root_path}/station"
+waveform_path = f"{root_path}/waveform"
+# catalog_path = "/quakeflow_dataset/NC/catalog"
+# station_path = "/quakeflow_dataset/NC/FDSNstationXML"
+# waveform_path = "/ncedc-pds/continuous_waveforms"
+
+protocol = "gs"
+token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+bucket = "quakeflow_dataset"
+result_path = f"{bucket}/NC"
 
 
 # %%
 def cut_data(event, phases):
     arrival_time = phases.loc[event.event_id, "phase_time"].min()
-    begin_time = arrival_time - pd.Timedelta(seconds=30)
-    end_time = arrival_time + pd.Timedelta(seconds=90)
+    begin_time = arrival_time - pd.Timedelta(seconds=35)
+    end_time = arrival_time + pd.Timedelta(seconds=95)
+
+    fs = fsspec.filesystem(protocol=protocol, token=token)
 
     for _, pick in phases.loc[event.event_id].iterrows():
-        outfile_path = (
-            dataset_path
-            / "waveform"
-            / f"{event.event_time.year}"
-            / f"{event.event_time.year}.{event.event_time.dayofyear:03d}"
-            / f"{event.event_id}"
-        )
+        outfile_path = f"{result_path}/waveform_mseed/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}_{begin_time.strftime('%Y%m%d%H%M%S')}"
+        outfile_name = f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.mseed"
+        if fs.exists(f"{outfile_path}/{outfile_name}"):
+            continue
 
-        # if (outfile_path / f"{pick.network}.{pick.station}.{pick.location}.{pick.component[:-1]}.mseed").exists():
-        #     continue
-
-        inv_path = (
-            station_path / f"{pick.network}.info" / f"{pick.network}.FDSN.xml" / f"{pick.network}.{pick.station}.xml"
-        )
-        if not inv_path.exists():
+        inv_path = f"{station_path}/{pick.network}.info/{pick.network}.FDSN.xml/{pick.network}.{pick.station}.xml"
+        if not os.path.exists(inv_path):
             continue
         inv = obspy.read_inventory(str(inv_path))
 
-        begin_mseed_path = (
-            waveform_path
-            / f"{pick.network}"
-            / f"{begin_time.year}"
-            / f"{begin_time.year}.{begin_time.dayofyear:03d}"
-            / f"{pick.station}.{pick.network}.{pick.component[:-1]}?.{pick.location}.?.{begin_time.year}.{begin_time.dayofyear:03d}"
-        )
-        end_mseed_path = (
-            waveform_path
-            / f"{pick.network}"
-            / f"{end_time.year}"
-            / f"{end_time.year}.{end_time.dayofyear:03d}"
-            / f"{pick.station}.{pick.network}.{pick.component[:-1]}?.{pick.location}.?.{end_time.year}.{end_time.dayofyear:03d}"
-        )
+        begin_mseed_path = f"{waveform_path}/{pick.network}/{begin_time.year}/{begin_time.year}.{begin_time.dayofyear:03d}/{pick.station}.{pick.network}.{pick.instrument}?.{pick.location}.?.{begin_time.year}.{begin_time.dayofyear:03d}"
+        end_mseed_path = f"{waveform_path}/{pick.network}/{end_time.year}/{end_time.year}.{end_time.dayofyear:03d}/{pick.station}.{pick.network}.{pick.instrument}?.{pick.location}.?.{end_time.year}.{end_time.dayofyear:03d}"
         try:
             st = obspy.Stream()
             for mseed_path in set([begin_mseed_path, end_mseed_path]):
@@ -73,7 +61,6 @@ def cut_data(event, phases):
             continue
 
         if len(st) == 0:
-            # print(f"{event.event_id}.{pick.network}.{pick.station}.{pick.location}.{pick.component[:-1]} is empty")
             continue
 
         try:
@@ -85,47 +72,47 @@ def cut_data(event, phases):
             print(e)
             continue
 
-        if not outfile_path.exists():
-            outfile_path.mkdir(parents=True)
-        st.write(
-            outfile_path / f"{pick.network}.{pick.station}.{pick.location}.{pick.component[:-1]}.mseed",
-            format="MSEED",
-        )
+        # float64 to float32
+        for tr in st:
+            tr.data = tr.data.astype("float32")
 
-        outfile_path = (
-            dataset_path
-            / "figure"
-            / f"{event.event_time.year}"
-            / f"{event.event_time.year}.{event.event_time.dayofyear:03d}"
-            / f"{event.event_id}"
-        )
-        if not outfile_path.exists():
-            outfile_path.mkdir(parents=True)
+        if not fs.exists(outfile_path):
+            fs.makedirs(outfile_path)
 
-        st.plot(outfile=outfile_path / f"{pick.network}.{pick.station}.{pick.location}.{pick.component[:-1]}.png")
+        with fs.open(f"{outfile_path}/{outfile_name}", "wb") as f:
+            st.write(f, format="MSEED")
+
+        # st.plot(outfile=outfile_path / f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.png")
+        # outfile_path = (
+        #     f"{result_path}/figure/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}"
+        # )
+        # if not os.path.exists(outfile_path):
+        #     os.makedirs(outfile_path)
+        # st.plot(outfile=f"{outfile_path}/{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.png")
 
     return 0
 
 
 # %%
 if __name__ == "__main__":
-    ncpu = 32
-    event_list = sorted(list(catalog_path.glob("*.event.csv")))[::-1]
-    start_year = "1966"
-    end_year = "2022"
-    # end_year = "2014"
+    ncpu = min(mp.cpu_count() * 4, 32)
+    event_list = sorted(list(glob(f"{catalog_path}/*.event.csv")))[::-1]
+    start_year = "1967"
+    end_year = "2023"
     tmp = []
     for event_file in event_list:
-        if event_file.name.split(".")[0] >= start_year and event_file.name.split(".")[0] <= end_year:
+        if (
+            event_file.split("/")[-1].split(".")[0] >= start_year
+            and event_file.split("/")[-1].split(".")[0] <= end_year
+        ):
             tmp.append(event_file)
-    event_list = sorted(tmp)[::-1]
+    event_list = sorted(tmp, reverse=True)
 
-    # pool = mp.get_context("spawn").Pool(ncpu)
     for event_file in event_list:
         print(event_file)
-        events = pd.read_csv(event_file, parse_dates=["event_time"])
+        events = pd.read_csv(event_file, parse_dates=["time"])
         phases = pd.read_csv(
-            event_file.parent / (event_file.name.replace("event.csv", "phase.csv")),
+            f"{event_file.replace('event.csv', 'phase.csv')}",
             parse_dates=["phase_time"],
             keep_default_na=False,
         )
@@ -142,6 +129,3 @@ if __name__ == "__main__":
             p.close()
             p.join()
         pbar.close()
-
-        # pool.starmap(cut_data, [(event, phases.loc[event.event_id]) for _, event in events.iterrows()])
-    # pool.close()

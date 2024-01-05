@@ -1,36 +1,36 @@
 # %%
 import gzip
+import multiprocessing as mp
 import os
 import re
 import shutil
 from collections import namedtuple
 from datetime import datetime, timedelta
+from glob import glob
 from pathlib import Path
 
-import fsspec
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
 # %%
-protocol = "sftp"
-host = "range.geo.berkeley.edu"
-username = "zhuwq"
-keyfile = "/Users/weiqiang/.ssh/id_rsa"
-fs = fsspec.filesystem(protocol, host=host, username=username, key_filename=keyfile)
-fs.ls(".")
+root_path = "./"
+catalog_path = f"{root_path}/catalog/phase2k/"
+station_path = f"{root_path}/station"
+waveform_path = f"{root_path}/waveform"
+# root_path = "/ncedc-pds"
+# catalog_path = f"{root_path}/event_phases"
+# station_path = "./station"
+# waveform_path = f"{root_path}/waveform"
 
-# %%
-catalog_path = Path("../catalog/phase2k")
-station_path = Path("../station")
-waveform_path = Path("../waveform/")
-dataset_path = Path("./dataset")
-if not dataset_path.exists():
-    dataset_path.mkdir()
-if not (dataset_path / "catalog").exists():
-    (dataset_path / "catalog").mkdir()
-
+result_path = "dataset"
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
+if not os.path.exists(f"{result_path}/catalog"):
+    os.makedirs(f"{result_path}/catalog")
+if not os.path.exists(f"{result_path}/catalog_raw"):
+    os.makedirs(f"{result_path}/catalog_raw")
 
 ## https://ncedc.org/ftp/pub/doc/ncsn/shadow2000.pdf
 # %%
@@ -95,7 +95,8 @@ event_columns = {
     "qdds_version_number": (162, 163),
     "origin_instance_version_number": (163, 164),
 }
-event_scale_factors = {
+
+event_decimal_number = {
     "seconds": 100,
     "latitude_deg": 1,
     "latitude_min": 100,
@@ -139,7 +140,7 @@ phase_columns = {
     "period": (83, 86),
     "station_remark": (86, 87),
     "coda_duration": (87, 91),
-    "back_azimuth": (91, 94),
+    "azimuth": (91, 94),
     "duration_magnitude_for_this_station": (94, 97),
     "amplitude_magnitude_for_this_station": (97, 100),
     "importance_of_p_arrival": (100, 104),
@@ -154,19 +155,23 @@ phase_columns = {
     "duration_magnitude_not_used": (119, 120),
 }
 
-phase_scale_factors = {
+phase_decimal_number = {
     "second_of_p_arrival": 100,
     "second_of_s_arrival": 100,
     "distance_km": 10,
+    "p_travel_time_residual": 100,
+    "s_travel_time_residual": 100,
+    "normalized_p_weight_actually_used": 100,
+    "s_weight_actually_used": 100,
 }
 
 
 def read_event_line(line):
     event = {}
     for key, (start, end) in event_columns.items():
-        if key in event_scale_factors:
+        if key in event_decimal_number:
             try:
-                event[key] = float(line[start:end]) / event_scale_factors[key]
+                event[key] = float(line[start:end]) / event_decimal_number[key]
             except:
                 print(key, line[start:end])
         else:
@@ -174,17 +179,17 @@ def read_event_line(line):
 
     if event["seconds"] < 60:
         event[
-            "event_time"
+            "time"
         ] = f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}:{event['seconds']:06.3f}"
     else:
         tmp = datetime.fromisoformat(
             f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}"
         )
         tmp += timedelta(seconds=event["seconds"])
-        event["event_time"] = tmp.isoformat()
+        event["time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
-    event["latitude"] = event["latitude_deg"] + event["latitude_min"] / 60
-    event["longitude"] = event["longitude_deg"] + event["longitude_min"] / 60
+    event["latitude"] = round(event["latitude_deg"] + event["latitude_min"] / 60, 6)
+    event["longitude"] = round(-(event["longitude_deg"] + event["longitude_min"] / 60), 6)
     if event["s_indicator"] == "S":
         event["latitude"] = -event["latitude"]
     if event["e_indicator"] == "E":
@@ -202,12 +207,17 @@ def read_phase_line(line):
     if len(line[start:end].strip()) > 0:
         p_phase = {}
         for key, (start, end) in phase_columns.items():
-            if key in phase_scale_factors:
-                # p_phase[key] = float(line[start:end].replace(" ", "0")) / phase_scale_factors[key]
+            # ######## filter strange data ############
+            # if key == "p_travel_time_residual":
+            #     if line[start : end + 3] == " " * 3 + "0" + " " * 2 + "0":
+            #         # print(f"strange data: {line}")
+            #         return []
+            # #########################################
+            if key in phase_decimal_number:
                 if len(line[start:end].strip()) == 0:
                     p_phase[key] = ""
                 else:
-                    p_phase[key] = float(line[start:end]) / phase_scale_factors[key]
+                    p_phase[key] = float(line[start:end].strip()) / phase_decimal_number[key]
             else:
                 p_phase[key] = line[start:end]
         if (p_phase["second_of_p_arrival"] < 60) and (p_phase["second_of_p_arrival"] >= 0):
@@ -219,26 +229,23 @@ def read_phase_line(line):
                 f"{p_phase['year']}-{p_phase['month']}-{p_phase['day']}T{p_phase['hour']}:{p_phase['minute']}"
             )
             tmp += timedelta(seconds=p_phase["second_of_p_arrival"])
-            p_phase["phase_time"] = tmp.isoformat()
+            p_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
         p_phase["phase_polarity"] = p_phase["p_polarity"]
-        p_phase["remark"] = p_phase["p_remark"]
+        p_phase["phase_remark"] = p_phase["p_remark"]
         p_phase["phase_score"] = p_phase["p_weight_code"]
         p_phase["phase_type"] = "P"
+        p_phase["location_residual_s"] = p_phase["p_travel_time_residual"]
+        p_phase["location_weight"] = p_phase["normalized_p_weight_actually_used"]
         phases.append(p_phase)
     start, end = phase_columns["s_remark"]
     if len(line[start:end].strip()) > 0:
         s_phase = {}
         for key, (start, end) in phase_columns.items():
-            if key in phase_scale_factors:
-                # s_phase[key] = float(line[start:end].replace(" ", "0")) / phase_scale_factors[key]
+            if key in phase_decimal_number:
                 if len(line[start:end].strip()) == 0:
                     s_phase[key] = ""
                 else:
-                    s_phase[key] = float(line[start:end]) / phase_scale_factors[key]
-                # try:
-                #     s_phase[key] = float(line[start:end].replace(" ", "0")) / phase_scale_factors[key]
-                # except:
-                #     print(key, line[start:end])
+                    s_phase[key] = float(line[start:end].strip()) / phase_decimal_number[key]
             else:
                 s_phase[key] = line[start:end]
         if (s_phase["second_of_s_arrival"] < 60) and (s_phase["second_of_s_arrival"] >= 0):
@@ -250,40 +257,43 @@ def read_phase_line(line):
                 f"{s_phase['year']}-{s_phase['month']}-{s_phase['day']}T{s_phase['hour']}:{s_phase['minute']}"
             )
             tmp += timedelta(seconds=s_phase["second_of_s_arrival"])
-            s_phase["phase_time"] = tmp.isoformat()
-        s_phase["remark"] = s_phase["s_remark"]
+            s_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        s_phase["phase_remark"] = s_phase["s_remark"]
         s_phase["phase_score"] = s_phase["s_weight_code"]
         s_phase["phase_type"] = "S"
+        s_phase["location_residual_s"] = s_phase["s_travel_time_residual"]
+        s_phase["location_weight"] = s_phase["s_weight_actually_used"]
         phases.append(s_phase)
 
     return phases
 
 
 # %%
-for year in range(1966, 2024)[::-1]:
-    for phase_file in sorted(list((catalog_path / f"{year}").glob("*.phase.Z")))[::-1]:
-        # if (dataset_path / "catalog" / f"{phase_file.name[:-2-6]}.event.csv").exists():
-        #     continue
+# for year in range(1966, 2024)[::-1]:
+def process(year):
+    for phase_file in sorted(glob(f"{catalog_path}/{year}/*.phase.Z"))[::-1]:
+        phase_filename = phase_file.split("/")[-1]
 
-        if not (dataset_path / "catalog" / phase_file.name[:-2]).exists():
-            shutil.copy(phase_file, dataset_path / "catalog" / phase_file.name)
-            os.system(f"uncompress {dataset_path / 'catalog' / phase_file.name}")
+        # if not os.path.exists(f"{result_path}/catalog_raw/{phase_filename[:-2]}"):
+        shutil.copy(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
+        os.system(f"uncompress -f {result_path}/catalog_raw/{phase_filename}")
 
-        with open(dataset_path / "catalog" / phase_file.name[:-2]) as f:
+        with open(f"{result_path}/catalog_raw/{phase_filename[:-2]}") as f:
             lines = f.readlines()
         catalog = {}
         event_id = None
-        for line in tqdm(lines, desc=phase_file.name):
-            if len(line) > (180 + 114) / 2:
+        for line in tqdm(lines, desc=phase_filename):
+            if len(line) > (180 + 114) / 2:  # event_line
                 if event_id is not None:
                     assert event["event_id"] == event_id
                     catalog[event_id] = {"event": event, "picks": picks}
                 event = read_event_line(line)
                 picks = []
-            elif len(line) > (73 + 114) / 2:
+            elif len(line) > (73 + 114) / 2:  # phase_line
                 picks.extend(read_phase_line(line))
             else:
                 event_id = line.strip().split(" ")[-1]
+        catalog[event_id] = {"event": event, "picks": picks}  # last event
 
         events = []
         phases = []
@@ -297,24 +307,27 @@ for year in range(1966, 2024)[::-1]:
         if len(phases) == 0:
             continue
         phases = pd.concat(phases)
-        events = events[["event_id", "event_time", "latitude", "longitude", "depth_km", "magnitude", "magnitude_type"]]
+        events = events[["event_id", "time", "latitude", "longitude", "depth_km", "magnitude", "magnitude_type"]]
         events["event_id"] = events["event_id"].apply(lambda x: "nc" + x)
-        events["event_time"] = events["event_time"].apply(lambda x: x + "+00:00")
+        events["time"] = events["time"].apply(lambda x: x + "+00:00")
         phases = phases[
             [
                 "event_id",
                 "network",
                 "station",
                 "location",
+                "instrument",
                 "component",
                 "phase_type",
                 "phase_time",
                 "phase_score",
                 "phase_polarity",
-                "remark",
+                "phase_remark",
                 "distance_km",
-                "back_azimuth",
+                "azimuth",
                 "takeoff_angle",
+                "location_residual_s",
+                "location_weight",
             ]
         ]
         phases["event_id"] = phases["event_id"].apply(lambda x: "nc" + x)
@@ -322,26 +335,47 @@ for year in range(1966, 2024)[::-1]:
         phases["network"] = phases["network"].str.strip()
         phases["station"] = phases["station"].str.strip()
         phases["phase_polarity"] = phases["phase_polarity"].str.strip()
-        phases["back_azimuth"] = phases["back_azimuth"].str.strip()
+        phases["azimuth"] = phases["azimuth"].str.strip()
         phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
         phases = phases[phases["distance_km"] != ""]
+        phases = phases[phases["location_residual_s"].abs() < 9.99]
+        phases = phases[~((phases["location_weight"] == 0) & (phases["location_residual_s"] == 0))]
         phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
 
         # %%
         phases_ps = []
+        event_ids = []
         for (event_id, network, station), picks in phases.groupby(["event_id", "network", "station"]):
             if len(picks) >= 2:
                 phase_type = picks["phase_type"].unique()
-                if "P" in phase_type and "S" in phase_type:
+                if ("P" in phase_type) and ("S" in phase_type):
                     phases_ps.append(picks)
+                    event_ids.append(event_id)
             if len(picks) >= 3:
                 print(event_id, network, station, len(picks))
         if len(phases_ps) == 0:
             continue
         phases_ps = pd.concat(phases_ps)
-        phases = phases_ps
+        events = events[events.event_id.isin(event_ids)]
+        phases = phases[phases.event_id.isin(event_ids)]
 
         # %%
-        events.to_csv(dataset_path / "catalog" / f"{phase_file.name[:-2-6]}.event.csv", index=False)
-        phases.to_csv(dataset_path / "catalog" / f"{phase_file.name[:-2]}.csv", index=False)
-    # %%
+        events.to_csv(f"{result_path}/catalog/{phase_filename[:-2-6]}.event.csv", index=False)
+        phases_ps.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}_ps.csv", index=False)
+        phases.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}.csv", index=False)
+
+        # year, month = phase_filename.split("/")[-1].split(".")[0:2]
+        # if not os.path.exists(f"{result_path}/catalog/{year}"):
+        #     os.makedirs(f"{result_path}/catalog/{year}")
+        # events.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.event.csv", index=False)
+        # phases_ps.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.phase_ps.csv", index=False)
+        # phases.to_csv(f"{result_path}/catalog/{year}/{year}_{month}.phase.csv", index=False)
+
+
+if __name__ == "__main__":
+    ctx = mp.get_context("spawn")
+    # years = range(2023, 2024)[::-1]
+    years = range(1966, 2024)[::-1]
+    ncpu = 16
+    with ctx.Pool(processes=ncpu) as pool:
+        pool.map(process, years)

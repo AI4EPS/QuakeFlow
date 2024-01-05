@@ -1,18 +1,21 @@
 # %%
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
+import os
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
+from glob import glob
 
 # %%
-root_path = Path("dataset")
-waveform_path = root_path / "waveform"
-catalog_path = root_path / "catalog"
-station_path = Path("../station")
-
+root_path = "./"
+waveform_path = f"{root_path}/waveform"
+catalog_path = f"{root_path}/catalog"
+station_path = f"{root_path}/station"
+result_path = f"dataset/station"
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
 
 # %%
 def parse_inventory_csv(inventory):
@@ -60,20 +63,24 @@ def parse_inventory_csv(inventory):
     return channel_list
 
 
-for network in station_path.glob("*.info"):
-    if network.name in ["broadband.info", "BARD.info", "CISN.info"]:
+# for network in station_path.glob("*.info"):
+for network in glob(f"{station_path}/*.info"):
+    network_name = network.split("/")[-1]
+    if network_name in ["broadband.info", "BARD.info", "CISN.info"]:
         continue
-    if (root_path / "station" / f"{network.stem}.csv").exists():
-        print(f"Skip {network.stem}")
+    # if (root_path / "station" / f"{network.stem}.csv").exists():
+    network_stem = network.split("/")[-1].split(".")[0]
+    if os.path.exists(f"{result_path}/{network_stem}.csv"):
+        print(f"Skip {network_stem}")
         # continue
-    print(f"Parse {network.stem}")
+    print(f"Parse {network_stem}")
     inv = obspy.Inventory()
-    for xml in (network / f"{network.stem}.FDSN.xml").glob(f"{network.stem}.*.xml"):
+    # for xml in (network / f"{network_stem}.FDSN.xml").glob(f"{network_stem}.*.xml"):
+    for xml in glob(f"{network}/{network_stem}.FDSN.xml/{network_stem}.*.xml"):
         inv += obspy.read_inventory(xml)
     stations = parse_inventory_csv(inv)
-    if not (root_path / "station").exists():
-        (root_path / "station").mkdir(parents=True)
-    stations.to_csv(root_path / "station" / f"{network.stem}.csv", index=False)
+    if len(stations) > 0:
+        stations.to_csv(f"{result_path}/{network_stem}.csv", index=False)
 
 
 # %%
