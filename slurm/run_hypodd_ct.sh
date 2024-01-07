@@ -35,7 +35,7 @@ phase.txt
 *MINOBS: min. number of links per pair saved [8]
 *MAXOBS: max. number of links per pair saved [20]
 *MINWGHT MAXDIST MAXSEP MAXNGH MINLNK MINOBS MAXOBS
-   0      120     10     50     8      8     100
+   0      200     10     50     8      8     100
 EOF
 
 cat <<EOF > ct.inp

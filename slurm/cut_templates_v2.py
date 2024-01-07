@@ -210,25 +210,28 @@ def extract_template_numpy(
     return mseed_path
 
 
-def generate_pairs(events, min_pair_dist=10):
-    neigh = NearestNeighbors(radius=min_pair_dist, metric="euclidean")
+def generate_pairs(events, min_pair_dist=10, max_neighbors=500, fname="event_pairs.txt"):
+    ncpu = min(32, mp.cpu_count())
+    neigh = NearestNeighbors(radius=min_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
     event_loc = events[["x_km", "y_km", "z_km"]].values
     neigh.fit(event_loc)
 
+    print(f"Generating pairs with min_pair_dist={min_pair_dist} km, max_neighbors={max_neighbors}")
     # event_pairs = []
     # for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
     #     neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
-
     #     event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
 
     neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
-    assert len(neigh_ind) == len(events)
-    event_pairs = []
-    for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating pairs")):
-        for j in neighs:
-            if i < j:
-                event_pairs.append([i, j])
-    return event_pairs
+    with open(fname, "w") as fp:
+        for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating pairs")):
+            # event_pairs.extend([[i, j] for j in neighs if i < j])
+            for j in neighs[:max_neighbors]:
+                if i < j:
+                    fp.write(f"{i},{j}\n")
+
+    del neigh, neigh_ind
+    return fname
 
 
 if __name__ == "__main__":
@@ -250,7 +253,7 @@ if __name__ == "__main__":
 
     # %%
     picks = pd.read_csv(
-        f"{root_path}/{region}/gamma/gamma_picks.csv",
+        f"{root_path}/{region}/results/phase_association/phase_picks.csv",
         parse_dates=["phase_time"],
     )
     picks = picks[picks["event_index"] != -1]
@@ -265,7 +268,7 @@ if __name__ == "__main__":
     ################################################
 
     # %%
-    stations = pd.read_json(f"{root_path}/{region}/obspy/stations.json", orient="index")
+    stations = pd.read_json(f"{root_path}/{region}/results/data/stations.json", orient="index")
     stations["station_id"] = stations.index
     # %% filter stations without picks
     stations = stations[stations["station_id"].isin(picks.groupby("station_id").size().index)]
@@ -275,7 +278,7 @@ if __name__ == "__main__":
     print(stations.iloc[:5])
 
     # %%
-    events = pd.read_csv(f"{root_path}/{region}/gamma/gamma_events.csv", parse_dates=["time"])
+    events = pd.read_csv(f"{root_path}/{region}/results/phase_association/events.csv", parse_dates=["time"])
     events = events[events["time"].notna()]
     # events.sort_values(by="time", inplace=True)
     events.rename(columns={"time": "event_time"}, inplace=True)
@@ -299,11 +302,8 @@ if __name__ == "__main__":
     ################################################
 
     # %%
-    event_pairs = generate_pairs(events, config["cctorch"]["min_pair_dist_km"])
     event_pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
-    with open(event_pair_fname, "w") as f:
-        for id1, id2 in event_pairs:
-            f.write(f"{id1},{id2}\n")
+    event_pairs = generate_pairs(events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=event_pair_fname)
     config["cctorch"]["event_pair_file"] = event_pair_fname
 
     # %%

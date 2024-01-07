@@ -9,7 +9,7 @@ def run_gamma(
     region: str,
     config: Dict,
     rank: int = 0,
-    picks_csv: str = "picks.csv",
+    picks_csv: str = None,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -33,8 +33,9 @@ def run_gamma(
 
     # %%
     # station_csv = data_path / "stations.csv"
-    station_json = f"{region}/obspy/stations.json"
-    # picks_csv = f"{region}/phasenet/{picks_csv}"
+    station_json = f"{region}/results/data/stations.json"
+    if picks_csv is None:
+        picks_csv = f"{region}/results/phase_picking/phase_picks_{rank:03d}.csv"
     gamma_events_csv = f"{result_path}/gamma_events_{rank:03d}.csv"
     gamma_picks_csv = f"{result_path}/gamma_picks_{rank:03d}.csv"
 
@@ -92,7 +93,10 @@ def run_gamma(
         np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
         * config["degree2km"]
     )
-    config["z(km)"] = (0, 30)
+    if "gamma" not in config:
+        config["z(km)"] = (0, 60)
+    else:
+        config["z(km)"] = [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]]
     config["bfgs_bounds"] = (
         (config["x(km)"][0] - 1, config["x(km)"][1] + 1),  # x
         (config["y(km)"][0] - 1, config["y(km)"][1] + 1),  # y
@@ -201,6 +205,23 @@ def run_gamma(
         with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
             pass
 
+    # %% copy to results/phase_association
+    if not os.path.exists(f"{root_path}/{region}/results/phase_association"):
+        os.makedirs(f"{root_path}/{region}/results/phase_association")
+    os.system(f"cp {root_path}/{gamma_events_csv} {root_path}/{region}/results/phase_association/events_{rank:03d}.csv")
+    os.system(
+        f"cp {root_path}/{gamma_picks_csv} {root_path}/{region}/results/phase_association/phase_picks_{rank:03d}.csv"
+    )
+    if protocol != "file":
+        fs.put(
+            f"{root_path}/{gamma_events_csv}",
+            f"{bucket}/{region}/results/phase_association/events_{rank:03d}.csv",
+        )
+        fs.put(
+            f"{root_path}/{gamma_picks_csv}",
+            f"{bucket}/{region}/results/phase_association/phase_picks_{rank:03d}.csv",
+        )
+
     outputs = NamedTuple("outputs", events=str, picks=str)
     return outputs(events=gamma_events_csv, picks=gamma_picks_csv)
 
@@ -220,8 +241,4 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_gamma.python_func(root_path, region=region, config=config, picks_csv=f"{region}/phasenet/phasenet_picks.csv")
-
-    if config["kubeflow"]["num_nodes"] == 1:
-        os.system(f"mv {root_path}/{region}/gamma/gamma_events_000.csv {root_path}/{region}/gamma/gamma_events.csv")
-        os.system(f"mv {root_path}/{region}/gamma/gamma_picks_000.csv {root_path}/{region}/gamma/gamma_picks.csv")
+    run_gamma.execute(root_path=root_path, region=region, config=config)

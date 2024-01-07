@@ -44,7 +44,7 @@ ylim = [config["minlatitude"], config["maxlatitude"]]
 
 # %%
 # %%
-routine_catalog = f"{root_path}/{region}/obspy/catalog.csv"
+routine_catalog = f"{root_path}/{region}/results/data/catalog.csv"
 routine_exist = False
 if os.path.exists(routine_catalog):
     routine_exist = True
@@ -52,7 +52,7 @@ if os.path.exists(routine_catalog):
 
 
 # %%
-gamma_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+gamma_file = f"{root_path}/{region}/results/phase_association/events.csv"
 gamma_exist = False
 if os.path.exists(gamma_file):
     gamma_exist = True
@@ -303,14 +303,14 @@ size_factor = 2600
 fig, ax = plt.subplots(3, 2, squeeze=False, figsize=(10, 15), sharex=True, sharey=True)
 for i in range(3):
     for j in range(2):
-        # ax[i, j].set_xlim(xlim)
-        # ax[i, j].set_ylim(ylim)
-        # ax[i, j].set_aspect((ylim[1] - ylim[0]) / ((xlim[1] - xlim[0]) * np.cos(np.mean(ylim) * np.pi / 180)))
+        ax[i, j].set_xlim(xlim)
+        ax[i, j].set_ylim(ylim)
+        ax[i, j].set_aspect((ylim[1] - ylim[0]) / ((xlim[1] - xlim[0]) * np.cos(np.mean(ylim) * np.pi / 180)))
         # # ax[i, j].set_xlabel("Longitude")
         # # ax[i, j].set_ylabel("Latitude")
         # # ax[i, j].grid()
-        ax[i, j].set_xlim([-117.70, -117.45])
-        ax[i, j].set_ylim([35.55, 35.80])
+        # ax[i, j].set_xlim([-117.70, -117.45])
+        # ax[i, j].set_ylim([35.55, 35.80])
 
 
 if routine_exist and (len(routine_catalog) > 0):
@@ -704,8 +704,8 @@ if plot3d:
     config_plot3d = {
         "xrange": [config["minlongitude"], config["maxlongitude"]],
         "yrange": [config["minlatitude"], config["maxlatitude"]],
-        # "zrange": [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]],
-        "zrange": [0, 6],
+        "zrange": [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]],
+        # "zrange": [0, 6],
     }
 
     if gamma_exist and len(gamma_catalog) > 0:
@@ -715,7 +715,7 @@ if plot3d:
             # gamma_catalog["depth(m)"] / 1e3,
             gamma_catalog["depth_km"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_gamma.html",
+            f"{root_path}/{figure_path}/earthquake_location_gamma.html",
         )
 
     if adloc_exist and len(adloc_catalog) > 0:
@@ -725,7 +725,7 @@ if plot3d:
             # gamma_catalog["depth(m)"] / 1e3,
             adloc_catalog["depth_km"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_adloc.html",
+            f"{root_path}/{figure_path}/earthquake_location_adloc.html",
         )
     if hypodd_ct_exist and len(catalog_ct_hypodd) > 0:
         plot3d(
@@ -733,7 +733,7 @@ if plot3d:
             catalog_ct_hypodd["LAT"],
             catalog_ct_hypodd["DEPTH"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_hypodd_ct.html",
+            f"{root_path}/{figure_path}/earthquake_location_hypodd_ct.html",
         )
 
     if hypodd_cc_exist and len(catalog_cc_hypodd) > 0:
@@ -742,7 +742,7 @@ if plot3d:
             catalog_cc_hypodd["LAT"],
             catalog_cc_hypodd["DEPTH"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_hypodd_cc.html",
+            f"{root_path}/{figure_path}/earthquake_location_hypodd_cc.html",
         )
 
     if growclust_ct_exist and len(growclust_ct_catalog) > 0:
@@ -751,7 +751,7 @@ if plot3d:
             growclust_ct_catalog["latR"],
             growclust_ct_catalog["depR"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_growclust_ct.html",
+            f"{root_path}/{figure_path}/earthquake_location_growclust_ct.html",
         )
 
     if growclust_cc_exist and len(growclust_cc_catalog) > 0:
@@ -760,7 +760,7 @@ if plot3d:
             growclust_cc_catalog["latR"],
             growclust_cc_catalog["depR"],
             config_plot3d,
-            f"{root_path}/{result_path}/earthquake_location_growclust_cc.html",
+            f"{root_path}/{figure_path}/earthquake_location_growclust_cc.html",
         )
 
 # %%

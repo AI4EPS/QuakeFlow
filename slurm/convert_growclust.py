@@ -32,7 +32,7 @@ if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")
 
 # %%
-station_json = f"{region}/obspy/stations.json"
+station_json = f"{region}/results/data/stations.json"
 station_df = pd.read_json(f"{root_path}/{station_json}", orient="index")
 
 lines = []
@@ -46,7 +46,7 @@ with open(f"{root_path}/{result_path}/stlist.txt", "w") as fp:
 
 
 # %%
-catalog_file = f"{region}/gamma/gamma_events.csv"
+catalog_file = f"{region}/results/phase_association/events.csv"
 # catalog_file = f"{region}/cctorch/events.csv"
 catalog_df = pd.read_csv(f"{root_path}/{catalog_file}")
 # catalog_df = catalog_df[catalog_df["gamma_score"] > 10]
@@ -73,7 +73,7 @@ if args.dtct:
     dt_ct = f"{root_path}/{region}/hypodd/dt.ct"
     lines = []
     with open(dt_ct, "r") as fp:
-        for line in tqdm(fp):
+        for line in tqdm(fp, desc="convert dt.ct"):
             if line.startswith("#"):
                 ev1, ev2 = line.split()[1:3]
                 lines.append(f"# {ev1} {ev2} 0.000\n")
