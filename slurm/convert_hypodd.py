@@ -32,7 +32,7 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 
 # %%
 ############################################# Station Format ######################################################
-station_json = f"{region}/obspy/stations.json"
+station_json = f"{region}/results/data/stations.json"
 stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
 
 shift_topo = stations["elevation_m"].max() / 1e3

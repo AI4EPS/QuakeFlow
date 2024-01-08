@@ -666,13 +666,13 @@ def plot3d(x, y, z, config, fig_name):
                 z=z,
                 mode="markers",
                 marker=dict(
-                    size=1.0,
+                    size=3.0,
                     autocolorscale=False,
                     color=z,
                     cmin=config["zrange"][0],
                     cmax=config["zrange"][1],
                     colorscale="Viridis_r",
-                    opacity=0.1,
+                    opacity=0.2,
                 ),
             )
         ],
