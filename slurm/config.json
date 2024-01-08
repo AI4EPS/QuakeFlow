@@ -63,6 +63,17 @@
                 "SCEDC"
             ]
         },
+        "Hawaii": {
+            "minlatitude": 18.39,
+            "maxlatitude": 20.39,
+            "minlongitude": -156.32,
+            "maxlongitude": -154.32,
+            "starttime": "2021-04-01T00:00:00",
+            "endtime": "2021-11-01T00:00:00",
+            "provider": [
+                "IRIS"
+            ]
+        },
         "Hawaii_Loa": {
             "center": [
                 -155.602737,
@@ -108,8 +119,7 @@
             "channel_priorities": [
                 "HH[321ENZ]",
                 "BH[321ENZ]"
-            ],
-            "degree2km": 111.19492474777779
+            ]
         },
         "Montezuma": {
             "starttime": "2020-05-01T00:00:00",
@@ -117,8 +127,7 @@
             "minlatitude": 37.9937,
             "maxlatitude": 38.1657,
             "minlongitude": -122.0325,
-            "maxlongitude": -121.7275,
-            "degree2km": 111.19492474777779
+            "maxlongitude": -121.7275
         },
         "Kilauea": {
             "starttime": "2018-04-29T00:00:00",
@@ -130,7 +139,6 @@
             "provider": [
                 "IRIS"
             ],
-            "degree2km": 111.19492474777779,
             "gamma": {
                 "zmin_km": -1,
                 "zmax_km": 10
@@ -145,8 +153,7 @@
             "maxlongitude": -155.18,
             "provider": [
                 "IRIS"
-            ],
-            "degree2km": 111.19492474777779
+            ]
         },
         "Kilauea_debug_v2": {
             "starttime": "2018-04-29T00:00:00",
@@ -157,8 +164,7 @@
             "maxlongitude": -155.18,
             "provider": [
                 "IRIS"
-            ],
-            "degree2km": 111.19492474777779
+            ]
         },
         "BayArea": {
             "starttime": "2009-01-01T00:00:00",
@@ -184,6 +190,33 @@
                 "IRIS"
             ],
             "network": "_CASCADIA_OBS"
+        },
+        "Mendocino_8mon": {
+            "starttime": "2014-10-01T00:00:00",
+            "endtime": "2015-06-01T00:00:00",
+            "minlatitude": 39.3,
+            "maxlatitude": 41.7,
+            "minlongitude": -129,
+            "maxlongitude": -123,
+            "provider": [
+                "IRIS",
+                "NCEDC", 
+                "SCEDC"
+            ],
+            "network": "7D,Z5,5E,BK,NC,CE,NP,PB"
+        },
+        "Geysers": {
+            "starttime": "2023-03-20T00:00:00",
+            "endtime": "2023-03-31T00:00:00",
+            "minlatitude": 38.68,
+            "maxlatitude": 38.92,
+            "minlongitude": -122.95,
+            "maxlongitude": -122.6,
+            "provider": [
+                "NCEDC"
+            ],
+            "network": "BG",
+            "channel": "HH*,BH*,EH*,HN*,DP*"
         }
     }
 }

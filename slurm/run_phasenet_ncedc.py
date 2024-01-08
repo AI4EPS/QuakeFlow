@@ -4,7 +4,7 @@ from typing import Dict, List
 from kfp import dsl
 
 
-@dsl.component(base_image="zhuwq0/phasenet-ncedc:v1.2", packages_to_install=["fsspec", "gcsfs", "s3fs"])
+@dsl.component(base_image="zhuwq0/phasenet-ncedc:v1.4", packages_to_install=["fsspec", "gcsfs", "s3fs"])
 def run_phasenet(
     root_path: str,
     region: str,
@@ -65,10 +65,11 @@ def run_phasenet(
         mseed_list = fp.read().split("\n")
 
     valid_channels = ["3", "2", "1", "E", "N", "Z", "U", "V"]
+    valid_instruments = ["BH", "HH", "EH", "HN", "EL"]
     groups = defaultdict(list)
     for mseed in tqdm(mseed_list):
         tmp = mseed.split(".")
-        if tmp[3][-1] in valid_channels:
+        if (tmp[3][-1] in valid_channels) and (tmp[3][:2] in valid_instruments):
             key = ".".join(tmp[:3]) + "." + tmp[3][:-1] + "." + ".".join(tmp[4:])
             groups[key].append(mseed)
         # else:
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     if not yaml_path.exists():
         yaml_path.mkdir()
 
-    world_size = 64
+    world_size = 128
 
     @dsl.pipeline
     def run_pipeline(root_path: str, region: str, config: Dict, token: Dict = None):
@@ -132,6 +133,8 @@ if __name__ == "__main__":
                 token=token,
             )
             op.set_cpu_request("1100m")
+            op.set_memory_request("12000Mi")
+            op.set_memory_limit("12000Mi")
             op.set_retry(3)
 
     client = Client("https://3824c3562c113c3e-dot-us-central1.pipelines.googleusercontent.com")

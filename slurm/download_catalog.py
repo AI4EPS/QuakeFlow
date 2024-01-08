@@ -170,6 +170,14 @@ def download_catalog(
     if protocol != "file":
         fs.put(f"{root_path}/{data_dir}/catalog.png", f"{bucket}/{data_dir}/catalog.png")
 
+    # %% copy to results/data
+    if not os.path.exists(f"{root_path}/{region}/results/data"):
+        os.makedirs(f"{root_path}/{region}/results/data")
+    for file in ["catalog.csv", "catalog.png"]:
+        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/data/{file}")
+        if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/data/{file}")
+
 
 if __name__ == "__main__":
     import json

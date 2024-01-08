@@ -17,19 +17,29 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
     data_dir = f"{region}"
     if not os.path.exists(f"{root_path}/{data_dir}"):
         os.makedirs(f"{root_path}/{data_dir}", exist_ok=True)
-    for subfolder in ["obspy", "waveforms"]:
+    for subfolder in ["obspy", "waveforms", "results", "kubeflow"]:
         if not os.path.exists(f"{root_path}/{data_dir}/{subfolder}"):
             os.makedirs(f"{root_path}/{data_dir}/{subfolder}", exist_ok=True)
+    for subfolder in [
+        "data",
+        "phase_picking",
+        "phase_association",
+        "earthquake_location",
+        "earthquake_relocation",
+        "earthquake_mechanism",
+    ]:
+        if not os.path.exists(f"{root_path}/{data_dir}/results/{subfolder}"):
+            os.makedirs(f"{root_path}/{data_dir}/results/{subfolder}", exist_ok=True)
 
     config_region = {}
     if "default" in config:
         config_region.update(config["default"])
-    if "kubeflow" in config:
-        config_region.update(config["kubeflow"])
-    if "skypilot" in config:
-        config_region.update(config["skypilot"])
     if "obspy" in config:
         config_region.update(config["obspy"])
+    if "skypilot" in config:
+        config_region["skypilot"] = config["skypilot"]
+    if "kubeflow" in config:
+        config_region["kubeflow"] = config["kubeflow"]
     if "phasenet" in config:
         config_region["phasenet"] = config["phasenet"]
     if "gamma" in config:
@@ -69,7 +79,7 @@ if __name__ == "__main__":
     else:
         config["skypilot"] = {"num_nodes": num_nodes}
 
-    set_config.python_func(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
+    set_config.execute(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
 
     # # %%
     # import os

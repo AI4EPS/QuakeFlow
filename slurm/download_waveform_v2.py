@@ -12,12 +12,13 @@ def download_waveform(
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
-) -> List:
+) -> str:
     # %%
     import json
     import os
     import threading
     import time
+    from concurrent.futures import ThreadPoolExecutor
     from datetime import datetime
     from glob import glob
 
@@ -88,17 +89,6 @@ def download_waveform(
                         print(f"{bucket}/{mseed_dir}/{mseed_name} already exists. Skip.")
                         continue
 
-                bulk.append(
-                    (
-                        station["network"],
-                        station["station"],
-                        station["location"],
-                        f"{station['instrument']}{comp}",
-                        starttime,
-                        endtime,
-                    )
-                )
-
                 if cloud is not None:
                     mseed_path = map_remote_path(
                         cloud["provider"],
@@ -129,60 +119,73 @@ def download_waveform(
                                 )
                                 if tr.stats.npts < 1000:
                                     continue
-                                if not os.path.exists(f"{root_path}/{tmp_dir}"):
-                                    os.makedirs(f"{root_path}/{tmp_dir}")
+                                os.makedirs(f"{root_path}/{tmp_dir}", exist_ok=True)
                                 tr.write(f"{root_path}/{tmp_dir}/{tr.id}.mseed", format="MSEED")
+                                if protocol != "file":
+                                    fs.put(f"{root_path}/{tmp_dir}/{tr.id}.mseed", f"{bucket}/{tmp_dir}/{tr.id}.mseed")
+                        print(f"Downloaded from {cloud['provider']}:{mseed_path}")
                     except Exception as e:
                         with lock:
                             skip_list.append(mseed_path)
                         print(f"Failed to download {e}")
 
-        if cloud is None:
-            if len(bulk) == 0:
-                print(f"Already downloaded from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
-                return
-            print(
-                f"Downloading from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()} {len(bulk)} traces"
-            )
+                else:
+                    bulk.append(
+                        (
+                            station["network"],
+                            station["station"],
+                            station["location"],
+                            f"{station['instrument']}{comp}",
+                            starttime,
+                            endtime,
+                        )
+                    )
 
-            retry = 0
-            while retry < max_retry:
-                try:
-                    stream = client.get_waveforms_bulk(bulk)
-                    stream.merge(fill_value="latest")
-                    for tr in stream:
-                        tr.write(f"{root_path}/{mseed_dir}/{tr.id}.mseed", format="MSEED")
-                    if protocol != "file":
-                        fs.put(f"{root_path}/{mseed_dir}/", f"{bucket}/{mseed_dir}/", recursive=True)
+        if len(bulk) == 0:
+            print(f"Already downloaded from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
+            return 0
+
+        print(f"Downloading from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()} {len(bulk)} traces")
+
+        retry = 0
+        while retry < max_retry:
+            try:
+                stream = client.get_waveforms_bulk(bulk)
+                stream.merge(fill_value="latest")
+                for tr in stream:
+                    tr.data = tr.data.astype(np.float32)
+                    tr.write(f"{root_path}/{mseed_dir}/{tr.id}.mseed", format="MSEED")
+                if protocol != "file":
+                    fs.put(f"{root_path}/{mseed_dir}/{tr.id}.mseed", f"{bucket}/{mseed_dir}/{tr.id}.mseed")
+                break
+
+            except Exception as err:
+                err = str(err).rstrip("\n")
+                message1 = "No data available for request"
+                message2 = "The current client does not have a dataselect service"
+                if err[: len(message1)] == message1:
+                    print(f"{message1} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
                     break
+                elif err[: len(message2)] == message2:
+                    print(f"{message2} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
+                    break
+                else:
+                    print(f"Error occurred from {client.base_url}:{err}. Retrying...")
+                retry += 1
+                time.sleep(30)
+                continue
 
-                except Exception as err:
-                    err = str(err).rstrip("\n")
-                    message1 = "No data available for request"
-                    message2 = "The current client does not have a dataselect service"
-                    if err[: len(message1)] == message1:
-                        print(f"{message1} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
-                        break
-                    elif err[: len(message2)] == message2:
-                        print(f"{message2} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
-                        break
-                    else:
-                        print(f"Error occurred from {client.base_url}:{err}. Retrying...")
-                    retry += 1
-                    time.sleep(30)
-                    continue
+        if retry == max_retry:
+            print(f"Failed to download from {client.base_url} {mseed_name}")
 
-            if retry == max_retry:
-                print(f"Failed to download from {client.base_url} {mseed_name}")
+        return 0
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
     # %%
-    data_dir = f"{region}/obspy"
-    if "num_nodes" in config:
-        num_nodes = config["num_nodes"]
-    else:
-        num_nodes = 1
+    data_dir = f"{region}/results/data"
+    num_nodes = config["kubeflow"]["num_nodes"] if "num_nodes" in config["kubeflow"] else 1
+    print(f"{num_nodes = }, {rank = }")
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
@@ -205,8 +208,8 @@ def download_waveform(
         elif DELTATIME == "1D":
             start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
         starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left")
-        # starttimes = starttimes[rank::num_nodes]
         starttimes = np.array_split(starttimes, num_nodes)[rank]
+        print(f"rank {rank}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
 
         if provider.lower() == "scedc":
             cloud_config = {"provider": provider, "bucket": "scedc-pds/continuous_waveforms"}
@@ -214,13 +217,12 @@ def download_waveform(
             cloud_config = None
 
         skip_list = []
-        threads = []
         MAX_THREADS = 3
         lock = threading.Lock()
-        for ii, starttime in enumerate(starttimes):
-            t = threading.Thread(
-                target=download,
-                args=(
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for ii, starttime in enumerate(starttimes):
+                executor.submit(
+                    download,
                     client,
                     starttime,
                     stations,
@@ -230,20 +232,32 @@ def download_waveform(
                     skip_list,
                     lock,
                     cloud_config,
-                ),
-            )
-            t.start()
-            threads.append(t)
-            time.sleep(1)
-            if (len(threads) - 1) % MAX_THREADS == MAX_THREADS - 1:
-                for t in threads:
-                    t.join()
-                threads = []
-        for t in threads:
-            t.join()
+                )
+                time.sleep(1)
 
-    mseed_list = glob(f"{root_path}/{waveform_dir}/????-???/??/*.mseed", recursive=True)
-    return mseed_list
+    tmp_list = sorted(glob(f"{root_path}/{waveform_dir}/????-???/??/*.mseed", recursive=True))
+    mseed_list = []
+    for mseed in tmp_list:
+        tmp = mseed.split("/")
+        year, jday = tmp[-3].split("-")
+        hour = tmp[-2]
+        if starttimes[0].strftime("%Y-%jT%H") <= f"{year}-{jday}T{hour}" <= starttimes[-1].strftime("%Y-%jT%H"):
+            mseed_list.append(mseed)
+
+    print(f"rank {rank}: {len(mseed_list) = }, {mseed_list[0]}, {mseed_list[-1]}")
+
+    # %% copy to results/data
+    if not os.path.exists(f"{root_path}/{region}/results/data"):
+        os.makedirs(f"{root_path}/{region}/results/data")
+    with open(f"{root_path}/{region}/results/data/mseed_list_{rank:03d}.csv", "w") as fp:
+        fp.write("\n".join(mseed_list))
+    if protocol != "file":
+        fs.put(
+            f"{root_path}/{region}/results/data/mseed_list_{rank:03d}.csv",
+            f"{bucket}/{region}/results/data/mseed_list_{rank:03d}.csv",
+        )
+
+    return f"{region}/results/data/mseed_list_{rank:03d}.csv"
 
 
 if __name__ == "__main__":
@@ -260,7 +274,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_waveform.python_func(root_path, region=region, config=config)
+    download_waveform.execute(root_path=root_path, region=region, config=config)
 
     # # %%
     # bucket = "quakeflow_share"

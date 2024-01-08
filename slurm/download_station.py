@@ -107,11 +107,12 @@ def download_station(
         for net in inventory:
             for sta in net:
                 sta_3c = {}
-                components = defaultdict(list)
+                components = defaultdict(set)
 
                 for chn in sta:
                     key = f"{chn.location_code}.{chn.code[:-1]}"
-                    components[key].append([chn.code[-1], chn.response.instrument_sensitivity.value])
+                    # components[key].add((chn.code[-1], chn.response.instrument_sensitivity.value))
+                    components[key].add(chn.code[-1])
 
                     if key not in sta_3c:
                         sta_3c[key] = {
@@ -134,8 +135,8 @@ def download_station(
                         "station": sta.code,
                         "location": sta_3c[key]["location"],
                         "instrument": sta_3c[key]["instrument"],
-                        "component": "".join([x[0] for x in sorted(components[key], key=lambda x: order[x[0]])]),
-                        "sensitivity": [x[1] for x in sorted(components[key], key=lambda x: order[x[0]])],
+                        "component": "".join([x[0] for x in sorted(list(components[key]), key=lambda x: order[x[0]])]),
+                        # "sensitivity": [x[1] for x in sorted(list(components[key]), key=lambda x: order[x[0]])],
                         "latitude": sta_3c[key]["latitude"],
                         "longitude": sta_3c[key]["longitude"],
                         "elevation_m": sta_3c[key]["elevation_m"],
@@ -293,6 +294,15 @@ def download_station(
     if protocol != "file":
         fs.put(f"{root_path}/{data_dir}/stations.png", f"{bucket}/{data_dir}/stations.png")
 
+    # %% copy to results/data
+    if not os.path.exists(f"{root_path}/{region}/results/data"):
+        os.makedirs(f"{root_path}/{region}/results/data", exist_ok=True)
+
+    for file in ["inventory.xml", "stations.csv", "stations.json", "stations.png"]:
+        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/data/{file}")
+        if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/data/{file}")
+
 
 if __name__ == "__main__":
     import json
@@ -307,9 +317,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_station.python_func(
-        root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None
-    )
+    download_station.execute(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
 
     # # %%
     # import os

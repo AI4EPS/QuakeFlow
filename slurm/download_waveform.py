@@ -34,10 +34,7 @@ def download_waveform(
     fs = fsspec.filesystem(protocol, token=token)
 
     # %%
-    if "num_nodes" in config:
-        num_nodes = config["num_nodes"]
-    else:
-        num_nodes = 1
+    num_nodes = config["kubeflow"]["num_nodes"] if "kubeflow" in config else 1
 
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
@@ -127,7 +124,10 @@ def download_waveform(
         # fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
 
     mseed_list = glob(f"{root_path}/{waveform_dir}/**/*.mseed", recursive=True)
-    return mseed_list
+    with open(f"{root_path}/{region}/data/mseed_list_{rank:03d}.csv", "w") as fp:
+        fp.write("\n".join(mseed_list))
+
+    return f"{region}/data/mseed_list_{rank:03d}.csv"
 
 
 if __name__ == "__main__":
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_waveform.python_func(root_path, region=region, config=config, rank=rank)
+    download_waveform.execute(root_path, region=region, config=config, rank=rank)
 
     # # %%
     # bucket = "quakeflow_share"

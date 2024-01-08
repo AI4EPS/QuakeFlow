@@ -67,7 +67,7 @@ TT/tt.sg
 * vpvs_factor  rayparam_min (-1 = default)
   1.732             0.0
 * tt_dep0  tt_dep1  tt_ddep
-   0.        31.       1.
+   0.        81.       1.
 * tt_del0  tt_del1  tt_ddel
    0.        500.      2.
 *
