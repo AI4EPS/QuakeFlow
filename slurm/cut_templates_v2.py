@@ -3,11 +3,8 @@ import json
 import multiprocessing as mp
 import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from glob import glob
-from multiprocessing.pool import ThreadPool
-from pathlib import Path
 
 import gamma
 import numpy as np
@@ -25,8 +22,8 @@ def extract_template_numpy(
     snr_fname,
     mseed_path,
     events,
-    stations,
     picks,
+    stations,
     config,
     lock,
 ):
@@ -230,7 +227,6 @@ def generate_pairs(events, min_pair_dist=10, max_neighbors=500, fname="event_pai
                 if i < j:
                     fp.write(f"{i},{j}\n")
 
-    del neigh, neigh_ind
     return fname
 
 
@@ -275,6 +271,7 @@ if __name__ == "__main__":
     stations.reset_index(drop=True, inplace=True)  # index used in memmap array
     stations.to_json(f"{root_path}/{result_path}/stations.json", orient="index", indent=4)
     stations.to_csv(f"{root_path}/{result_path}/stations.csv", index=True)
+    print(f"{len(stations) = }")
     print(stations.iloc[:5])
 
     # %%
@@ -292,6 +289,7 @@ if __name__ == "__main__":
         events.rename(columns={"z(km)": "z_km"}, inplace=True)
     events.reset_index(drop=True, inplace=True)  # index used in memmap array
     events.to_csv(f"{root_path}/{result_path}/events.csv", index=True)
+    print(f"{len(events) = }")
     print(events.iloc[:5])
 
     ################## debuging ####################
@@ -303,7 +301,7 @@ if __name__ == "__main__":
 
     # %%
     event_pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
-    event_pairs = generate_pairs(events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=event_pair_fname)
+    # generate_pairs(events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=event_pair_fname)
     config["cctorch"]["event_pair_file"] = event_pair_fname
 
     # %%
@@ -372,6 +370,7 @@ if __name__ == "__main__":
         pbar.set_description(f"Cutting templates: {'/'.join(x.split('/')[-2:])}")
 
     ctx = mp.get_context("spawn")
+    # ctx = mp.get_context("fork")
     with ctx.Manager() as manager:
         lock = manager.Lock()
         with ctx.Pool(ncpu) as pool:
@@ -386,8 +385,8 @@ if __name__ == "__main__":
                         snr_fname,
                         d,
                         events,
-                        stations,
                         picks,
+                        stations,
                         config["cctorch"],
                         lock,
                     ),
@@ -397,3 +396,8 @@ if __name__ == "__main__":
             pool.join()
 
     pbar.close()
+
+    # %%
+    generate_pairs(
+        events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=config["cctorch"]["event_pair_file"]
+    )
