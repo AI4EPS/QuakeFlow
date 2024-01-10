@@ -163,6 +163,8 @@ def cut_templates(
 
                             begin_time = phase_timestamp_pred[j] - trace_starttime - config["time_before"]
                             end_time = phase_timestamp_pred[j] - trace_starttime + config["time_after"]
+                            if begin_time < 0:
+                                continue
                             begin_time_index = max(0, int(begin_time * trace.stats.sampling_rate))
                             end_time_index = max(0, int(end_time * trace.stats.sampling_rate))
                             traveltime_[k, j] = (
