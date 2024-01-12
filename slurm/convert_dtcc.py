@@ -152,7 +152,7 @@ if __name__ == "__main__":
         num_pair = 0
         for h5 in h5_list:
             with h5py.File(h5, "r") as fp:
-                for id1 in tqdm(fp, desc=f"Loading {h5.split('/')[-1]}"):
+                for id1 in tqdm(fp, desc=f"Loading {h5.split('/')[-1]}", leave=True):
                     gp1 = fp[id1]
                     # for id2 in gp1:
                     #     pair_list.append((h5, id1, id2))
