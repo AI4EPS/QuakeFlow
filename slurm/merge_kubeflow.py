@@ -74,7 +74,7 @@ def reindex(
     fs = fsspec.filesystem(protocol, token=token)
 
     if picks_csv is None:
-        picks_csv = f"results/phase_picking/phase_picks.csv"
+        picks_csv = f"results/phase_picking/picks.csv"
     if events_csv is None:
         events_csv = f"results/phase_association/events.csv"
 
@@ -180,7 +180,7 @@ if __name__ == "__main__":
         root_path=root_path,
         region=region,
         config=config,
-        picks_csv="results/phase_association/phase_picks.csv",
+        picks_csv="results/phase_association/picks.csv",
         events_csv="results/phase_association/events.csv",
         protocol=args.protocol,
         token=token,

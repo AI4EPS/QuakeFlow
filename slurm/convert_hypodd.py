@@ -68,7 +68,7 @@ with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = f"{region}/results/phase_association/phase_picks.csv"
+picks_csv = f"{region}/results/phase_association/picks.csv"
 events_csv = f"{region}/results/phase_association/events.csv"
 
 picks = pd.read_csv(f"{root_path}/{picks_csv}", parse_dates=["phase_time"])

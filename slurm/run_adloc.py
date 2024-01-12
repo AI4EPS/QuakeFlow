@@ -26,7 +26,7 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 
 batch = 100
 
-base_cmd = f"../ADLoc/run.py --config {root_path}/{region}/config.json --stations {root_path}/{region}/results/data/stations.json --events {root_path}/{region}/results/phase_association/events.csv --picks {root_path}/{region}/results/phase_association/phase_picks.csv --result_path {root_path}/{region}/adloc --batch_size {batch}"
+base_cmd = f"../ADLoc/run.py --config {root_path}/{region}/config.json --stations {root_path}/{region}/results/data/stations.json --events {root_path}/{region}/results/phase_association/events.csv --picks {root_path}/{region}/results/phase_association/picks.csv --result_path {root_path}/{region}/adloc --batch_size {batch}"
 os.system(f"python {base_cmd} --device=cpu --epochs=1")
 
 # num_gpu = torch.cuda.device_count()

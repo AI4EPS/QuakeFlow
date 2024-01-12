@@ -69,7 +69,6 @@ def run_phasenet(
         fs.put(
             f"{root_path}/{result_path}/phasenet_picks_{rank:03d}.csv",
             f"{bucket}/{result_path}/phasenet_picks_{rank:03d}.csv",
-            recursive=True,
         )
 
     # copy to results/phase_picking
@@ -101,6 +100,6 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_phasenet.execute(root_path, region=region, config=config)
+    run_phasenet.execute(root_path=root_path, region=region, config=config)
 
 # %%

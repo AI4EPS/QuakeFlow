@@ -209,9 +209,7 @@ def run_gamma(
     if not os.path.exists(f"{root_path}/{region}/results/phase_association"):
         os.makedirs(f"{root_path}/{region}/results/phase_association")
     os.system(f"cp {root_path}/{gamma_events_csv} {root_path}/{region}/results/phase_association/events_{rank:03d}.csv")
-    os.system(
-        f"cp {root_path}/{gamma_picks_csv} {root_path}/{region}/results/phase_association/phase_picks_{rank:03d}.csv"
-    )
+    os.system(f"cp {root_path}/{gamma_picks_csv} {root_path}/{region}/results/phase_association/picks_{rank:03d}.csv")
     if protocol != "file":
         fs.put(
             f"{root_path}/{gamma_events_csv}",
@@ -219,7 +217,7 @@ def run_gamma(
         )
         fs.put(
             f"{root_path}/{gamma_picks_csv}",
-            f"{bucket}/{region}/results/phase_association/phase_picks_{rank:03d}.csv",
+            f"{bucket}/{region}/results/phase_association/picks_{rank:03d}.csv",
         )
 
     outputs = NamedTuple("outputs", events=str, picks=str)
