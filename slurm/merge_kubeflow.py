@@ -164,7 +164,7 @@ if __name__ == "__main__":
         config["kubeflow"] = {"num_nodes": args.num_nodes}
 
     folders = ["results/phase_picking", "results/phase_association", "results/phase_association"]
-    fnames = ["phase_picks", "phase_picks", "events"]
+    fnames = ["phase_picks", "picks", "events"]
     for folder, fname in zip(folders, fnames):
         merge_op.execute(
             root_path=root_path,

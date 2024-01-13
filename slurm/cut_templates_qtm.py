@@ -3,6 +3,7 @@ import json
 import multiprocessing as mp
 import os
 import sys
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from glob import glob
 
@@ -14,6 +15,7 @@ from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 
 
+# %%
 def extract_template_numpy(
     template_fname,
     traveltime_fname,
@@ -43,9 +45,9 @@ def extract_template_numpy(
     begin_time = datetime.strptime(f"{year_jday}T{hour}", "%Y-%jT%H").replace(tzinfo=timezone.utc)
     # TODO: make timedelta a parameter
     end_time = begin_time + timedelta(hours=1)
-    events_ = events[(events["event_time"] >= begin_time) & (events["event_time"] < end_time)]
+    picks_ = picks[(picks["phase_time"] >= begin_time) & (picks["phase_time"] < end_time)]
 
-    if len(events_) == 0:
+    if len(picks_) == 0:
         return mseed_path
 
     # %%
@@ -76,122 +78,82 @@ def extract_template_numpy(
                     continue
 
     # %%
-    picks["station_phase_index"] = picks.apply(lambda x: f"{x.station_id}.{x.phase_type}", axis=1)
+    stations = stations.set_index("station_id")
+    for i, pick in picks_.iterrows():
+        template_ = np.zeros((6, 1, config["nt"]), dtype=np.float32)
+        snr_ = np.zeros((6, 1), dtype=np.float32)
+        traveltime_ = np.zeros((2, 1), dtype=np.float32)
+        traveltime_index_ = np.zeros((2, 1), dtype=np.int32)
+        traveltime_type_ = np.zeros((2, 1), dtype=np.int32)
 
-    # %%
-    num_event = 0
-    # for i, event in tqdm(
-    #     events_.iterrows(),
-    #     total=len(events_),
-    #     desc=f"Cutting event {year_jday}T{hour}",
-    #     position=ibar % 6,
-    #     nrows=7,
-    #     mininterval=5,
-    #     leave=True,
-    # ):
-    for i, event in events_.iterrows():
-        if event.event_index not in picks.index:
-            continue
+        station_id = pick["station_id"]
+        phase_type = pick["phase_type"]
+        if phase_type == "P":
+            k = 0
+        elif phase_type == "S":
+            k = 1
+        else:
+            raise ValueError(f"Unknown phase type: {phase_type}")
+        station = stations.loc[station_id]
+        event = events.loc[pick["event_index"]]
+        empty_data = True
+        for c in station["component"]:
+            c_index = k * 3 + config["component_mapping"][c]  # 012 for P, 345 for S
 
-        picks_ = picks.loc[[event.event_index]]
-        picks_ = picks_.set_index("station_phase_index")
+            if f"{station_id}{c}" in waveforms_dict:
+                trace = waveforms_dict[f"{station_id}{c}"]
+                trace_starttime = trace.stats.starttime.datetime.replace(tzinfo=timezone.utc).timestamp()
 
-        event_loc = event[["x_km", "y_km", "z_km"]].to_numpy().astype(np.float32)
-        event_loc = np.hstack((event_loc, [0]))[np.newaxis, :]
-        station_loc = stations[["x_km", "y_km", "z_km"]].to_numpy().astype(np.float32)
+                begin_time = pick["phase_timestamp"] - trace_starttime - config["time_before"]
+                end_time = pick["phase_timestamp"] - trace_starttime + config["time_after"]
+                if begin_time < 0:
+                    continue
+                begin_time_index = max(0, int(begin_time * trace.stats.sampling_rate))
+                end_time_index = max(0, int(end_time * trace.stats.sampling_rate))
+                traveltime_[k, 0] = (
+                    begin_time_index / trace.stats.sampling_rate
+                    + config["time_before"]
+                    + trace_starttime
+                    - event["event_timestamp"]
+                )  ## define traveltime at the exact data point
+                traveltime_index_[k, 0] = begin_time_index + int(config["time_before"] * trace.stats.sampling_rate)
+                trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
 
-        template_ = np.zeros((6, len(stations), config["nt"]), dtype=np.float32)
-        snr_ = np.zeros((6, len(stations)), dtype=np.float32)
-        traveltime_ = np.zeros((2, len(stations)), dtype=np.float32)
-        traveltime_index_ = np.zeros((2, len(stations)), dtype=np.int32)
-        traveltime_type_ = np.zeros((2, len(stations)), dtype=np.int32)
+                if len(trace_data) < config["nt"]:
+                    continue
+                std = np.std(trace_data)
+                if std == 0:
+                    continue
 
-        for k, phase_type in enumerate(["P", "S"]):
-            traveltime = gamma.seismic_ops.calc_time(
-                event_loc,
-                station_loc,
-                [phase_type.lower() for _ in range(len(station_loc))],
-                vel={"p": 6.0, "s": 6.0 / 1.73},
-            ).squeeze()
+                empty_data = False
+                if traveltime_type_[k, 0] == 1:  ## only use auto picks
+                    template_[c_index, 0, : config["nt"]] = trace_data[: config["nt"]]
+                ################## debuging ##################
+                # import matplotlib.pyplot as plt
+                # import scipy.interpolate
 
-            phase_timestamp_pred = event["event_timestamp"] + traveltime
+                # if (i == 0) and (j in [3, 4, 5]):
+                #     # template_[c_index, j, 1 : config["nt"]] = trace_data[: config["nt"] - 1]
+                #     t = np.linspace(0, 1, (config["nt"] - 1) + 1)
+                #     t_interp = np.linspace(0, 1, (config["nt"] - 1) * 10 + 1)
+                #     x = trace_data[: config["nt"]]
+                #     x_interp = scipy.interpolate.interp1d(t, x, kind="cubic")(t_interp)
+                #     # print(x - x_interp[0::10])
+                #     # plt.figure()
+                #     # plt.plot(t, x)
+                #     # plt.plot(t_interp, x_interp)
+                #     # plt.plot(t, x_interp[0::10])
+                #     # plt.savefig("debug.png")
+                #     # raise
+                #     template_[c_index, j, :] = np.roll(x_interp, -1)[::10]
+                ################################################
 
-            mean_shift = []
-            for j, station in stations.iterrows():
-                station_id = station["station_id"]
-                if f"{station_id}.{phase_type}" in picks_.index:
-                    ## TODO: check if multiple phases for the same station
-                    phase_timestamp = picks_.loc[f"{station_id}.{phase_type}"]["phase_timestamp"]
-                    phase_timestamp_pred[j] = phase_timestamp
-                    mean_shift.append(phase_timestamp - (event["event_timestamp"] + traveltime[j]))
-                    traveltime_type_[k, j] = 1  # auto pick
-                    # traveltime[j] = phase_timestamp - event["event_timestamp"] # should define traveltime at the exact data point
+                s = np.std(trace_data[-int(config["time_after"] * config["sampling_rate"]) :])
+                n = np.std(trace_data[: int(config["time_before"] * config["sampling_rate"])])
+                if n == 0:
+                    snr_[c_index, 0] = 0
                 else:
-                    traveltime_type_[k, j] = 0  # theoretical pick
-
-            for j, station in stations.iterrows():
-                station_id = station["station_id"]
-
-                empty_data = True
-                for c in station["component"]:
-                    c_index = k * 3 + config["component_mapping"][c]  # 012 for P, 345 for S
-
-                    if f"{station_id}{c}" in waveforms_dict:
-                        trace = waveforms_dict[f"{station_id}{c}"]
-                        trace_starttime = trace.stats.starttime.datetime.replace(tzinfo=timezone.utc).timestamp()
-
-                        begin_time = phase_timestamp_pred[j] - trace_starttime - config["time_before"]
-                        end_time = phase_timestamp_pred[j] - trace_starttime + config["time_after"]
-                        if begin_time < 0:
-                            continue
-                        begin_time_index = max(0, int(begin_time * trace.stats.sampling_rate))
-                        end_time_index = max(0, int(end_time * trace.stats.sampling_rate))
-                        traveltime_[k, j] = (
-                            begin_time_index / trace.stats.sampling_rate
-                            + config["time_before"]
-                            + trace_starttime
-                            - event["event_timestamp"]
-                        )  ## define traveltime at the exact data point
-                        traveltime_index_[k, j] = begin_time_index + int(
-                            config["time_before"] * trace.stats.sampling_rate
-                        )
-                        trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-
-                        if len(trace_data) < config["nt"]:
-                            continue
-                        std = np.std(trace_data)
-                        if std == 0:
-                            continue
-
-                        empty_data = False
-                        if traveltime_type_[k, j] == 1:  ## only use auto picks
-                            template_[c_index, j, : config["nt"]] = trace_data[: config["nt"]]
-                        ################## debuging ##################
-                        # import matplotlib.pyplot as plt
-                        # import scipy.interpolate
-
-                        # if (i == 0) and (j in [3, 4, 5]):
-                        #     # template_[c_index, j, 1 : config["nt"]] = trace_data[: config["nt"] - 1]
-                        #     t = np.linspace(0, 1, (config["nt"] - 1) + 1)
-                        #     t_interp = np.linspace(0, 1, (config["nt"] - 1) * 10 + 1)
-                        #     x = trace_data[: config["nt"]]
-                        #     x_interp = scipy.interpolate.interp1d(t, x, kind="cubic")(t_interp)
-                        #     # print(x - x_interp[0::10])
-                        #     # plt.figure()
-                        #     # plt.plot(t, x)
-                        #     # plt.plot(t_interp, x_interp)
-                        #     # plt.plot(t, x_interp[0::10])
-                        #     # plt.savefig("debug.png")
-                        #     # raise
-                        #     template_[c_index, j, :] = np.roll(x_interp, -1)[::10]
-                        ################################################
-
-                        s = np.std(trace_data[-int(config["time_after"] * config["sampling_rate"]) :])
-                        n = np.std(trace_data[: int(config["time_before"] * config["sampling_rate"])])
-                        if n == 0:
-                            snr_[c_index, j] = 0
-                        else:
-                            snr_[c_index, j] = s / n
+                    snr_[c_index, 0] = s / n
 
         template_array[i] = template_
         traveltime_array[i] = traveltime_
@@ -209,40 +171,37 @@ def extract_template_numpy(
     return mseed_path
 
 
-def generate_pairs(events, min_pair_dist=10, max_neighbors=500, fname="event_pairs.txt"):
-    ncpu = min(32, mp.cpu_count())
-    neigh = NearestNeighbors(radius=min_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
-    event_loc = events[["x_km", "y_km", "z_km"]].values
-    neigh.fit(event_loc)
+def generate_pairs(picks, mseeds, fname="mseed_pick_pairs.txt"):
+    # %%
+    # mseeds_dict = {x.split("/")[-1].replace(".mseed", "")[:-1]: x for x in mseeds}
+    mseeds_df = pd.DataFrame(mseeds, columns=["fname"])
+    mseeds_df["station_id"] = mseeds_df["fname"].apply(lambda x: x.split("/")[-1].replace(".mseed", "")[:-1])
+    picks["index"] = picks.index
+    picks = picks.set_index("station_id")
 
-    print(f"Generating pairs with min_pair_dist={min_pair_dist} km, max_neighbors={max_neighbors}")
-    # event_pairs = []
-    # for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
-    #     neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
-    #     event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
-
-    neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
-    with open(fname, "w") as fp:
-        for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating pairs")):
-            # event_pairs.extend([[i, j] for j in neighs if i < j])
-            for j in neighs[:max_neighbors]:
-                if i < j:
-                    fp.write(f"{i},{j}\n")
+    # %%
+    with open(fname, "w") as f:
+        for i, m in tqdm(mseeds_df.iterrows(), desc="Generating pairs", total=len(mseeds_df)):
+            for j, p in picks.loc[m["station_id"]].iterrows():
+                f.write(f"{i},{p['index']}\n")
 
     return fname
 
 
 if __name__ == "__main__":
+    # %%
     root_path = "local"
     region = "demo"
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
+
+    # %%
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
     # %%
-    result_path = f"{region}/cctorch"
+    result_path = f"{region}/qtm"
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
@@ -323,18 +282,19 @@ if __name__ == "__main__":
     # %%
     picks = picks.merge(stations, on="station_id")
     picks = picks.merge(events, on="event_index", suffixes=("_station", "_event"))
-    picks.set_index("event_index", inplace=True)
+    # picks.set_index("event_index", inplace=True)
+    picks["event_index"] = picks["event_index"].astype(int)
+    picks["event_station_id"] = picks["event_index"].astype(str) + "." + picks["station_id"]
 
     # %%
     nt = int((config["cctorch"]["time_before"] + config["cctorch"]["time_after"]) * config["cctorch"]["sampling_rate"])
     config["cctorch"]["nt"] = nt
     nch = 6  ## For [P,S] phases and [E,N,Z] components
-    nev = len(events)
-    nst = len(stations)
-    print(f"nev: {nev}, nch: {nch}, nst: {nst}, nt: {nt}")
-    template_shape = (nev, nch, nst, nt)
-    traveltime_shape = (nev, nch // 3, nst)
-    snr_shape = (nev, nch, nst)
+    npk = len(picks)
+    print(f"npk: {npk}, nch: {nch}, nt: {nt}")
+    template_shape = (npk, nch, 1, nt)
+    traveltime_shape = (npk, nch // 3, 1)
+    snr_shape = (npk, nch, 1)
     config["cctorch"]["template_shape"] = template_shape
     config["cctorch"]["traveltime_shape"] = traveltime_shape
     config["cctorch"]["snr_shape"] = snr_shape
@@ -364,6 +324,25 @@ if __name__ == "__main__":
     ncpu = min(32, mp.cpu_count())
     print(f"Using {ncpu} cores")
     pbar = tqdm(total=len(dirs), desc="Cutting templates")
+
+    # %%
+    # for d in dirs:
+    #     extract_template_numpy(
+    #         template_fname,
+    #         traveltime_fname,
+    #         traveltime_index_fname,
+    #         traveltime_type_fname,
+    #         snr_fname,
+    #         d,
+    #         events,
+    #         picks,
+    #         stations,
+    #         config["cctorch"],
+    #         nullcontext(),
+    #     )
+    #     pbar.update()
+
+    # raise
 
     def pbar_update(x):
         """
@@ -401,6 +380,8 @@ if __name__ == "__main__":
     pbar.close()
 
     # %%
-    generate_pairs(
-        events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=config["cctorch"]["event_pair_file"]
-    )
+    mseeds = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??/*.mseed"))
+    mseeds = ["/".join(x.split("/")[-3:]) for x in mseeds]
+    generate_pairs(picks, mseeds, fname=f"{root_path}/{result_path}/mseed_pick_pairs.txt")
+
+# %%
