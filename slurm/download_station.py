@@ -94,7 +94,24 @@ def download_station(
                 inventory += stations
 
         inventory.write(f"{root_path}/{data_dir}/inventory.xml", format="STATIONXML")
+
+        # save inventory by station
+        if not os.path.exists(f"{root_path}/{data_dir}/inventory/"):
+            os.makedirs(f"{root_path}/{data_dir}/inventory/")
+
+        for net in inventory:
+            for sta in net:
+                for chn in sta:
+                    inv = inventory.select(
+                        network=net.code, station=sta.code, location=chn.location_code, channel=chn.code[:-1] + "*"
+                    )
+                    inv.write(
+                        f"{root_path}/{data_dir}/inventory/{net.code}.{sta.code}.{chn.location_code}.{chn.code[:-1]}.xml",
+                        format="STATIONXML",
+                    )
+
         if protocol != "file":
+            fs.put(f"{root_path}/{data_dir}/inventory/", f"{bucket}/{data_dir}/inventory/")
             fs.put(f"{root_path}/{data_dir}/inventory.xml", f"{bucket}/{data_dir}/inventory.xml")
 
     # %%
@@ -302,6 +319,7 @@ def download_station(
         os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/data/{file}")
         if protocol != "file":
             fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/data/{file}")
+    os.system(f"cp -r {root_path}/{data_dir}/inventory/ {root_path}/{region}/results/data/inventory/")
 
 
 if __name__ == "__main__":

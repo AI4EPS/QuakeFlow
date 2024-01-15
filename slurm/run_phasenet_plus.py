@@ -66,7 +66,8 @@ def run_phasenet(
         folder_depth = 1
     num_gpu = torch.cuda.device_count()
     print(f"num_gpu = {num_gpu}")
-    base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
+    # base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
+    base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_path={root_path}/{region}/results/data/inventory --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
     if num_gpu == 0:
         cmd = f"python {base_cmd} --device=cpu"
     elif num_gpu == 1:
@@ -174,6 +175,7 @@ def run_association(
     # clustering = DBSCAN(eps=3, min_samples=3).fit(events[["timestamp", "x_s", "y_s"]])
     clustering = DBSCAN(eps=3, min_samples=3).fit(events[["timestamp"]])
     events["event_index"] = clustering.labels_
+    print(f"Number of associated events: {len(events['event_index'].unique())}")
 
     # plt.figure(figsize=(10, 5))
     # plt.scatter(
