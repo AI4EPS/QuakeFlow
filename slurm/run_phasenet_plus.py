@@ -12,6 +12,7 @@ def run_phasenet(
     rank: int = 0,
     model_path: str = "../PhaseNet/",
     data_type: str = "continuous",
+    overwrite: bool = False,
     mseed_list: List = None,
     protocol: str = "file",
     bucket: str = "",
@@ -23,6 +24,12 @@ def run_phasenet(
 
     import fsspec
     import torch
+
+    # %%
+    if data_type == "continuous":
+        folder_depth = 3
+    elif data_type == "event":
+        folder_depth = 1
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
@@ -51,6 +58,12 @@ def run_phasenet(
         mseed_list = list(set([x.split(".mseed")[0][:-1] + "*.mseed" for x in mseed_list]))
     mseed_list = sorted(mseed_list)
 
+    # %% skip processed files
+    if not overwrite:
+        picks_list = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????-???/??/*.csv"))
+        processed_list = set(["/".join(x.replace(".csv", "*.mseed").split("/")[-folder_depth:]) for x in picks_list])
+        mseed_list = [x for x in mseed_list if "/".join(x.split("/")[-folder_depth:]) not in processed_list]
+
     # %%
     if protocol != "file":
         fs.get(f"{bucket}/{region}/obspy/inventory.xml", f"{root_path}/{region}/obspy/inventory.xml")
@@ -59,11 +72,6 @@ def run_phasenet(
     with open(f"{root_path}/{result_path}/mseed_list_{rank:03d}.csv", "w") as fp:
         fp.write("\n".join(mseed_list))
 
-    # %%
-    if data_type == "continuous":
-        folder_depth = 3
-    elif data_type == "event":
-        folder_depth = 1
     num_gpu = torch.cuda.device_count()
     print(f"num_gpu = {num_gpu}")
     # base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{rank:03d}.csv --response_xml={root_path}/{region}/obspy/inventory.xml --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --folder_depth {folder_depth}"
