@@ -16,6 +16,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+*pyc
 build/
 develop-eggs/
 dist/
@@ -145,6 +146,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+Trash
 
 # seismic data
 *.mseed
@@ -155,3 +157,16 @@ cython_debug/
 hypoinverse/
 notebooks/*/config.json
 Trash
+slurm/stations/
+slurm/figures/
+slurm/waveforms/
+slurm/results/
+slurm/templates/
+slurm/relocation/hypodd/
+slurm/relocation/growclust/
+
+slurm/*/stations/
+slurm/*/waveforms/
+slurm/*/waveforms/
+slurm/*/results/
+slurm/*/*.xml

@@ -1,0 +1,7 @@
+redis
+fastapi
+fsspec
+gcsfs
+obspy
+uvicorn
+pandas

@@ -1,0 +1,64 @@
+name: quakeflow
+
+workdir: .
+
+num_nodes: 1
+
+resources:
+
+  cloud: gcp
+
+  region: us-west1
+
+  zone: us-west1-b
+
+  # instance_type: n2-highmem-16
+
+  # accelerators: P100:4
+
+  cpus: 16+
+  # cpus: 64+
+
+  # disk_size: 300
+
+  # disk_tier: high
+
+  use_spot: True
+
+  # spot_recovery: FAILOVER
+
+  # image_id: docker:zhuwq0/quakeflow:latest
+
+envs:
+  JOB: quakeflow_dataset
+
+file_mounts:
+
+  /scedc-pds:
+    source: s3://scedc-pds/
+    mode: MOUNT
+
+  /ncedc-pds:
+    source: s3://ncedc-pds/
+    mode: MOUNT
+
+  /quakeflow_dataset:
+    source: gs://quakeflow_dataset/
+    mode: MOUNT
+
+  ~/.ssh/id_rsa.pub: ~/.ssh/id_rsa.pub
+  ~/.ssh/id_rsa: ~/.ssh/id_rsa
+  ~/.config/rclone/rclone.conf: ~/.config/rclone/rclone.conf
+  ~/.config/gcloud/application_default_credentials.json: ~/.config/gcloud/application_default_credentials.json
+
+setup: |
+  echo "Begin setup."
+  sudo apt install rclone
+  pip install fsspec gcsfs
+  pip install obspy matplotlib
+  pip install h5py tqdm
+
+run: |
+  echo "Begin run." 
+  # python download_catalog.py
+  python download_waveform.py

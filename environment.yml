@@ -1,0 +1,8 @@
+name: base
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - cartopy
+  - obspy
+prefix: /opt/conda

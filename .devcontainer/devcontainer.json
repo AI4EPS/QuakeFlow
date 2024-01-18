@@ -4,7 +4,8 @@
     "cpus": 4
   },
   "waitFor": "onCreateCommand",
-  "updateContentCommand": "python3 -m pip install -r requirements.txt",
+  "updateContentCommand": "sudo apt update && sudo apt install -y libgeos-dev && python3 -m pip install -r requirements.txt && python -m pip install kfp --pre",
+  // "updateContentCommand": "conda env update --file environment.yml",
   "postCreateCommand": "",
   "customizations": {
     "codespaces": {
@@ -13,7 +14,8 @@
     "vscode": {
       "extensions": [
         "ms-toolsai.jupyter",
-        "ms-python.python"
+        "ms-python.python",
+        "googlecloudtools.cloudcode"
       ]
     }
   }

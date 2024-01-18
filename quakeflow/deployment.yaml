@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quakeflow-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quakeflow-hub
+  template:
+    metadata:
+      labels:
+        app: quakeflow-hub
+    spec:
+      containers:
+      - name: server
+        image: zhuwq0/quakeflow-hub
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quakeflow-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quakeflow-data
+  template:
+    metadata:
+      labels:
+        app: quakeflow-data
+    spec:
+      containers:
+      - name: server
+        image: zhuwq0/quakeflow-data
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: picking-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: picking-api
+  template:
+    metadata:
+      labels:
+        app: picking-api
+    spec:
+      containers:
+      - name: server
+        image: zhuwq0/picking-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: association-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: association-api
+  template:
+    metadata:
+      labels:
+        app: association-api
+    spec:
+      containers:
+      - name: server
+        image: zhuwq0/association-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: location-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: location-api
+  template:
+    metadata:
+      labels:
+        app: location-api
+    spec:
+      containers:
+      - name: server
+        image: zhuwq0/location-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5

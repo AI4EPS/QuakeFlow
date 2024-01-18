@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Data Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id="plotly-div"></div>
+    <script>
+        var ws = new WebSocket('ws://localhost:8000/ws');
+        var layout = { title: "Real-Time Waveforms", height: window.innerHeight };
+
+        ws.onopen = function(event) {
+            console.log("Connected");
+        };
+
+        ws.onmessage = function(event) {
+            var data = JSON.parse(event.data);
+            var traces = [];
+            var offset = 0;            
+            for (var id in data) {
+                traces.push({
+                    // convert timestamp from seconds to ISO format in "yyyy-mm-dd hh:mm:ss"
+                    x: data[id].timestamp.map(function(x) { return new Date(x * 1000); }),
+                    // x: data[id].timestamp,
+                    y: data[id].data,
+                    type: "scatter",
+                    mode: "lines",
+                    name: id
+                });
+            }
+            Plotly.newPlot('plotly-div', traces, layout);
+        };
+    </script>
+</body>
+</html>

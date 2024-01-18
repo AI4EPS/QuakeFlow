@@ -1,0 +1,79 @@
+name: quakeflow
+
+workdir: .
+
+num_nodes: 1
+
+resources:
+
+  cloud: gcp
+
+  region: us-west1
+
+  zone: us-west1-b
+
+  # instance_type: n2-highmem-16
+
+  # accelerators: V100:1
+
+  cpus: 8+
+
+  use_spot: True
+
+  # image_id: docker:zhuwq0/quakeflow:latest
+
+envs:
+  JOB: quakeflow
+  NCPU: 1
+  ROOT_PATH: /data
+  RESULT_PATH: phasenet_das
+
+file_mounts:
+
+  /data:
+    # source: s3://scedc-pds/
+    # source: gs://quakeflow_dataset/
+    # source: gs://quakeflow_share/
+    source: gs://das_arcata/
+    mode: MOUNT
+
+  /quakeflow_dataset:
+    source: gs://quakeflow_dataset/
+    mode: MOUNT
+
+  ~/.ssh/id_rsa.pub: ~/.ssh/id_rsa.pub
+  ~/.ssh/id_rsa: ~/.ssh/id_rsa
+  ~/.config/rclone/rclone.conf: ~/.config/rclone/rclone.conf
+  # EQNet: ../EQNet
+
+setup: |
+  echo "Begin setup."
+  sudo apt install rclone
+  pip3 install fsspec gcsfs kfp==2.3
+  pip3 install obspy pyproj
+  pip3 install cartopy
+  pip3 install h5py tqdm wandb
+  pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+  # pip3 install torch torchvision torchaudio
+  # mkdir ~/data && rclone mount range:/ ~/data --daemon
+
+run: |
+  [ -d "EQNet" ] && rm -r "EQNet"
+  git clone https://github.com/AI4EPS/EQNet.git
+  num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
+  master_addr=`echo "$SKYPILOT_NODE_IPS" | head -n1`
+  [[ ${SKYPILOT_NUM_GPUS_PER_NODE} -gt $NCPU ]] && nproc_per_node=${SKYPILOT_NUM_GPUS_PER_NODE} || nproc_per_node=$NCPU
+  if [ "${SKYPILOT_NODE_RANK}" == "0" ]; then
+    ls -al /data
+    python create_filelist.py ${ROOT_PATH} ""
+  fi
+  
+  torchrun \
+    --nproc_per_node=${nproc_per_node} \
+    --node_rank=${SKYPILOT_NODE_RANK} \
+    --nnodes=$num_nodes \
+    --master_addr=$master_addr \
+    --master_port=8008 \
+    EQNet/predict.py --model phasenet_das --format=h5  --data_list=${ROOT_PATH}/${RESULT_PATH}/filelist.csv --result_path=${ROOT_PATH}/${RESULT_PATH} --batch_size 1 --workers 6 --folder_depth=2 --system optasense
+
+  

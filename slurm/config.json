@@ -1,17 +1,222 @@
 {
-  "region": "Ridgecrest",
-  "center": [
-    -117.504,
-    35.705
-  ],
-  "horizontal_degree": 1.0,
-  "vertical_degree": 1.0,
-  "starttime": "2019-07-04T17:00:00",
-  "endtime": "2019-07-04T19:00:00",
-  "channel_list": [
-    "HH[321ENZ]",
-    "BH[321ENZ]",
-    "EH[321ENZ]",
-    "HN[321ENZ]"
-  ],
+    "kubeflow": {
+        "num_nodes": 1
+    },
+    "skypilot": {
+        "num_nodes": 1
+    },
+    "gamma": {
+        "zmin_km": 0,
+        "zmax_km": 60
+    },
+    "cctorch":{
+        "sampling_rate": 100,
+        "time_before": 0.25,
+        "time_after": 1.0,
+        "min_pair_dist_km": 10,
+        "components": "ENZ123",
+        "component_mapping": {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2}
+    },
+    "obspy": {
+        "sampling_rate": 100,
+        "degree2km": 111.1949,
+        "channel": "HH*,BH*,EH*,HN*",
+        "level": "response"
+    },
+    "region": {
+        "demo": {
+            "longitude0": -117.504,
+            "latitude0": 35.705,
+            "maxradius_degree": 0.5,
+            "minlatitude": 35.205,
+            "maxlatitude": 36.205,
+            "minlongitude": -118.004,
+            "maxlongitude": -117.004,
+            "starttime": "2019-07-04T17:00:00",
+            "endtime": "2019-07-05T00:00:00",
+            "provider": [
+                "SCEDC"
+            ],
+            "network": "CI"
+        },
+        "Ridgecrest": {
+            "center": [
+                -117.504,
+                35.705
+            ],
+            "longitude0": -117.504,
+            "latitude0": 35.705,
+            "maxradius_degree": 1.0,
+            "minlatitude": 35.205,
+            "maxlatitude": 36.205,
+            "minlongitude": -118.004,
+            "maxlongitude": -117.004,
+            "starttime": "2019-07-04T00:00:00",
+            "endtime": "2019-07-10T00:00:00",
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "EH[321ENZ]",
+                "HN[321ENZ]",
+                "BH[321ENZ]"
+            ],
+            "provider": [
+                "SCEDC"
+            ]
+        },
+        "Hawaii": {
+            "minlatitude": 18.39,
+            "maxlatitude": 20.39,
+            "minlongitude": -156.32,
+            "maxlongitude": -154.32,
+            "starttime": "2021-04-01T00:00:00",
+            "endtime": "2021-11-01T00:00:00",
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "Hawaii_Loa": {
+            "center": [
+                -155.602737,
+                19.451827
+            ],
+            "longitude0": -155.602737,
+            "latitude0": 19.451827,
+            "minlatitude": 19.151827,
+            "maxlatitude": 19.751827,
+            "minlongitude": -155.352737,
+            "maxlongitude": -155.852737,
+            "xlim_degree": [
+                -155.852737,
+                -155.352737
+            ],
+            "ylim_degree": [
+                19.151827,
+                19.751827
+            ],
+            "maxradius_degree": 0.3,
+            "horizontal_degree": 0.3,
+            "vertical_degree": 0.3,
+            "starttime": "2022-11-30T22:00:00",
+            "endtime": "2022-11-30T23:00:00",
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "BH[321ENZ]",
+                "EH[321ENZ]",
+                "HN[321ENZ]"
+            ],
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "South_Pole2": {
+            "starttime": "2003-01-01T00:00:00",
+            "endtime": "2023-05-01T00:00:00",
+            "network": "IU",
+            "station": "QSPA",
+            "provider": [
+                "IRIS"
+            ],
+            "channel_priorities": [
+                "HH[321ENZ]",
+                "BH[321ENZ]"
+            ]
+        },
+        "Montezuma": {
+            "starttime": "2020-05-01T00:00:00",
+            "endtime": "2023-05-01T00:00:00",
+            "minlatitude": 37.9937,
+            "maxlatitude": 38.1657,
+            "minlongitude": -122.0325,
+            "maxlongitude": -121.7275
+        },
+        "Kilauea": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-08-12T00:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ],
+            "gamma": {
+                "zmin_km": -1,
+                "zmax_km": 10
+            }
+        },
+        "Kilauea_debug": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-04-29T01:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "Kilauea_debug_v2": {
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-04-29T01:00:00",
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "BayArea": {
+            "starttime": "2009-01-01T00:00:00",
+            "endtime": "2023-01-01T00:00:00",
+            "minlatitude": 36,
+            "maxlatitude": 38.6,
+            "minlongitude": -123.5,
+            "maxlongitude": -120.5,
+            "provider": ["NCEDC"],
+            "network": "NC,BK,CE,NP",
+            "channel": "BH*,HH*,EH*,HN*",
+            "level": "response",
+            "minmagnitude": 2.0
+        },
+        "Mendocino": {
+            "starttime": "2014-12-01T00:00:00",
+            "endtime": "2014-12-31T00:00:00",
+            "minlatitude": 39.5,
+            "maxlatitude": 41.5,
+            "minlongitude": -126.5,
+            "maxlongitude": -123.0,
+            "provider": [
+                "IRIS"
+            ],
+            "network": "_CASCADIA_OBS"
+        },
+        "Mendocino_8mon": {
+            "starttime": "2014-10-01T00:00:00",
+            "endtime": "2015-06-01T00:00:00",
+            "minlatitude": 39.3,
+            "maxlatitude": 41.7,
+            "minlongitude": -129,
+            "maxlongitude": -123,
+            "provider": [
+                "IRIS",
+                "NCEDC", 
+                "SCEDC"
+            ],
+            "network": "7D,Z5,5E,BK,NC,CE,NP,PB"
+        },
+        "Geysers": {
+            "starttime": "2023-03-20T00:00:00",
+            "endtime": "2023-03-31T00:00:00",
+            "minlatitude": 38.68,
+            "maxlatitude": 38.92,
+            "minlongitude": -122.95,
+            "maxlongitude": -122.6,
+            "provider": [
+                "NCEDC"
+            ],
+            "network": "BG",
+            "channel": "HH*,BH*,EH*,HN*,DP*"
+        }
+    }
 }
