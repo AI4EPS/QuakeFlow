@@ -6,6 +6,7 @@ local
 debug
 figures
 templates
+win32tools
 __pycache__
 2019-185
 BayArea
@@ -14,5 +15,7 @@ Shelly2020.txt
 *.pth
 *.csv
 *.txt
+*.tar.gz
+
 
 
