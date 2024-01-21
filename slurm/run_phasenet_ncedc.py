@@ -223,5 +223,7 @@ if __name__ == "__main__":
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={"token": token, "region": "NC", "root_path": "./", "config": {"world_size": world_size}},
+        run_name=f"phasenet-{year}",
+        enable_caching=False,
     )
 # %%
