@@ -89,10 +89,10 @@ def parse_phase_pick(line, event_id, event_time):
     }
     if phase_pick["phase_polarity"][0] == ".":
         phase_pick["phase_polarity"] = "N"
-    elif phase_pick["phase_polarity"][0] == "c":
-        phase_pick["phase_polarity"] = "D"
-    elif phase_pick["phase_polarity"][0] == "d":
+    elif phase_pick["phase_polarity"][0] in ["c", "+", "u"]:
         phase_pick["phase_polarity"] = "U"
+    elif phase_pick["phase_polarity"][0] in ["d", "-", "r"]:
+        phase_pick["phase_polarity"] = "D"
     else:
         print(f"Unknown polarity: {phase_pick['phase_polarity']}")
         phase_pick["phase_polarity"] = "N"
