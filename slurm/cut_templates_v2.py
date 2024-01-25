@@ -112,6 +112,7 @@ def extract_template_numpy(
                 station_loc,
                 [phase_type.lower() for _ in range(len(station_loc))],
                 vel={"p": 6.0, "s": 6.0 / 1.73},
+                eikonal=config["eikonal"],
             ).squeeze()
 
             phase_timestamp_pred = event["event_timestamp"] + traveltime
@@ -358,6 +359,17 @@ if __name__ == "__main__":
 
     with open(f"{root_path}/{result_path}/config.json", "w") as f:
         json.dump(config["cctorch"], f, indent=4, sort_keys=True)
+
+    # %%
+    # Eikonal for 1D velocity model
+    zz = [0.0, 5.5, 16.0, 32.0]
+    vp = [5.5, 5.5, 6.7, 7.8]
+    vp_vs_ratio = 1.73
+    vs = [v / vp_vs_ratio for v in vp]
+    h = 0.3
+    vel = {"z": zz, "p": vp, "s": vs}
+    eikonal = {"vel": vel, "h": h, "xlim": [0, 200], "ylim": [0, 200], "zlim": [0, 30]}
+    config["cctorch"]["eikonal"] = gamma.seismic_ops.initialize_eikonal(eikonal)
 
     # %%
     dirs = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??"))
