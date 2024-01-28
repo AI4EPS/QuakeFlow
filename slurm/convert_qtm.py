@@ -61,27 +61,29 @@ if __name__ == "__main__":
     # %%
     root_path = "local"
     region = "demo"
+
+    # %%
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
 
     # %%
-    reult_path = f"{region}/qtm"
+    result_path = f"{region}/qtm"
 
     # %%
-    with open(f"{root_path}/{reult_path}/config.json", "r") as fp:
+    with open(f"{root_path}/{result_path}/config.json", "r") as fp:
         config = json.load(fp)
     config["min_cc_score"] = 0.6
     config["min_cc_diff"] = 0.0
 
-    h5_list = sorted(list(glob(f"{root_path}/{reult_path}/ccpairs/*.h5")))
+    h5_list = sorted(list(glob(f"{root_path}/{result_path}/ccpairs/*.h5")))
 
     # %%
-    picks = pd.read_csv(f"{root_path}/{reult_path}/picks.csv", parse_dates=["phase_time"])
+    picks = pd.read_csv(f"{root_path}/{result_path}/picks.csv", parse_dates=["phase_time"])
     picks["travel_time"] = picks["phase_timestamp"] - picks["event_timestamp"]
 
     # %%
-    mseeds = pd.read_csv(f"{root_path}/{reult_path}/mseed_list.csv", parse_dates=["begin_time"])
+    mseeds = pd.read_csv(f"{root_path}/{result_path}/mseed_list.csv", parse_dates=["begin_time"])
 
     # %% Interpolation
     # dt = 0.01
@@ -109,9 +111,9 @@ if __name__ == "__main__":
                     pair_list.append([h5, id1])
                     num_pair += len(gp1.keys())
 
-        ncpu = max(1, min(32, mp.cpu_count() - 1))
-        pbar = tqdm(total=len(pair_list), desc="Extracting pairs")
+        ncpu = max(1, min(16, mp.cpu_count() - 1))
         print(f"Total pairs: {num_pair}. Using {ncpu} cores.")
+        pbar = tqdm(total=len(pair_list), desc="Extracting pairs")
 
         ## Debug
         # for pair in pair_list:
@@ -129,21 +131,19 @@ if __name__ == "__main__":
         pbar.close()
 
         data = list(data)
-        print(f"Valid pairs: {len(data)}")
 
     # %%
     detects = pd.DataFrame(data, columns=["event_time", "cc_score", "station_id", "phase_type", "template_index"])
     detects["cc_score"] = detects["cc_score"].round(3)
-    detects.sort_values(by="event_time", inplace=True)
-    detects.to_csv(f"{root_path}/{reult_path}/qtm_detects.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
-    print(f"Number of detected phases: {len(detects)}")
+    # detects.sort_values(by="event_time", inplace=True)
+    # detects.to_csv(f"{root_path}/{result_path}/qtm_detects.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
+    # print(f"Number of detected phases: {len(detects)}")
 
     # %%
     t0 = detects["event_time"].min()
     detects["timestamp"] = detects["event_time"].apply(lambda x: (x - t0).total_seconds())
     clustering = DBSCAN(eps=3, min_samples=3).fit(detects[["timestamp"]])
     detects["event_index"] = clustering.labels_
-    detects = detects[detects["event_index"] != -1]
 
     events = (
         detects.groupby("event_index")
@@ -153,11 +153,39 @@ if __name__ == "__main__":
     events.rename(columns={"station_id": "num_station"}, inplace=True)
     events["event_time"] = events["timestamp"].apply(lambda x: t0 + pd.to_timedelta(x, unit="s"))
     events.sort_values(by="event_time", inplace=True)
+    events = events[events["event_index"] != -1]
     if "timestamp" in events.columns:
         events.drop(columns=["timestamp"], inplace=True)
     events["cc_score"] = events["cc_score"].round(3)
-    events.to_csv("qtm_events.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
+    events.to_csv(f"{root_path}/{result_path}/qtm_events.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
     print(f"Number of associated events: {len(events)}")
+
+    detects.sort_values(by="event_time", inplace=True)
+    if "timestamp" in detects.columns:
+        detects.drop(columns=["timestamp"], inplace=True)
+    detects.to_csv(f"{root_path}/{result_path}/qtm_detects.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
+    print(f"Number of detected phases: {len(detects)}")
+    print(f"Number of associated phases: {len(detects[detects['event_index'] != -1])}")
+
+    # # %%
+    # root_path = "local"
+    # region = "demo"
+    # events = pd.read_csv(f"{root_path}/{result_path}/qtm_events.csv", parse_dates=["event_time"])
+    # detects = pd.read_csv(f"{root_path}/{result_path}/qtm_detects.csv", parse_dates=["event_time"])
+    # print(f"Number of associated events: {len(events)}")
+    # print(f"Number of detected phases: {len(detects)}")
+
+    # # %%
+    # events = events[
+    #     (events["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
+    #     & (events["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
+    # ]
+    # detects = detects[
+    #     (detects["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
+    #     & (detects["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
+    # ]
+    # print(f"Number of associated events: {len(events)}")
+    # print(f"Number of detected phases: {len(detects)}")
 
     # # %%
     # plt.figure()
@@ -169,6 +197,7 @@ if __name__ == "__main__":
     #     s=10 ** detects["cc_score"],
     #     alpha=0.6,
     # )
+    # # plt.xlim(pd.to_datetime("2019-07-04T17:00:00"), pd.to_datetime("2019-07-04T18:0:00"))
     # plt.savefig("debug_qtm_detects.png")
     # # plt.show()
 
@@ -182,6 +211,7 @@ if __name__ == "__main__":
     #     c=[f"C{x}" if x != -1 else "k" for x in detects["event_index"]],
     #     s=10 ** detects["cc_score"],
     # )
+    # # plt.xlim(pd.to_datetime("2019-07-04T17:00:00"), pd.to_datetime("2019-07-04T18:0:00"))
     # ylim = plt.ylim()
     # xlim = plt.xlim()
     # for i, row in catalog.iterrows():
@@ -189,3 +219,16 @@ if __name__ == "__main__":
     # plt.ylim(ylim)
     # plt.xlim(xlim)
     # plt.savefig("debug_qtm_events.png")
+
+    # # %%
+    # # density plot of detected phases
+    # plt.figure(figsize=(20, 5))
+    # plt.hist(detects["event_time"], bins=pd.date_range(detects["event_time"].min(), detects["event_time"].max(), freq="3s"))
+    # ylim = plt.ylim()
+    # xlim = plt.xlim()
+    # for i, row in catalog.iterrows():
+    #     plt.plot([row["time"], row["time"]], ylim, "-k", alpha=0.3, linewidth=0.5)
+    # plt.ylim(ylim)
+    # plt.xlim(xlim)
+    # # plt.show()
+    # plt.savefig("debug_qtm_events_hist.png")
