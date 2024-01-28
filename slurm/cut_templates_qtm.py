@@ -174,6 +174,7 @@ if __name__ == "__main__":
     # %%
     root_path = "local"
     region = "demo"
+    rank = 0
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
@@ -192,20 +193,27 @@ if __name__ == "__main__":
 
     # %%
     picks = pd.read_csv(
+        # f"{root_path}/{region}/results/phase_association/picks_{rank:03d}.csv",
         f"{root_path}/{region}/results/phase_association/picks.csv",
         parse_dates=["phase_time"],
     )
     picks = picks[picks["event_index"] != -1]
     picks["phase_time"] = picks["phase_time"].apply(lambda x: pd.to_datetime(x, utc=True))
     picks["phase_timestamp"] = picks["phase_time"].apply(lambda x: x.timestamp())
+    print(f"{len(picks) = }")
+    print(picks.iloc[:5])
 
-    picks = picks[
-        (picks["phase_time"] > pd.to_datetime("2019-07-04T17:00:00", utc=True))
-        & (picks["phase_time"] < pd.to_datetime("2019-07-04T18:00:00", utc=True))
-    ]
-    # picks = picks[picks["event_index"] == (picks["event_index"].unique()[0])]
+    # DEBUG TM
+    # picks = picks[
+    #     (picks["phase_time"] > pd.to_datetime("2019-07-04T17:00:00", utc=True))
+    #     & (picks["phase_time"] < pd.to_datetime("2019-07-04T18:00:00", utc=True))
+    # ]
+    # picks = picks[(picks["event_index"] == 1253.0) | (picks["event_index"] == 270.0) | (picks["event_index"] == 272.0)]
+    # picks = picks[(picks["event_index"] == 1253.0)] # 270
+    # picks = picks[(picks["event_index"] == 270.0)]  # 270
     # print(picks)
-    # print(len(picks))
+    # print(f"{len(picks) = }")
+    # print(f"{len(picks['event_index'].unique()) = }")
     ################## debuging ##################
     # tmp = picks[picks["event_index"] == 1528]
     # tmp["event_index"] = 1527
@@ -226,6 +234,7 @@ if __name__ == "__main__":
     print(stations.iloc[:5])
 
     # %%
+    # events = pd.read_csv(f"{root_path}/{region}/results/phase_association/events_{rank:03d}.csv", parse_dates=["time"])
     events = pd.read_csv(f"{root_path}/{region}/results/phase_association/events.csv", parse_dates=["time"])
     events = events[events["time"].notna()]
     # events.sort_values(by="time", inplace=True)
