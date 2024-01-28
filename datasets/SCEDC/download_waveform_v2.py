@@ -33,6 +33,7 @@ waveform_path = f"continuous_waveforms"
 
 # %%
 def cut_data(event_file):
+    print(event_file)
     input_fs = fsspec.filesystem(input_protocol, anon=True)
     output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
@@ -64,8 +65,8 @@ def cut_data(event_file):
         for _, pick in phases_.loc[[event.event_id]].iterrows():
             outfile_path = f"{result_path}/waveform_mseed/{event.time.year}/{event.time.year}.{event.time.dayofyear:03d}/{event.event_id}_{begin_time.strftime('%Y%m%d%H%M%S')}"
             outfile_name = f"{pick.network}.{pick.station}.{pick.location}.{pick.instrument}.mseed"
-            # if output_fs.exists(f"{outfile_path}/{outfile_name}"):
-            #     continue
+            if output_fs.exists(f"{outfile_path}/{outfile_name}"):
+                continue
 
             ########### NCEDC ###########
             # inv_path = f"{station_path}/{pick.network}.info/{pick.network}.FDSN.xml/{pick.network}.{pick.station}.xml"
@@ -157,7 +158,7 @@ if __name__ == "__main__":
     ncpu = min(mp.cpu_count(), 32)
     fs = fsspec.filesystem(output_protocol, token=output_token)
     event_list = sorted(list(fs.glob(f"{result_path}/catalog/????/*.event.csv")), reverse=True)
-    start_year = "1967"
+    start_year = "1999"
     end_year = "2023"
     tmp = []
     for event_file in event_list:
@@ -170,7 +171,7 @@ if __name__ == "__main__":
             and event_file.split("/")[-2] <= end_year
         ):
             tmp.append(event_file)
-    event_list = sorted(tmp, reverse=True)
+    event_list = sorted(tmp, reverse=False)
 
     pbar = tqdm(event_list, total=len(event_list))
     ctx = mp.get_context("spawn")

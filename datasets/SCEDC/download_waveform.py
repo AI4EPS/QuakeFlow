@@ -130,8 +130,8 @@ if __name__ == "__main__":
     # fs = fsspec.filesystem(output_protocol, token=output_token)
     fs = output_fs
     event_list = sorted(list(fs.glob(f"{result_path}/catalog/????/*.event.csv")), reverse=False)
-    start_year = "1967"
-    end_year = "2022"
+    start_year = "1999"
+    end_year = "2023"
     tmp = []
     for event_file in event_list:
         if (
@@ -143,7 +143,7 @@ if __name__ == "__main__":
             and event_file.split("/")[-2] <= end_year
         ):
             tmp.append(event_file)
-    event_list = sorted(tmp, reverse=True)
+    event_list = sorted(tmp, reverse=False)
 
     for event_file in event_list:
         print(event_file)
