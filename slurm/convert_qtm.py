@@ -36,9 +36,8 @@ def extract_picks(pair, detects, config, mseeds, picks):
 
             cc_score = ds["cc_score"][:]  # [nch, nsta, nev]
             cc_index = ds["cc_index"][:]  # [nch, nsta, nev]
-            # neighbor_score = ds["neighbor_score"][:]  # [nch, nsta, nev]
 
-            select_idx = cc_score > min_cc_score
+            select_idx = np.where(cc_score >= min_cc_score)
             cc_score = cc_score[select_idx]
             cc_index = cc_index[select_idx]
 
@@ -190,4 +189,3 @@ if __name__ == "__main__":
     # plt.ylim(ylim)
     # plt.xlim(xlim)
     # plt.savefig("debug_qtm_events.png")
-    # # plt.xlim(pd.Timestamp("2019-07-04T18:00:00"), pd.Timestamp("2019-07-04T18:10:00"))

@@ -16,6 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
     parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
+    return parser.parse_args()
 
 
 args = parse_args()
@@ -81,13 +82,24 @@ for station_id in unique_station_ids:
 with open(f"{root_path}/{region}/qtm/pairs.txt", "w") as fp:
     fp.write("\n".join([f"{x[0]},{x[1]}" for x in pairs]))
 
+## based on GPU memory
+batch = 256
+block_size1 = 1
+block_size2 = 10_000  # ~7GB
+
+# %%
+base_cmd = f"../CCTorch/run.py --mode=TM --pair_list={root_path}/{region}/qtm/pairs.txt --data_list1={root_path}/{region}/qtm/mseed_list.txt --data_format1=mseed --data_path2={root_path}/{region}/qtm/template.dat --data_format2=memmap --config={root_path}/{region}/qtm/config.json --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c  --result_path={root_path}/{region}/qtm/ccpairs"
+
 # %%
 num_gpu = torch.cuda.device_count()
-base_cmd = f"python ../CCTorch/run.py --mode=TM --pair_list={root_path}/{region}/qtm/pairs.txt --data_list1={root_path}/{region}/qtm/mseed_list.txt --data_format1=mseed --data_path2={root_path}/{region}/qtm/template.dat --data_format2=memmap --config={root_path}/{region}/qtm/config.json --batch_size=128 --block_size1=1 --block_size2=128 --normalize --reduce_c  --result_path={root_path}/{region}/qtm/ccpairs"
 if num_gpu == 0:
-    os.system(f"{base_cmd} --device=cpu")
-    # os.system(f"{base_cmd} --device=mps")
+    if os.uname().sysname == "Darwin":
+        os.system(f"python {base_cmd} --device=mps")
+    else:
+        os.system(f"python {base_cmd} --device=cpu")
+elif num_gpu == 1:
+    os.system(f"python {base_cmd}")
 else:
-    os.system(base_cmd)
+    os.system(f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}")
 
 # %%
