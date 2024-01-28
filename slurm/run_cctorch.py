@@ -17,12 +17,11 @@ def parse_args():
 
 
 args = parse_args()
-
 # %%
 root_path = args.root_path
 region = args.region
 
-result_path = f"{region}/templates"
+result_path = f"{region}/cctorch"
 if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")
 

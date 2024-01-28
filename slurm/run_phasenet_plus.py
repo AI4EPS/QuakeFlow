@@ -10,7 +10,6 @@ def run_phasenet(
     region: str,
     config: Dict,
     rank: int = 0,
-    model_path: str = "../PhaseNet/",
     data_type: str = "continuous",
     overwrite: bool = False,
     mseed_list: List = None,
@@ -151,9 +150,10 @@ def run_association(
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
-    #
+    # %%
     PS_RATIO = 1.73
     VP = 6.0
+
     # %%
     data_path = f"{region}/phasenet_plus"
     result_path = f"{region}/phasenet_plus"
@@ -218,6 +218,49 @@ def run_association(
     # %%
     # plt.figure(figsize=(10, 5))
     # plt.scatter(
+    #     picks["phase_time"],
+    #     picks["station_id"].map(mapping),
+    #     # c=[f"C{x}" if x != -1 else "k" for x in picks["phase_type"]],
+    #     c=["b" if x == "P" else "r" if x == "S" else "k" for x in picks["phase_type"]],
+    #     marker=".",
+    #     s=3,
+    # )
+    # plt.scatter([], [], c="b", label="P")
+    # plt.scatter([], [], c="r", label="S")
+    # plt.legend(loc="upper right")
+    # plt.ylabel("Station #")
+    # plt.xlim(pd.Timestamp("2019-07-04T17:40:00"), pd.Timestamp("2019-07-04T17:45:00"))
+    # # plt.xlim(pd.Timestamp("2019-07-04T18:01:50"), pd.Timestamp("2019-07-04T18:05:00"))
+    # plt.savefig("demo_phasenet_plus_picks.png")
+
+    # plt.figure(figsize=(10, 5))
+    # plt.scatter(
+    #     events["event_time"],
+    #     events["station_id"].map(mapping),
+    #     # c=[f"C{x}" if x != -1 else "k" for x in events["event_index"]],
+    #     c=["g" for x in events["event_index"]],
+    #     marker="x",
+    #     s=10,
+    # )
+    # plt.scatter(
+    #     picks["phase_time"],
+    #     picks["station_id"].map(mapping),
+    #     # c=[f"C{x}" if x != -1 else "k" for x in picks["event_index"]],
+    #     c=["b" if x == "P" else "r" if x == "S" else "k" for x in picks["phase_type"]],
+    #     marker=".",
+    #     s=3,
+    #     alpha=0.2,
+    # )
+    # plt.scatter([], [], c="b", label="P")
+    # plt.scatter([], [], c="r", label="S")
+    # plt.scatter([], [], c="g", marker="x", label="Event OT")
+    # plt.legend(loc="upper right")
+    # plt.ylabel("Station #")
+    # plt.xlim(pd.Timestamp("2019-07-04T17:40:00"), pd.Timestamp("2019-07-04T17:45:00"))
+    # plt.savefig("demo_phasenet_plus_events.png")
+
+    # plt.figure(figsize=(10, 5))
+    # plt.scatter(
     #     events["event_time"],
     #     events["station_id"].map(mapping),
     #     c=[f"C{x}" if x != -1 else "k" for x in events["event_index"]],
@@ -227,11 +270,20 @@ def run_association(
     # plt.scatter(
     #     picks["phase_time"],
     #     picks["station_id"].map(mapping),
-    #     c=[f"C{x}" if x != -1 else "k" for x in picks["event_index"]],
+    #     # c=[f"C{x}" if x != -1 else "k" for x in picks["event_index"]],
+    #     c=["b" if x == "P" else "r" if x == "S" else "k" for x in picks["phase_type"]],
     #     marker=".",
     #     s=3,
+    #     alpha=0.2,
     # )
+    # plt.scatter([], [], c="b", label="P")
+    # plt.scatter([], [], c="r", label="S")
+    # plt.scatter([], [], c="k", marker="x", label="Event OT")
+    # plt.legend(loc="upper right")
+    # plt.ylabel("Station #")
     # plt.xlim(pd.Timestamp("2019-07-04T17:40:00"), pd.Timestamp("2019-07-04T17:45:00"))
+    # # plt.xlim(pd.Timestamp("2019-07-04T18:01:50"), pd.Timestamp("2019-07-04T18:05:00"))
+    # plt.savefig("demo_phasenet_plus.png")
 
     # %%
     events.to_csv(f"{root_path}/{result_path}/phasenet_plus_association_events_{rank:03d}.csv", index=False)

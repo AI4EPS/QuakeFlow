@@ -80,25 +80,12 @@ def extract_template_numpy(
     # %%
     stations = stations.set_index("station_id")
     for i, pick in picks_.iterrows():
-        template_ = np.zeros((6, 1, config["nt"]), dtype=np.float32)
-        snr_ = np.zeros((6, 1), dtype=np.float32)
-        traveltime_ = np.zeros((2, 1), dtype=np.float32)
-        traveltime_index_ = np.zeros((2, 1), dtype=np.int32)
-        traveltime_type_ = np.zeros((2, 1), dtype=np.int32)
-
         station_id = pick["station_id"]
-        phase_type = pick["phase_type"]
-        if phase_type == "P":
-            k = 0
-        elif phase_type == "S":
-            k = 1
-        else:
-            raise ValueError(f"Unknown phase type: {phase_type}")
         station = stations.loc[station_id]
         event = events.loc[pick["event_index"]]
         empty_data = True
         for c in station["component"]:
-            c_index = k * 3 + config["component_mapping"][c]  # 012 for P, 345 for S
+            c_idx = config["component_mapping"][c]  # 012 for P, 345 for S
 
             if f"{station_id}{c}" in waveforms_dict:
                 trace = waveforms_dict[f"{station_id}{c}"]
@@ -110,13 +97,15 @@ def extract_template_numpy(
                     continue
                 begin_time_index = max(0, int(begin_time * trace.stats.sampling_rate))
                 end_time_index = max(0, int(end_time * trace.stats.sampling_rate))
-                traveltime_[k, 0] = (
+                traveltime_array[i, 0, 0] = (
                     begin_time_index / trace.stats.sampling_rate
                     + config["time_before"]
                     + trace_starttime
                     - event["event_timestamp"]
                 )  ## define traveltime at the exact data point
-                traveltime_index_[k, 0] = begin_time_index + int(config["time_before"] * trace.stats.sampling_rate)
+                traveltime_index_array[i, 0, 0] = begin_time_index + int(
+                    config["time_before"] * trace.stats.sampling_rate
+                )
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
 
                 if len(trace_data) < config["nt"]:
@@ -126,8 +115,7 @@ def extract_template_numpy(
                     continue
 
                 empty_data = False
-                if traveltime_type_[k, 0] == 1:  ## only use auto picks
-                    template_[c_index, 0, : config["nt"]] = trace_data[: config["nt"]]
+                template_array[i, c_idx, 0, : config["nt"]] = trace_data[: config["nt"]]
                 ################## debuging ##################
                 # import matplotlib.pyplot as plt
                 # import scipy.interpolate
@@ -151,15 +139,9 @@ def extract_template_numpy(
                 s = np.std(trace_data[-int(config["time_after"] * config["sampling_rate"]) :])
                 n = np.std(trace_data[: int(config["time_before"] * config["sampling_rate"])])
                 if n == 0:
-                    snr_[c_index, 0] = 0
+                    snr_array[i, c_idx, 0] = 0
                 else:
-                    snr_[c_index, 0] = s / n
-
-        template_array[i] = template_
-        traveltime_array[i] = traveltime_
-        traveltime_index_array[i] = traveltime_index_
-        traveltime_type_array[i] = traveltime_type_
-        snr_array[i] = snr_
+                    snr_array[i, c_idx, 0] = s / n
 
         with lock:
             template_array.flush()
@@ -192,6 +174,7 @@ if __name__ == "__main__":
     # %%
     root_path = "local"
     region = "demo"
+    rank = 0
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
@@ -210,13 +193,27 @@ if __name__ == "__main__":
 
     # %%
     picks = pd.read_csv(
+        # f"{root_path}/{region}/results/phase_association/picks_{rank:03d}.csv",
         f"{root_path}/{region}/results/phase_association/picks.csv",
         parse_dates=["phase_time"],
     )
     picks = picks[picks["event_index"] != -1]
     picks["phase_time"] = picks["phase_time"].apply(lambda x: pd.to_datetime(x, utc=True))
     picks["phase_timestamp"] = picks["phase_time"].apply(lambda x: x.timestamp())
+    print(f"{len(picks) = }")
+    print(picks.iloc[:5])
 
+    # DEBUG TM
+    # picks = picks[
+    #     (picks["phase_time"] > pd.to_datetime("2019-07-04T17:00:00", utc=True))
+    #     & (picks["phase_time"] < pd.to_datetime("2019-07-04T18:00:00", utc=True))
+    # ]
+    # picks = picks[(picks["event_index"] == 1253.0) | (picks["event_index"] == 270.0) | (picks["event_index"] == 272.0)]
+    # picks = picks[(picks["event_index"] == 1253.0)] # 270
+    # picks = picks[(picks["event_index"] == 270.0)]  # 270
+    # print(picks)
+    # print(f"{len(picks) = }")
+    # print(f"{len(picks['event_index'].unique()) = }")
     ################## debuging ##################
     # tmp = picks[picks["event_index"] == 1528]
     # tmp["event_index"] = 1527
@@ -229,7 +226,7 @@ if __name__ == "__main__":
     stations = pd.read_json(f"{root_path}/{region}/results/data/stations.json", orient="index")
     stations["station_id"] = stations.index
     # %% filter stations without picks
-    stations = stations[stations["station_id"].isin(picks.groupby("station_id").size().index)]
+    stations = stations[stations["station_id"].isin(picks["station_id"].unique())]
     stations.reset_index(drop=True, inplace=True)  # index used in memmap array
     stations.to_json(f"{root_path}/{result_path}/stations.json", orient="index", indent=4)
     stations.to_csv(f"{root_path}/{result_path}/stations.csv", index=True)
@@ -237,6 +234,7 @@ if __name__ == "__main__":
     print(stations.iloc[:5])
 
     # %%
+    # events = pd.read_csv(f"{root_path}/{region}/results/phase_association/events_{rank:03d}.csv", parse_dates=["time"])
     events = pd.read_csv(f"{root_path}/{region}/results/phase_association/events.csv", parse_dates=["time"])
     events = events[events["time"].notna()]
     # events.sort_values(by="time", inplace=True)
@@ -284,16 +282,22 @@ if __name__ == "__main__":
     picks = picks.merge(events, on="event_index", suffixes=("_station", "_event"))
     # picks.set_index("event_index", inplace=True)
     picks["event_index"] = picks["event_index"].astype(int)
-    picks["event_station_id"] = picks["event_index"].astype(str) + "." + picks["station_id"]
+    picks["event_phase_station_id"] = (
+        picks["event_index"].astype(str) + "/" + picks["phase_type"] + "/" + picks["station_id"]
+    )
+    picks.to_csv(f"{root_path}/{result_path}/picks.csv", index=False)
+    picks["event_phase_station_id"].to_csv(
+        f"{root_path}/{result_path}/event_phase_station_id.txt", index=False, header=False
+    )
 
     # %%
     nt = int((config["cctorch"]["time_before"] + config["cctorch"]["time_after"]) * config["cctorch"]["sampling_rate"])
     config["cctorch"]["nt"] = nt
-    nch = 6  ## For [P,S] phases and [E,N,Z] components
+    nch = 3  ## For [P,S] phases and [E,N,Z] components  ## Seperate P and S phases
     npk = len(picks)
     print(f"npk: {npk}, nch: {nch}, nt: {nt}")
     template_shape = (npk, nch, 1, nt)
-    traveltime_shape = (npk, nch // 3, 1)
+    traveltime_shape = (npk, 1, 1)
     snr_shape = (npk, nch, 1)
     config["cctorch"]["template_shape"] = template_shape
     config["cctorch"]["traveltime_shape"] = traveltime_shape
@@ -379,9 +383,9 @@ if __name__ == "__main__":
 
     pbar.close()
 
-    # %%
-    mseeds = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??/*.mseed"))
-    mseeds = ["/".join(x.split("/")[-3:]) for x in mseeds]
-    generate_pairs(picks, mseeds, fname=f"{root_path}/{result_path}/mseed_pick_pairs.txt")
+    # # %%
+    # mseeds = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??/*.mseed"))
+    # mseeds = ["/".join(x.split("/")[-3:]) for x in mseeds]
+    # generate_pairs(picks, mseeds, fname=f"{root_path}/{result_path}/mseed_pick_pairs.txt")
 
 # %%

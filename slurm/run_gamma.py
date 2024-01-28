@@ -178,6 +178,7 @@ def run_gamma(
         ## add assignment to picks
         assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
         picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({"event_index": int})
+        picks.sort_values(["phase_time"], inplace=True)
         with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
             picks.to_csv(
                 fp,

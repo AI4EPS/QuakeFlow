@@ -35,6 +35,10 @@ def download_waveform(
             if location == "":
                 location = "__"
             path = f"s3://{bucket}/{year}/{year}_{dayofyear}/{network}{station:_<5}{instrument}{component}_{location}{year}{dayofyear}.ms"
+        if provider.lower() == "ncedc":
+            year = starttime.strftime("%Y")
+            dayofyear = starttime.strftime("%j")
+            path = f"s3://{bucket}/{network}/{year}/{year}.{dayofyear}/{station}.{network}.{instrument}{component}.{location}.D.{year}.{dayofyear}"
         else:
             raise ValueError(f"Unknown provider: {provider}")
         return path
@@ -211,8 +215,8 @@ def download_waveform(
         starttimes = np.array_split(starttimes, num_nodes)[rank]
         print(f"rank {rank}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
 
-        if provider.lower() == "scedc":
-            cloud_config = {"provider": provider, "bucket": "scedc-pds/continuous_waveforms"}
+        if provider.lower() in ["scedc", "ncedc"]:
+            cloud_config = {"provider": provider.lower(), "bucket": f"{provider.lower()}-pds/continuous_waveforms"}
         else:
             cloud_config = None
 
