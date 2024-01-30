@@ -190,67 +190,67 @@ if __name__ == "__main__":
     events.to_csv(f"{root_path}/{result_path}/qtm_events.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
     print(f"Number of associated events: {len(events)}")
 
-    # %%
-    ###### Debug ######
-    root_path = "local"
-    region = "demo"
-    result_path = f"{region}/qtm"
-    events = pd.read_csv(f"{root_path}/{result_path}/qtm_events.csv", parse_dates=["event_time"])
-    detects = pd.read_csv(f"{root_path}/{result_path}/qtm_detects.csv", parse_dates=["event_time", "phase_time"])
-    catalog = pd.read_csv(f"{root_path}/{region}/results/data/catalog.csv", parse_dates=["time"])
-    mapping = {k: v for v, k in enumerate(detects["station_id"].unique())}
+    # # %%
+    # ###### Debug ######
+    # root_path = "local"
+    # region = "demo"
+    # result_path = f"{region}/qtm"
+    # events = pd.read_csv(f"{root_path}/{result_path}/qtm_events.csv", parse_dates=["event_time"])
+    # detects = pd.read_csv(f"{root_path}/{result_path}/qtm_detects.csv", parse_dates=["event_time", "phase_time"])
+    # catalog = pd.read_csv(f"{root_path}/{region}/results/data/catalog.csv", parse_dates=["time"])
+    # mapping = {k: v for v, k in enumerate(detects["station_id"].unique())}
 
-    print(f"Number of associated events: {len(events)}")
-    print(f"Number of detected phases: {len(detects)}")
+    # print(f"Number of associated events: {len(events)}")
+    # print(f"Number of detected phases: {len(detects)}")
 
-    # %%
-    plt.figure(figsize=(10, 5))
-    bins = pd.date_range(start=detects["event_time"].min(), end=detects["event_time"].max(), periods=30)
-    plt.hist(events["event_time"], bins=bins, edgecolor="k", linewidth=0.5, label=f"QTM ({len(events)})")
-    plt.hist(catalog["time"], bins=bins, edgecolor="k", linewidth=0.5, alpha=0.5, label=f"Catalog ({len(catalog)})")
-    plt.savefig("debug_qtm_events_hist.png", dpi=300)
+    # # %%
+    # plt.figure(figsize=(10, 5))
+    # bins = pd.date_range(start=detects["event_time"].min(), end=detects["event_time"].max(), periods=30)
+    # plt.hist(events["event_time"], bins=bins, edgecolor="k", linewidth=0.5, label=f"QTM ({len(events)})")
+    # plt.hist(catalog["time"], bins=bins, edgecolor="k", linewidth=0.5, alpha=0.5, label=f"Catalog ({len(catalog)})")
+    # plt.savefig("debug_qtm_events_hist.png", dpi=300)
 
-    # %%
-    events = events[
-        (events["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
-        & (events["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
-    ]
-    detects = detects[
-        (detects["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
-        & (detects["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
-    ]
-    print(f"Selected associated events: {len(events)}")
-    print(f"Selected detected phases: {len(detects)}")
-    # %%
-    plt.figure(figsize=(20, 5))
-    plt.scatter(
-        detects["event_time"],
-        detects["station_id"].map(mapping),
-        c=[f"C{x}" if x != -1 else "k" for x in detects["event_index"]],
-        # s=10 ** detects["cc_score"],
-        s=1,
-    )
-    ylim = plt.ylim()
-    xlim = plt.xlim()
-    for i, row in catalog.iterrows():
-        plt.plot([row["time"], row["time"]], ylim, "-k", alpha=0.3, linewidth=0.5)
-    plt.ylim(ylim)
-    plt.xlim(xlim)
-    plt.savefig("debug_qtm_events.png", dpi=300)
+    # # %%
+    # events = events[
+    #     (events["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
+    #     & (events["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
+    # ]
+    # detects = detects[
+    #     (detects["event_time"] >= pd.to_datetime("2019-07-04T23:00:00"))
+    #     & (detects["event_time"] <= pd.to_datetime("2019-07-05T00:00:00"))
+    # ]
+    # print(f"Selected associated events: {len(events)}")
+    # print(f"Selected detected phases: {len(detects)}")
+    # # %%
+    # plt.figure(figsize=(20, 5))
+    # plt.scatter(
+    #     detects["event_time"],
+    #     detects["station_id"].map(mapping),
+    #     c=[f"C{x}" if x != -1 else "k" for x in detects["event_index"]],
+    #     # s=10 ** detects["cc_score"],
+    #     s=1,
+    # )
+    # ylim = plt.ylim()
+    # xlim = plt.xlim()
+    # for i, row in catalog.iterrows():
+    #     plt.plot([row["time"], row["time"]], ylim, "-k", alpha=0.3, linewidth=0.5)
+    # plt.ylim(ylim)
+    # plt.xlim(xlim)
+    # plt.savefig("debug_qtm_events.png", dpi=300)
 
-    # %%
-    plt.figure(figsize=(20, 5))
-    plt.scatter(
-        detects["phase_time"],
-        detects["station_id"].map(mapping),
-        c=[f"C{x}" if x != -1 else "k" for x in detects["event_index"]],
-        # s=2 ** detects["cc_score"],
-        s=1,
-    )
-    ylim = plt.ylim()
-    xlim = plt.xlim()
-    for i, row in catalog.iterrows():
-        plt.plot([row["time"], row["time"]], ylim, "-k", alpha=0.3, linewidth=0.5)
-    plt.ylim(ylim)
-    plt.xlim(xlim)
-    plt.savefig("debug_qtm_phases.png", dpi=300)
+    # # %%
+    # plt.figure(figsize=(20, 5))
+    # plt.scatter(
+    #     detects["phase_time"],
+    #     detects["station_id"].map(mapping),
+    #     c=[f"C{x}" if x != -1 else "k" for x in detects["event_index"]],
+    #     # s=2 ** detects["cc_score"],
+    #     s=1,
+    # )
+    # ylim = plt.ylim()
+    # xlim = plt.xlim()
+    # for i, row in catalog.iterrows():
+    #     plt.plot([row["time"], row["time"]], ylim, "-k", alpha=0.3, linewidth=0.5)
+    # plt.ylim(ylim)
+    # plt.xlim(xlim)
+    # plt.savefig("debug_qtm_phases.png", dpi=300)
