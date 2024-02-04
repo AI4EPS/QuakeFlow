@@ -20,13 +20,14 @@ os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 # %%
 protocol = "gs"
-token = "/home/zhuwq/.config/gcloud/application_default_credentials.json"
+token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
 # token = "cloud"
 bucket = "quakeflow_dataset"
 
 # root_path = "dataset"
-root_path = f"{bucket}/NC"
-mseed_path = f"{root_path}/waveform_mseed"
+region = "NC"
+root_path = f"{bucket}/{region}"
+mseed_path = f"{root_path}/waveform_mseed2"
 catalog_path = f"{root_path}/catalog"
 station_path = f"{root_path}/station"
 result_path = f"waveform_h5"
@@ -150,9 +151,14 @@ def convert(i, year):
             phases = phases.sort_index()
 
             event_ids = sorted(fs_.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
-            event_ids = [x.split("/")[-1] for x in event_ids]
-            for event_id in event_ids:
+            event_fnames = [x.split("/")[-1] for x in event_ids]
+            event_ids = [x.split("/")[-1].split("_")[0] for x in event_ids]
+            for event_id, event_fname in zip(event_ids, event_fnames):
                 if event_id not in events.index:
+                    continue
+
+                if event_id in fp:
+                    print(f"Duplicate {event_id}: {event_fname}")
                     continue
 
                 gp = fp.create_group(event_id)
@@ -163,9 +169,9 @@ def convert(i, year):
                 gp.attrs["depth_km"] = events.loc[event_id, "depth_km"]
                 gp.attrs["magnitude"] = events.loc[event_id, "magnitude"]
                 gp.attrs["magnitude_type"] = events.loc[event_id, "magnitude_type"]
-                gp.attrs["source"] = "NC"
+                gp.attrs["source"] = region
 
-                mseed_list = sorted(list(fs_.glob(f"{mseed_path}/{year}/{jday}/{event_id}/*.mseed")))
+                mseed_list = sorted(list(fs_.glob(f"{mseed_path}/{year}/{jday}/{event_fname}/*.mseed")))
                 st = obspy.Stream()
                 for file in mseed_list:
                     with fs_.open(file, "rb") as f:
@@ -258,9 +264,12 @@ def convert(i, year):
                         continue
 
                     pick = picks_[picks_["event_id"] == event_id].iloc[0]  # after sort_value
-                    ds.attrs["azimuth"] = pick.azimuth
-                    ds.attrs["distance_km"] = pick.distance_km
-                    ds.attrs["takeoff_angle"] = pick.takeoff_angle
+                    if "azimuth" in pick:
+                        ds.attrs["azimuth"] = pick.azimuth
+                    if "takeoff_angle" in pick:
+                        ds.attrs["distance_km"] = pick.distance_km
+                    if "takeoff_angle" in pick:
+                        ds.attrs["takeoff_angle"] = pick.takeoff_angle
 
                     tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
                     if (tmp - 300 < 0) or (tmp + 300 >= NT):

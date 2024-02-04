@@ -121,7 +121,7 @@ def convert(i, year):
 
     # %%
     with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
-        jdays = sorted(fs_.ls(f"{mseed_path}/{year}"))[::-1]
+        jdays = sorted(fs_.ls(f"{mseed_path}/{year}"), reverse=True)
         jdays = [x.split("/")[-1] for x in jdays]
         for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i, leave=True):
             ## NCEDC
@@ -165,6 +165,9 @@ def convert(i, year):
                 if event_id not in events.index:
                     continue
 
+                if event_id in fp:
+                    print(f"Duplicate {event_id}: {event_fname}")
+                    continue
                 gp = fp.create_group(event_id)
                 gp.attrs["event_id"] = event_id
                 gp.attrs["event_time"] = events.loc[event_id, "time"].strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -326,6 +329,7 @@ if __name__ == "__main__":
     # %%
     years = sorted(fs.ls(mseed_path), reverse=True)
     years = [x.split("/")[-1] for x in years]
+    # years = ["2023"]
 
     ncpu = len(years)
     ctx = mp.get_context("spawn")
