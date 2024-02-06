@@ -52,8 +52,8 @@ def run_gamma(
         picks["phase_amplitude"] = picks["phase_amp"]
     if "phase_amplitude" in picks.columns:
         picks["amp"] = picks["phase_amplitude"]
-        # FIXME: hard-coded from nano to milli
-        picks["amp"] = picks["amp"] / 1e3
+        # FIXME: hard-coded converting nano m/s
+        picks["amp"] = picks["amp"] / 1e9
     picks["type"] = picks["phase_type"]
     picks["prob"] = picks["phase_score"]
 
