@@ -34,7 +34,7 @@ region = "NC"
 root_path = f"{bucket}/{region}"
 mseed_path = f"{root_path}/waveform_mseed2"
 catalog_path = f"{root_path}/catalog"
-#station_path = f"{root_path}/station"
+# station
 station_path = f"{root_path}/FDSNstationXML"
 xml_files = fs.glob(f"{station_path}/*.info/*.FDSN.xml/*.*.xml")
 inventory = Inventory()
@@ -43,6 +43,9 @@ print("it takes around 15 minutes")
 for xml_file in tqdm(xml_files):
     with fs.open(xml_file, 'rb') as f:
         inventory.extend(read_inventory(f, level='channel'))
+# # load local stationxml file
+# print("loading local local stationxml file, should be within 30 seconds.")
+# inventory = read_inventory("/data/sjh2019/NC_Dataset_Polarity/STATIONXML/nc_channel_level.stationxml")
 result_path = f"waveform_h5"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
@@ -147,7 +150,7 @@ def convert(i, year):
     # %%
     with h5py.File(f"{result_path}/{year}.h5", "w") as fp, open(f"{result_path}/{year}.skipped.csv", "w") as cw:
         jdays = sorted(fs_.ls(f"{mseed_path}/{year}"), reverse=False)
-        jdays = [x.split("/")[-1] for x in jdays][0:1]
+        jdays = [x.split("/")[-1] for x in jdays]
         for jday in tqdm(jdays, total=len(jdays), desc=f"{year}", position=i, leave=True):
             tmp = datetime.strptime(jday, "%Y.%j")
 
@@ -176,7 +179,7 @@ def convert(i, year):
             phases = phases.sort_index()
 
             event_ids = sorted(fs_.ls(f"{mseed_path}/{year}/{jday}"), reverse=True)
-            event_ids = [x.split("/")[-1] for x in event_ids][0:10]
+            event_ids = [x.split("/")[-1] for x in event_ids]
             for tmp_event_id in event_ids:
                 event_id, tmp_time_string = tmp_event_id.split('_')
                 if event_id not in events.index:
