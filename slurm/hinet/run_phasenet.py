@@ -35,7 +35,7 @@ def run_phasenet(
     waveform_dir = f"{region}/waveforms"
 
     if mseed_list is None:
-        mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????-???/*.sac"))
+        mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????-???/??/*.sac"))
     else:
         with open(f"{root_path}/{region}/{mseed_list}", "r") as fp:
             mseed_list = fp.read().split("\n")
@@ -43,7 +43,8 @@ def run_phasenet(
     # %% group channels
     mseed_3c = defaultdict(list)
     for mseed in mseed_list:
-        mseed_3c[mseed.replace(".sac", "")[:-1]].append(mseed)
+        # B.sac is for station N.WJMF.EB
+        mseed_3c[mseed.replace("B.sac", "").replace(".sac", "")[:-1]].append(mseed)
     mseed_3c = [",".join(sorted(v)) for k, v in mseed_3c.items()]
 
     # %%

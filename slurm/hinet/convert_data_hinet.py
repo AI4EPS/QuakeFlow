@@ -54,8 +54,10 @@ for cnt in win32_list:
     ctable = "/".join(tmp[:-1]) + "/" + tmp[-1][:13] + ".ch"
     # stations.extend(parse_ch(ctable))
     outdir = f"{mseed_path}/{'/'.join(tmp[-folder_depth:-1])}"
-    win32.extract_sac(data=cnt, ctable=ctable, suffix="sac", outdir=outdir)
-
+    try:
+        win32.extract_sac(data=cnt, ctable=ctable, suffix="sac", outdir=outdir)
+    except Exception as e:
+        print(e)
 
 # %%
 # stations_raw = pd.DataFrame(stations).copy()
