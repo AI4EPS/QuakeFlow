@@ -8,8 +8,8 @@ from HinetPy import Client
 
 # %%
 codes = ["0101", "0103"]
-USERNAME = "zhuwq"
-PASSWORD = "64Fding"
+USERNAME = ""
+PASSWORD = ""
 client = Client(timeout=120, retries=6)
 client.login(USERNAME, PASSWORD)
 
