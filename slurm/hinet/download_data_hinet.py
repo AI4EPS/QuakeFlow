@@ -13,9 +13,10 @@ PASSWORD = ""
 client.login(USERNAME, PASSWORD)
 
 # %%
-start_date = pd.to_datetime("2024-02-01")
-end_date = pd.to_datetime("2024-02-04")
-dates = pd.date_range(start_date, end_date, freq="D")
+start_date = pd.to_datetime("2024-01-01")
+end_date = pd.to_datetime("2024-01-04")
+span = 60  # minutes
+dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span))
 
 # %%
 root_path = "local"
@@ -25,13 +26,18 @@ if not os.path.exists(result_path):
     os.makedirs(result_path)
 
 # %%
+code = "0101"
 for date in dates:
     print(f"Downloading data for {date}")
-    outdir = f"{result_path}/{date.strftime('%Y-%j')}"
+    outdir = f"{result_path}/{date.strftime('%Y-%j/%H')}"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    if os.path.exists(f"{outdir}/{code}_{date.strftime('%Y%m%d%H%M')}_{span}.cnt"):
+        print(f"Data already exists for {date}")
+        continue
+
     client.get_continuous_waveform(
-        code="0101", starttime=date.strftime("%Y-%m-%dT%H:%M:%S.%f"), span=1440, outdir=outdir, threads=3
+        code=code, starttime=date.strftime("%Y-%m-%dT%H:%M:%S.%f"), span=span, outdir=outdir, threads=3
     )
 # %%

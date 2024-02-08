@@ -10,7 +10,8 @@ from HinetPy import win32
 # %%
 root_path = "local"
 region = "hinet"
-folder_depth = 2  # year-jday/cntfiles
+# folder_depth = 2 # year-jday/cntfiles
+folder_depth = 3  # year-jday/hour/cntfiles
 win32_path = f"{root_path}/{region}/win32"
 win32_list = glob(f"{win32_path}/**/*.cnt", recursive=True)
 
