@@ -48,39 +48,39 @@ def parse_ch(ctable):
 
 
 # %%
-stations = []
+# stations = []
 for cnt in win32_list:
     tmp = cnt.split("/")
     ctable = "/".join(tmp[:-1]) + "/" + tmp[-1][:13] + ".ch"
-    stations.extend(parse_ch(ctable))
+    # stations.extend(parse_ch(ctable))
     outdir = f"{mseed_path}/{'/'.join(tmp[-folder_depth:-1])}"
     win32.extract_sac(data=cnt, ctable=ctable, suffix="sac", outdir=outdir)
 
 
 # %%
-stations_raw = pd.DataFrame(stations).copy()
-stations = pd.DataFrame(stations)
-stations = stations.drop_duplicates()
-stations = (
-    stations.groupby(["network", "station"])
-    .agg(
-        {
-            "latitude": "first",
-            "longitude": "first",
-            "elevation_m": "first",
-            "location": "first",
-            "instrument": "first",
-            "component": lambda x: ",".join(sorted(set(x))),
-        }
-    )
-    .reset_index()
-)
-stations["station_id"] = (
-    stations["network"] + "." + stations["station"] + "." + stations["location"] + "." + stations["instrument"]
-)
-stations.to_csv(f"{station_path}/stations.csv", index=False)
-stations.set_index("station_id", inplace=True)
-stations.to_json(f"{station_path}/stations.json", orient="index", indent=2)
+# stations_raw = pd.DataFrame(stations).copy()
+# stations = pd.DataFrame(stations)
+# stations = stations.drop_duplicates()
+# stations = (
+#     stations.groupby(["network", "station"])
+#     .agg(
+#         {
+#             "latitude": "first",
+#             "longitude": "first",
+#             "elevation_m": "first",
+#             "location": "first",
+#             "instrument": "first",
+#             "component": lambda x: ",".join(sorted(set(x))),
+#         }
+#     )
+#     .reset_index()
+# )
+# stations["station_id"] = (
+#     stations["network"] + "." + stations["station"] + "." + stations["location"] + "." + stations["instrument"]
+# )
+# stations.to_csv(f"{station_path}/stations.csv", index=False)
+# stations.set_index("station_id", inplace=True)
+# stations.to_json(f"{station_path}/stations.json", orient="index", indent=2)
 
 
 # %%
