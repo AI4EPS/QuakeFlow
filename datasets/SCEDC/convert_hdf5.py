@@ -303,6 +303,13 @@ def convert(i, year):
                     try:
                         inv = obspy.read_inventory(f"{station_path}/{network}/{network}_{station}.xml")
                     except Exception as e:
+                        try:
+                            fs_.get(
+                                f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
+                                f"{station_path}/{network}/{network}_{station}.xml",
+                            )
+                        except:
+                            pass
                         logging.error(f"{event_id}/{station_channel_id} has invalid station metadata: {e}")
                         continue
                     inv = inv.select(starttime=obspy.UTCDateTime(begin_time))

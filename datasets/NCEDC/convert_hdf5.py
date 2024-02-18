@@ -202,7 +202,7 @@ def convert(i, year):
                     continue
 
                 if event_id in fp:
-                    logging.warn(f"Duplicate {event_id}: {event_fname}")
+                    logging.warning(f"Duplicate {event_id}: {event_fname}")
                     continue
 
                 gp = fp.create_group(event_id)
@@ -251,7 +251,7 @@ def convert(i, year):
                             )
                         )
                         if index0 > 3000:
-                            logging.warn(f"{event_id}/{mseed} has index0 > 3000")
+                            logging.warning(f"{event_id}/{mseed} has index0 > 3000")
                             break
 
                         if index0 > 0:
@@ -284,14 +284,26 @@ def convert(i, year):
                                 f"{station_path}/{network}.info/{network}.FDSN.xml/{network}.{station}.xml",
                             )
                         else:
-                            logging.warn(
+                            logging.warning(
                                 f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml does not exist"
                             )
                             continue
 
-                    inv = obspy.read_inventory(
-                        f"{station_path}/{network}.info/{network}.FDSN.xml/{network}.{station}.xml"
-                    )
+                    try:
+                        inv = obspy.read_inventory(
+                            f"{station_path}/{network}.info/{network}.FDSN.xml/{network}.{station}.xml"
+                        )
+                    except Exception as e:
+                        try:
+                            fs_.get(
+                                f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml",
+                                f"{station_path}/{network}.info/{network}.FDSN.xml/{network}.{station}.xml",
+                            )
+                        except:
+                            pass
+                        logging.error(f"{event_id}/{station_channel_id} has invalid station metadata: {e}")
+                        continue
+
                     inv = inv.select(starttime=obspy.UTCDateTime(begin_time))
 
                     # get channel orientations
@@ -339,7 +351,7 @@ def convert(i, year):
                         or abs(np.dot(vec1, vec3)) > epsilon
                         or abs(np.dot(vec2, vec3)) > epsilon
                     ):
-                        logging.warn(f"{event_id}/{station_channel_id} has invalid channel orientations")
+                        logging.warning(f"{event_id}/{station_channel_id} has invalid channel orientations")
                         continue
                     if (
                         (abs(azimuth1 - 90) < epsilon)
@@ -360,7 +372,7 @@ def convert(i, year):
                             array[0, :], azimuth1, dip1, array[1, :], azimuth2, dip2, array[2, :], azimuth3, dip3
                         )
                         array[:] = np.array(znewaveforms)[[2, 1, 0], :]  # ZNE -> ENZ
-                        logging.warn(
+                        logging.warning(
                             f"{event_id}/{station_channel_id} rotate from {components}:({azimuth1}, {dip1}; {azimuth2}, {dip2}; {azimuth3}, {dip3}) to ENZ: (90, 0; 0, 0; 0, -90)"
                         )
                         # assign zeros if one component has very low values
@@ -369,18 +381,18 @@ def convert(i, year):
 
                     station_id = f"{network}.{station}.{location}"
                     if station_id not in phases_by_station.index:
-                        logging.warn(f"{event_id}/{station_id} sation not in phase picks")
+                        logging.warning(f"{event_id}/{station_id} sation not in phase picks")
                         continue
                     picks_ = phases_by_station.loc[[station_id]]
                     picks_ = picks_[(picks_["phase_time"] > begin_time) & (picks_["phase_time"] < end_time)]
                     if len(picks_[picks_["event_id"] == event_id]) == 0:
-                        logging.warn(f"{event_id}/{station_id} no phase picks")
+                        logging.warning(f"{event_id}/{station_id} no phase picks")
                         continue
 
                     pick = picks_[picks_["event_id"] == event_id].iloc[0]  # after sort_value
                     tmp = int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate))
                     if (tmp - 300 < 0) or (tmp + 300 >= NT):
-                        logging.warn(f"{event_id}/{station_id} picks out of time range")
+                        logging.warning(f"{event_id}/{station_id} picks out of time range")
                         continue
 
                     snr = calc_snr(array, int(round((pick.phase_time - begin_time).total_seconds() * sampling_rate)))
@@ -406,7 +418,9 @@ def convert(i, year):
                         except:
                             channel_dip.append("none")
                     if 90.0 in channel_dip:
-                        logging.warn(f"{event_id}/{station_id}: {phase_picking_channel_x} {channel_dip} has 90.0 dip")
+                        logging.warning(
+                            f"{event_id}/{station_id}: {phase_picking_channel_x} {channel_dip} has 90.0 dip"
+                        )
                     phase_polarity = flip_polarity(phase_polarity, channel_dip)
 
                     # save to hdf5
@@ -449,7 +463,7 @@ def convert(i, year):
                     has_station = True
 
                 if not has_station:
-                    logging.warn(f"{event_id} has no stations")
+                    logging.warning(f"{event_id} has no stations")
                     del fp[event_id]
 
 
