@@ -315,7 +315,13 @@ def convert(i, year):
                     inv = inv.select(starttime=obspy.UTCDateTime(begin_time))
 
                     # get channel orientations
-                    orientations = [inv.get_channel_metadata(tr.id, tr.stats.starttime) for tr in st]
+                    try:
+                        orientations = [inv.get_channel_metadata(tr.id, tr.stats.starttime) for tr in st]
+                    except:
+                        logging.error(
+                            f"{event_id}/{station_channel_id} {[(tr.id, tr.stats.starttime) for tr in st]} has invalid channel metadata"
+                        )
+                        continue
                     # if channel metadata is missing or no data
                     if len(orientations) != len(st) or len(orientations) == 0:
                         print(f"{event_id}/{station_channel_id} has no channel metadata or no data")
