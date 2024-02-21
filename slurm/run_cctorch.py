@@ -21,7 +21,7 @@ args = parse_args()
 root_path = args.root_path
 region = args.region
 
-result_path = f"{region}/cctorch"
+result_path = f"{region}/cctorch/ccpairs"
 if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")
 
@@ -47,10 +47,10 @@ if args.dtct_pair:
     print(f"Number of pairs from hypodd dt.ct: {len(lines)}")
     with open(f"{root_path}/{region}/hypodd/event_pairs.txt", "w") as fp:
         fp.writelines(lines)
-    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/hypodd/event_pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{region}/cctorch/ccpairs"
+    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/hypodd/event_pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
 
 else:
-    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/cctorch/event_pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{region}/cctorch/ccpairs"
+    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/cctorch/event_pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
 num_gpu = torch.cuda.device_count()
 if num_gpu == 0:
     if os.uname().sysname == "Darwin":

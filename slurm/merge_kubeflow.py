@@ -134,8 +134,10 @@ if __name__ == "__main__":
 
     def parse_args():
         parser = argparse.ArgumentParser()
-        parser.add_argument("--root_path", type=str, default="local", help="root path")
-        parser.add_argument("--region", type=str, default="demo", help="region")
+        # parser.add_argument("--root_path", type=str, default="local", help="root path")
+        # parser.add_argument("--region", type=str, default="demo", help="region")
+        parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
+        parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
         parser.add_argument("--num_nodes", type=int, default=1)
         parser.add_argument("--bucket", type=str, default="quakeflow_share")
         parser.add_argument("--protocol", type=str, default="file")
@@ -150,6 +152,8 @@ if __name__ == "__main__":
     if os.path.exists(args.token_file):
         with open(args.token_file, "r") as fp:
             token = json.load(fp)
+    else:
+        token = None
 
     if args.protocol == "file":
         with open(f"{root_path}/{region}/config.json", "r") as fp:
