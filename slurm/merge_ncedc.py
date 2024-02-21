@@ -18,7 +18,8 @@ folder = "NC/phasenet"
 fs = fsspec.filesystem(protocol, token=token)
 
 # %%
-csv_list = fs.glob(f"{bucket}/{folder}/ncedc-pds/continuous_waveforms/??/2023/2023.???/*.csv")
+csv_list = fs.glob(f"{bucket}/{folder}/??/2023/2023.365/*.csv")  ## choose year and jday
+print(f"Save {len(csv_list)} CSV files")
 with open("csv_list.txt", "w") as fp:
     fp.write("\n".join(csv_list))
 
@@ -30,5 +31,3 @@ for csv in csv_list:
     df = pd.read_csv(fs.open(csv, "r"))
     print(df)
     raise
-
-# %%
