@@ -2,6 +2,8 @@
 ##  Important: Before downloading
 # - Make sure on Hinet website you select which stations and networks you want to download continuous waveform data for and then run this notebook (ie Hinet vs Fnet data and which province(s))
 import os
+import threading
+from datetime import datetime
 
 import pandas as pd
 from HinetPy import Client
@@ -10,15 +12,21 @@ from HinetPy import Client
 codes = ["0101", "0103"]
 USERNAME = ""
 PASSWORD = ""
-client = Client(timeout=120, retries=6)
-client.login(USERNAME, PASSWORD)
+TIMEOUT = 60 # seconds
+client = Client(user=USERNAME, password=PASSWORD, timeout=TIMEOUT, retries=1)
 
 # %%
 root_path = "local"
 region = "hinet"
 result_path = f"{root_path}/{region}/win32"
+backup_path = f"{root_path}/{region}/backup"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
+if not os.path.exists(backup_path):
+    os.makedirs(backup_path)
+for code in codes:
+    if not os.path.exists(f"{backup_path}/{code}"):
+        os.makedirs(f"{backup_path}/{code}")
 
 # %%
 client.select_stations("0101", ["N.SHKH", "N.TGIH", "N.AMZH", "N.WMZH", "N.UCUH", "N.YGDH", "N.SUZH"])
@@ -56,14 +64,13 @@ stations.to_json(f"{root_path}/{region}/results/data/stations.json", orient="ind
 
 
 # %%
-start_date = pd.to_datetime("2024-01-01")
-end_date = pd.to_datetime("2024-01-04")
+start_date = pd.to_datetime("2023-01-01")
+end_date = pd.to_datetime("2023-01-02")
+# end_date = pd.to_datetime(datetime.now().strftime("%Y-%m-%d"))
 span = 60  # minutes
-dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span))
-
+dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span), inclusive="left")[::-1]
 
 # %%
-
 for date in dates:
     print(f"Downloading data for {date}")
     outdir = f"{result_path}/{date.strftime('%Y-%j/%H')}"
@@ -76,7 +83,25 @@ for date in dates:
             print(f"Data already exists for {date}")
             continue
 
-        client.get_continuous_waveform(
-            code=code, starttime=date.strftime("%Y-%m-%dT%H:%M:%S.%f"), span=span, outdir=outdir, threads=3
-        )
+        # client.get_continuous_waveform(
+        #     code=code, starttime=date.strftime("%Y-%m-%dT%H:%M:%S.%f"), span=span, outdir=outdir, threads=3
+        # )
+
+        thread = threading.Thread(target=client.get_continuous_waveform, kwargs={
+            "code": code,
+            "starttime": date.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "span": span,
+            "outdir": outdir,
+            "threads": 3,
+            "cleanup": False
+        })
+        thread.start()
+        thread.join(TIMEOUT)
+        if thread.is_alive():
+            print(f"Timeout for {code} {date}")
+            #FIXME: downloading F-Net data will cause timeout
+            if os.path.exists(f"{code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch"):
+                os.system(f"mv {code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch {outdir}/{code}_{date.strftime('%Y%m%d')}.ch")
+        os.system(f"mv ./*.cnt {backup_path}/{code}/")
+
 # %%
