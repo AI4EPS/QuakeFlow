@@ -157,6 +157,7 @@ def cart2dir(X):
 
 # %%
 def convert_jday(jday, catalog_path, result_path, protocol, token):
+    inv_dict = {}
     fs_ = fsspec.filesystem(protocol=protocol, token=token)
     ## NCEDC
     # tmp = datetime.strptime(jday, "%Y.%j")
@@ -295,18 +296,22 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                                 f"{event_id}/{station_channel_id} has no station metadata: {station_path}/{network}/{network}_{station}.xml"
                             )
                         continue
-
-                try:
-                    inv = obspy.read_inventory(f"{station_path}/{network}/{network}_{station}.xml")
-                except Exception as e:
+                
+                if f"{network}.{station}" not in inv_dict:
                     try:
-                        fs_.get(
-                                f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
-                                f"{station_path}/{network}/{network}_{station}.xml",
-                            )
-                    except:
-                        logging.error(f"{event_id}/{station_channel_id} has invalid station metadata: {e}")
-                    continue
+                        inv = obspy.read_inventory(f"{station_path}/{network}/{network}_{station}.xml")
+                        inv_dict[f"{network}.{station}"] = inv
+                    except Exception as e:
+                        try:
+                            fs_.get(
+                                    f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
+                                    f"{station_path}/{network}/{network}_{station}.xml",
+                                )
+                        except:
+                            logging.error(f"{event_id}/{station_channel_id} has invalid station metadata: {e}")
+                        continue
+                else:
+                    inv = inv_dict[f"{network}.{station}"]
                 inv = inv.select(starttime=obspy.UTCDateTime(begin_time))
 
                 # get channel orientations
