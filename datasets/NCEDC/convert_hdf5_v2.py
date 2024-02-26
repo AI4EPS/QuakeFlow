@@ -36,7 +36,7 @@ bucket = "quakeflow_dataset"
 fs = fsspec.filesystem(protocol=protocol, token=token)
 
 # root_path = "dataset"
-region = "SC"
+region = "NC"
 root_path = f"{bucket}/{region}"
 mseed_path = f"{root_path}/waveform_mseed"
 catalog_path = f"{root_path}/catalog"
@@ -160,22 +160,25 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
     inv_dict = {}
     fs_ = fsspec.filesystem(protocol=protocol, token=token)
     ## NCEDC
-    # tmp = datetime.strptime(jday, "%Y.%j")
-    # with fs.open(f"{catalog_path}/{tmp.year:04d}/{tmp.year:04d}_{tmp.jday:02d}.event.csv", "rb") as f:
-    # SCEDC
+    tmp = datetime.strptime(jday, "%Y.%j")
+    year, month, day = f"{tmp.year:04d}", f"{tmp.month:02d}", f"{tmp.day:02d}"
     year, dayofyear = jday.split(".")
     if not os.path.exists(f"{result_path}/{year}"):
         os.makedirs(f"{result_path}/{year}")
     with h5py.File(f"{result_path}/{year}/{dayofyear}.h5", "w") as fp:
-        with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.event.csv", "rb") as f:
+
+        ## NCEDC
+        with fs.open(f"{catalog_path}/{year}.{month}.event.csv", "rb") as f:
+        ## SCEDC
+        # with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.event.csv", "rb") as f:
             events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f")
         events["time"] = pd.to_datetime(events["time"])
         events.set_index("event_id", inplace=True)
 
         ## NCEDC
-        # with fs.open(f"{catalog_path}/{tmp.year:04d}/{tmp.year:04d}_{tmp.jday:02d}.phase.csv", "rb") as f:
+        with fs.open(f"{catalog_path}/{year}.{month}.phase.csv", "rb") as f:
         ## SCEDC
-        with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.phase.csv", "rb") as f:
+        # with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.phase.csv", "rb") as f:
             phases = pd.read_csv(
                     f,
                     parse_dates=["phase_time"],
@@ -281,16 +284,26 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                 network, station, location, instrument = station_channel_id.split(".")
 
                 if not os.path.exists(f"{station_path}/{network}/{network}_{station}.xml"):
-                    if fs_.exists(f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml"):
+                ## NCEDC
+                    if fs_.exists(
+                        f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml"
+                    ):
+
                         fs_.get(
-                                f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
-                                f"{station_path}/{network}/{network}_{station}.xml",
-                            )
-                    elif fs_.exists(f"{root_path}/FDSNstationXML/unauthoritative-XML/{network}_{station}.xml"):
-                        fs_.get(
-                                f"{root_path}/FDSNstationXML/unauthoritative-XML/{network}_{station}.xml",
-                                f"{station_path}/{network}/{network}_{station}.xml",
-                            )
+                            f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml",
+                            f"{station_path}/{network}/{network}_{station}.xml",
+                        )
+                ## SCEDC
+                #     if fs_.exists(f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml"):
+                #         fs_.get(
+                #                 f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
+                #                 f"{station_path}/{network}/{network}_{station}.xml",
+                #             )
+                #     elif fs_.exists(f"{root_path}/FDSNstationXML/unauthoritative-XML/{network}_{station}.xml"):
+                #         fs_.get(
+                #                 f"{root_path}/FDSNstationXML/unauthoritative-XML/{network}_{station}.xml",
+                #                 f"{station_path}/{network}/{network}_{station}.xml",
+                #             )
                     else:
                         logging.warning(
                                 f"{event_id}/{station_channel_id} has no station metadata: {station_path}/{network}/{network}_{station}.xml"
@@ -303,10 +316,16 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                         inv_dict[f"{network}.{station}"] = inv
                     except Exception as e:
                         try:
+                            ## NCEDC
                             fs_.get(
-                                    f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
-                                    f"{station_path}/{network}/{network}_{station}.xml",
-                                )
+                                f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml",
+                                f"{station_path}/{network}/{network}.{station}.xml",
+                            )
+                            ## SCEDC
+                            # fs_.get(
+                            #         f"{root_path}/FDSNstationXML/{network}/{network}_{station}.xml",
+                            #         f"{station_path}/{network}/{network}_{station}.xml",
+                            #     )
                         except:
                             logging.error(f"{event_id}/{station_channel_id} has invalid station metadata: {e}")
                         continue
@@ -488,7 +507,6 @@ if __name__ == "__main__":
     years = sorted(fs.ls(mseed_path), reverse=True)
     years = [x.split("/")[-1] for x in years]
     # years = ["2022"]
-    years = [x for x in years if int(x) <= 2017]
     MAX_THREADS = 32
     for year in years:
         jdays = sorted(fs.ls(f"{mseed_path}/{year}"), reverse=False)
@@ -512,7 +530,7 @@ if __name__ == "__main__":
                 with h5py.File(f"{result_path}/{year}/{dayofyear}.h5", "r") as f:
                     for event_id in f:
                         f.copy(event_id, fp)
-        
+
         os.system(f"rm -rf {result_path}/{year}")
 
     # convert(0, "2019")
