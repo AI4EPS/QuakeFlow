@@ -164,7 +164,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
     year, month, day = f"{tmp.year:04d}", f"{tmp.month:02d}", f"{tmp.day:02d}"
     year, dayofyear = jday.split(".")
     if not os.path.exists(f"{result_path}/{year}"):
-        os.makedirs(f"{result_path}/{year}")
+        os.makedirs(f"{result_path}/{year}", exist_ok=True)
     with h5py.File(f"{result_path}/{year}/{dayofyear}.h5", "w") as fp:
 
         ## NCEDC
@@ -508,30 +508,36 @@ if __name__ == "__main__":
     years = [x.split("/")[-1] for x in years]
     # years = ["2022"]
     MAX_THREADS = 32
-    for year in years:
-        jdays = sorted(fs.ls(f"{mseed_path}/{year}"), reverse=False)
-        jdays = [x.split("/")[-1] for x in jdays]
-        pbar = tqdm(jdays, total=len(jdays), desc=f"{year}", leave=True)
-        # for jday in jdays[1:]:
-        #     convert_jday(jday, catalog_path, result_path, protocol, token)
-        #     pbar.update(1)
-        # raise
-        ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=MAX_THREADS) as pool:
-            for jday in jdays:
-                pool.apply_async(convert_jday, args=(jday, catalog_path, result_path, protocol, token), callback=lambda x: pbar.update(1))
-            pool.close()
-            pool.join()
-        pbar.close()
-    
-        with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
-            for jday in tqdm(jdays):
-                year, dayofyear = jday.split(".")
-                with h5py.File(f"{result_path}/{year}/{dayofyear}.h5", "r") as f:
-                    for event_id in f:
-                        f.copy(event_id, fp)
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=MAX_THREADS) as pool:
+        for year in years:
+            jdays = sorted(fs.ls(f"{mseed_path}/{year}"), reverse=False)
+            jdays = [x.split("/")[-1] for x in jdays]
+            pbar = tqdm(jdays, total=len(jdays), desc=f"{year}", leave=True)
+            # for jday in jdays[1:]:
+            #     convert_jday(jday, catalog_path, result_path, protocol, token)
+            #     pbar.update(1)
+            # raise
 
-        os.system(f"rm -rf {result_path}/{year}")
+            processes = []
+            for jday in jdays:
+                p = pool.apply_async(convert_jday, args=(jday, catalog_path, result_path, protocol, token), callback=lambda x: pbar.update(1))
+                processes.append(p)
+            for p in processes:
+                try:
+                    print(p.get())
+                except Exception as e:
+                    print(f"Error: {e}")
+            pbar.close()
+        
+            with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
+                for jday in tqdm(jdays):
+                    year, dayofyear = jday.split(".")
+                    with h5py.File(f"{result_path}/{year}/{dayofyear}.h5", "r") as f:
+                        for event_id in f:
+                            f.copy(event_id, fp)
+            
+            os.system(f"rm -rf {result_path}/{year}")
 
     # convert(0, "2019")
     # raise
