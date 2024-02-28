@@ -501,6 +501,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                 logging.warning(f"{event_id} has no stations")    
                 del fp[event_id]
 
+    return None
 
 if __name__ == "__main__":
     # %%
@@ -525,7 +526,9 @@ if __name__ == "__main__":
                 processes.append(p)
             for p in processes:
                 try:
-                    print(p.get())
+                    out = p.get()
+                    if out is not None:
+                        print(out)
                 except Exception as e:
                     print(f"Error: {e}")
             pbar.close()
