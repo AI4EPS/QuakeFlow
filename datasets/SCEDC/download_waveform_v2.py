@@ -14,7 +14,6 @@ matplotlib.use("Agg")
 warnings.filterwarnings("ignore")
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
-
 # %%
 input_protocol = "s3"
 input_bucket = "scedc-pds"
