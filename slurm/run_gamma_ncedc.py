@@ -1,9 +1,16 @@
+# %%
+import argparse
+import json
+import os
+from pathlib import Path
 from typing import Dict, List, NamedTuple
 
-from kfp import dsl
+import pandas as pd
+from kfp import compiler, dsl
+from kfp.client import Client
 
 
-@dsl.component(base_image="zhuwq0/quakeflow:latest")
+@dsl.component(packages_to_install=["fsspec", "gcsfs", "s3fs", "tqdm", "numpy", "pyproj", "pandas", "gmma"])
 def run_gamma(
     root_path: str,
     region: str,
@@ -28,7 +35,7 @@ def run_gamma(
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     # %%
-    result_path = f"{region}/gamma/{year:04d}/"
+    result_path = f"{region}/gamma/{year:04d}"
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
@@ -46,7 +53,9 @@ def run_gamma(
         if protocol == "file":
             picks = pd.read_csv(f"{root_path}/{picks_csv}", parse_dates=["phase_time"])
         else:
-            picks = pd.read_csv(f"{protocol}://{bucket}/{picks_csv}",  parse_dates=["phase_time"])
+            # picks = pd.read_csv(f"{protocol}://{bucket}/{picks_csv}",  parse_dates=["phase_time"])
+            with fs.open(f"{bucket}/{picks_csv}", "r") as fp:
+                picks = pd.read_csv(fp, parse_dates=["phase_time"])
     except Exception as e:
         print(f"Error reading {picks_csv}: {e}")
         return NamedTuple("outputs", events=str, picks=str)(events=gamma_events_csv, picks=gamma_picks_csv)
@@ -222,10 +231,12 @@ def run_gamma(
             f"{root_path}/{gamma_events_csv}",
             f"{bucket}/{region}/results/phase_association/events_{jday:03d}.csv",
         )
+        print(f"Uploaded {root_path}/{gamma_events_csv} to {bucket}/{region}/results/phase_association/events_{jday:03d}.csv")
         fs.put(
             f"{root_path}/{gamma_picks_csv}",
             f"{bucket}/{region}/results/phase_association/picks_{jday:03d}.csv",
         )
+        print(f"Uploaded {root_path}/{gamma_picks_csv} to {bucket}/{region}/results/phase_association/picks_{jday:03d}.csv")
 
     outputs = NamedTuple("outputs", events=str, picks=str)
     return outputs(events=gamma_events_csv, picks=gamma_picks_csv)
@@ -236,19 +247,77 @@ if __name__ == "__main__":
     import os
     import sys
 
+    import fsspec
     import pandas as pd
 
     os.environ["OMP_NUM_THREADS"] = "8"
 
+    protocol = "gs"
+    token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+    with open(token_json, "r") as fp:
+        token = json.load(fp)
+
+    fs = fsspec.filesystem(protocol, token=token)
+
+    # root_path = "local"
+    # region = "ncedc"
+    # # if len(sys.argv) > 1:
+    # #     root_path = sys.argv[1]
+    # #     region = sys.argv[2]
+    # with open(f"{root_path}/{region}/config.json", "r") as fp:
+    #     config = json.load(fp)
+
+    region = "NC"
+    bucket = "quakeflow_catalog"
     root_path = "local"
-    region = "ncedc"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
-    with open(f"{root_path}/{region}/config.json", "r") as fp:
+    with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
     year = 2023
-    # jday = 1
-    for jday in range(1, 366):
-        run_gamma.execute(root_path=root_path, region=region, config=config, year=year, jday=jday)
+
+    ## Local
+    # for jday in range(1, 366)[::-1]:
+    # for jday in [200]:
+    #     run_gamma.execute(root_path=root_path, region=region, config=config, year=year, jday=jday, protocol=protocol, token=token, bucket="quakeflow_catalog")
+    # raise
+
+    ### GCP
+    jdays = [i for i in range(1, 366)]
+    processed = fs.glob(f"{bucket}/{region}/gamma/{year}/gamma_events_???.csv")
+    processed = [int(p.split("_")[-1].split(".")[0]) for p in processed]
+    jdays = list(set(jdays) - set(processed))
+    print(f"{len(jdays) = }")
+    # jdays = [201]
+
+    world_size = min(64, len(jdays))
+    config["world_size"] = world_size
+    @dsl.pipeline
+    def run_pipeline(root_path: str, region: str, config: Dict, bucket:str, protocol:str, token: Dict = None):
+        with dsl.ParallelFor(items=jdays, parallelism=world_size) as item:
+            gamma_op = run_gamma(
+                root_path=root_path,
+                region=region,
+                config=config,
+                year=year,
+                jday=item,
+                bucket=bucket,
+                protocol=protocol,
+                token=token,
+            )
+            gamma_op.set_cpu_request("2100m")
+            gamma_op.set_memory_request("12000Mi")
+
+    client = Client("https://4fedc9c19a233c34-dot-us-west1.pipelines.googleusercontent.com")
+    run = client.create_run_from_pipeline_func(
+        run_pipeline,
+        arguments={
+            "region": region, 
+            "root_path": "./",
+            "bucket": "quakeflow_catalog",
+            "protocol": protocol,
+            "token": token, 
+            "config": config,
+        },
+        run_name=f"gamma-{year}",
+        enable_caching=False,
+    )
