@@ -9,11 +9,12 @@ import pandas as pd
 from HinetPy import Client
 
 # %%
-codes = ["0101", "0103"]
+# codes = ["0101", "0103"]
+codes = ["0101"]
 USERNAME = ""
 PASSWORD = ""
-TIMEOUT = 60 # seconds
-client = Client(user=USERNAME, password=PASSWORD, timeout=TIMEOUT, retries=1)
+TIMEOUT = 60 * 5  # seconds
+client = Client(user=USERNAME, password=PASSWORD, timeout=TIMEOUT * 10, retries=1)
 
 # %%
 root_path = "local"
@@ -62,11 +63,11 @@ stations.to_csv(f"{root_path}/{region}/results/data/stations.csv", index=False)
 stations.set_index("station_id", inplace=True)
 stations.to_json(f"{root_path}/{region}/results/data/stations.json", orient="index", indent=2)
 
-
 # %%
-start_date = pd.to_datetime("2023-01-01")
-end_date = pd.to_datetime("2023-01-02")
-# end_date = pd.to_datetime(datetime.now().strftime("%Y-%m-%d"))
+start_date = pd.to_datetime("2019-01-01")
+# end_date = pd.to_datetime("2020-01-01")
+# to japanese time zone
+end_date = pd.to_datetime(datetime.now().strftime("%Y-%m-%d"))
 span = 60  # minutes
 dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span), inclusive="left")[::-1]
 
@@ -87,21 +88,27 @@ for date in dates:
         #     code=code, starttime=date.strftime("%Y-%m-%dT%H:%M:%S.%f"), span=span, outdir=outdir, threads=3
         # )
 
-        thread = threading.Thread(target=client.get_continuous_waveform, kwargs={
-            "code": code,
-            "starttime": date.strftime("%Y-%m-%dT%H:%M:%S.%f"),
-            "span": span,
-            "outdir": outdir,
-            "threads": 3,
-            "cleanup": False
-        })
+        thread = threading.Thread(
+            target=client.get_continuous_waveform,
+            kwargs={
+                "code": code,
+                "starttime": date.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                "span": span,
+                "outdir": outdir,
+                "threads": 3,
+                "cleanup": False,
+            },
+        )
         thread.start()
         thread.join(TIMEOUT)
         if thread.is_alive():
             print(f"Timeout for {code} {date}")
-            #FIXME: downloading F-Net data will cause timeout
-            if os.path.exists(f"{code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch"):
-                os.system(f"mv {code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch {outdir}/{code}_{date.strftime('%Y%m%d')}.ch")
+            # FIXME: downloading F-Net data will cause timeout
+        if os.path.exists(f"{code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch"):
+            os.system(
+                f"mv {code[:2]}_{code[2:]}_{date.strftime('%Y%m%d')}.euc.ch {outdir}/{code}_{date.strftime('%Y%m%d')}.ch"
+            )
+
         os.system(f"mv ./*.cnt {backup_path}/{code}/")
 
 # %%

@@ -14,7 +14,8 @@ if __name__ == "__main__":
     # folder_depth = 2 # year-jday/cntfiles
     folder_depth = 3  # year-jday/hour/cntfiles
     win32_path = f"{root_path}/{region}/win32"
-    win32_list = glob(f"{win32_path}/**/*.cnt", recursive=True)
+    # win32_list = sorted(glob(f"{win32_path}/**/*.cnt", recursive=True))
+    win32_list = sorted(glob(f"{win32_path}/2024-???/??/*.cnt", recursive=True))
     print(f"Number of cnt files: {len(win32_list)}")
 
     mseed_path = f"{root_path}/{region}/waveforms"
