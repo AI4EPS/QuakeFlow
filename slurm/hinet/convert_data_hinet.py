@@ -14,8 +14,8 @@ if __name__ == "__main__":
     # folder_depth = 2 # year-jday/cntfiles
     folder_depth = 3  # year-jday/hour/cntfiles
     win32_path = f"{root_path}/{region}/win32"
-    # win32_list = sorted(glob(f"{win32_path}/**/*.cnt", recursive=True))
-    win32_list = sorted(glob(f"{win32_path}/2024-???/??/*.cnt", recursive=True))
+    win32_list = sorted(glob(f"{win32_path}/**/*.cnt", recursive=True), reverse=True)
+    # win32_list = sorted(glob(f"{win32_path}/2024-???/??/*.cnt", recursive=True))
     print(f"Number of cnt files: {len(win32_list)}")
 
     mseed_path = f"{root_path}/{region}/waveforms"
@@ -54,6 +54,9 @@ if __name__ == "__main__":
     for cnt in win32_list:
         tmp = cnt.split("/")
         ctable = "/".join(tmp[:-1]) + "/" + tmp[-1][:13] + ".ch"
+        if not os.path.exists(ctable):
+            print(f"Missing ctable: {ctable}")
+
         # check if ctable has zero size
         if os.path.getsize(cnt) == 0:
             print(f"Zero size: {cnt}")
@@ -61,6 +64,17 @@ if __name__ == "__main__":
 
         # stations.extend(parse_ch(ctable))
         outdir = f"{mseed_path}/{'/'.join(tmp[-folder_depth:-1])}"
+
+        if tmp[-1][:4] == "0101":
+            existing_sac = glob(f"{outdir}/N.*.[ENU].sac")
+            if len(existing_sac) >= 15:
+                continue
+        elif tmp[-1][:4] == "0103":
+            existing_sac = glob(f"{outdir}/N.*.[ENU]B.sac")
+            if len(existing_sac) >= 3:
+                continue
+        else:
+            raise
 
         # win32.extract_sac(data=cnt, ctable=ctable, suffix="sac", outdir=outdir)
         try:
