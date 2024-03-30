@@ -34,7 +34,7 @@ def download_waveform(
             dayofyear = starttime.strftime("%j")
             if location == "":
                 location = "__"
-            path = f"s3://{bucket}/{year}/{year}_{dayofyear}/{network}{station:_<5}{instrument}{component}_{location}{year}{dayofyear}.ms"
+            path = f"s3://{bucket}/{year}/{year}_{dayofyear}/{network}{station:_<5}{instrument}{component}{location:_<2}_{year}{dayofyear}.ms"
         if provider.lower() == "ncedc":
             year = starttime.strftime("%Y")
             dayofyear = starttime.strftime("%j")
