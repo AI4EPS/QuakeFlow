@@ -9,28 +9,36 @@ from datetime import datetime, timedelta
 from glob import glob
 from pathlib import Path
 
+import fsspec
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
 # %%
-root_path = "./"
-catalog_path = f"{root_path}/catalog/phase2k/"
-station_path = f"{root_path}/station"
-waveform_path = f"{root_path}/waveform"
-# root_path = "/ncedc-pds"
-# catalog_path = f"{root_path}/event_phases"
-# station_path = "./station"
-# waveform_path = f"{root_path}/waveform"
+input_protocol = "s3"
+input_bucket = "ncedc-pds"
+input_fs = fsspec.filesystem(input_protocol, anon=True)
 
+output_protocol = "gs"
+output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+output_bucket = "quakeflow_dataset"
+output_fs = fsspec.filesystem(output_protocol, token=output_token)
+
+# %%
+catalog_path = f"{input_bucket}/event_phases"
+station_path = f"{input_bucket}/FDSNstationXML"
+waveform_path = f"{input_bucket}/continuous_waveforms/"
+dataset_path = f"{output_bucket}/NC/catalog"
+
+# %%
 result_path = "dataset"
 if not os.path.exists(result_path):
     os.makedirs(result_path)
-if not os.path.exists(f"{result_path}/catalog"):
-    os.makedirs(f"{result_path}/catalog")
 if not os.path.exists(f"{result_path}/catalog_raw"):
     os.makedirs(f"{result_path}/catalog_raw")
+if not os.path.exists(f"{result_path}/catalog"):
+    os.makedirs(f"{result_path}/catalog")
 
 ## https://ncedc.org/ftp/pub/doc/ncsn/shadow2000.pdf
 # %%
@@ -178,9 +186,9 @@ def read_event_line(line):
             event[key] = line[start:end]
 
     if event["seconds"] < 60:
-        event[
-            "time"
-        ] = f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}:{event['seconds']:06.3f}"
+        event["time"] = (
+            f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}:{event['seconds']:06.3f}"
+        )
     else:
         tmp = datetime.fromisoformat(
             f"{event['year']}-{event['month']}-{event['day']}T{event['hour']}:{event['minute']}"
@@ -221,9 +229,9 @@ def read_phase_line(line):
             else:
                 p_phase[key] = line[start:end]
         if (p_phase["second_of_p_arrival"] < 60) and (p_phase["second_of_p_arrival"] >= 0):
-            p_phase[
-                "phase_time"
-            ] = f"{p_phase['year']}-{p_phase['month']}-{p_phase['day']}T{p_phase['hour']}:{p_phase['minute']}:{p_phase['second_of_p_arrival']:06.3f}"
+            p_phase["phase_time"] = (
+                f"{p_phase['year']}-{p_phase['month']}-{p_phase['day']}T{p_phase['hour']}:{p_phase['minute']}:{p_phase['second_of_p_arrival']:06.3f}"
+            )
         else:
             tmp = datetime.fromisoformat(
                 f"{p_phase['year']}-{p_phase['month']}-{p_phase['day']}T{p_phase['hour']}:{p_phase['minute']}"
@@ -249,9 +257,9 @@ def read_phase_line(line):
             else:
                 s_phase[key] = line[start:end]
         if (s_phase["second_of_s_arrival"] < 60) and (s_phase["second_of_s_arrival"] >= 0):
-            s_phase[
-                "phase_time"
-            ] = f"{s_phase['year']}-{s_phase['month']}-{s_phase['day']}T{s_phase['hour']}:{s_phase['minute']}:{s_phase['second_of_s_arrival']:06.3f}"
+            s_phase["phase_time"] = (
+                f"{s_phase['year']}-{s_phase['month']}-{s_phase['day']}T{s_phase['hour']}:{s_phase['minute']}:{s_phase['second_of_s_arrival']:06.3f}"
+            )
         else:
             tmp = datetime.fromisoformat(
                 f"{s_phase['year']}-{s_phase['month']}-{s_phase['day']}T{s_phase['hour']}:{s_phase['minute']}"
@@ -271,11 +279,15 @@ def read_phase_line(line):
 # %%
 # for year in range(1966, 2024)[::-1]:
 def process(year):
-    for phase_file in sorted(glob(f"{catalog_path}/{year}/*.phase.Z"))[::-1]:
+    # for phase_file in sorted(glob(f"{catalog_path}/{year}/*.phase.Z"))[::-1]:
+    # print(f"{catalog_path}/{year}/*.phase.Z")
+
+    for phase_file in sorted(input_fs.glob(f"{catalog_path}/{year}/*.phase.Z"), reverse=True):
         phase_filename = phase_file.split("/")[-1]
 
         # if not os.path.exists(f"{result_path}/catalog_raw/{phase_filename[:-2]}"):
-        shutil.copy(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
+        # shutil.copy(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
+        input_fs.get(phase_file, f"{result_path}/catalog_raw/{phase_filename}")
         os.system(f"uncompress -f {result_path}/catalog_raw/{phase_filename}")
 
         with open(f"{result_path}/catalog_raw/{phase_filename[:-2]}") as f:
@@ -342,6 +354,11 @@ def process(year):
         phases = phases[~((phases["location_weight"] == 0) & (phases["location_residual_s"] == 0))]
         phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
 
+        # %% save all events
+        tmp_name = ".".join(phase_filename.split(".")[:2])
+        events.to_csv(f"{result_path}/catalog/{tmp_name}.event.csv", index=False)
+        output_fs.put(f"{result_path}/catalog/{tmp_name}.event.csv", f"{dataset_path}/{tmp_name}.event.csv")
+
         # %%
         phases_ps = []
         event_ids = []
@@ -356,13 +373,14 @@ def process(year):
         if len(phases_ps) == 0:
             continue
         phases_ps = pd.concat(phases_ps)
-        events = events[events.event_id.isin(event_ids)]
+        # events = events[events.event_id.isin(event_ids)]
         phases = phases[phases.event_id.isin(event_ids)]
 
         # %%
-        events.to_csv(f"{result_path}/catalog/{phase_filename[:-2-6]}.event.csv", index=False)
-        phases_ps.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}_ps.csv", index=False)
-        phases.to_csv(f"{result_path}/catalog/{phase_filename[:-2]}.csv", index=False)
+        phases_ps.to_csv(f"{result_path}/catalog/{tmp_name}.phase_ps.csv", index=False)
+        phases.to_csv(f"{result_path}/catalog/{tmp_name}.phase.csv", index=False)
+        output_fs.put(f"{result_path}/catalog/{tmp_name}.phase_ps.csv", f"{dataset_path}/{tmp_name}.phase_ps.csv")
+        output_fs.put(f"{result_path}/catalog/{tmp_name}.phase.csv", f"{dataset_path}/{tmp_name}.phase.csv")
 
         # year, month = phase_filename.split("/")[-1].split(".")[0:2]
         # if not os.path.exists(f"{result_path}/catalog/{year}"):
@@ -376,6 +394,6 @@ if __name__ == "__main__":
     ctx = mp.get_context("spawn")
     # years = range(2023, 2024)[::-1]
     years = range(1966, 2024)[::-1]
-    ncpu = 16
+    ncpu = len(years)
     with ctx.Pool(processes=ncpu) as pool:
         pool.map(process, years)

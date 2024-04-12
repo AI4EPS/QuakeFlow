@@ -49,11 +49,15 @@ def filt_gamma(
     if protocol == "file":
         if not os.path.exists(f"{root_path}/{gamma_events_csv}"):
             print(f"{root_path}/{gamma_events_csv} does not exist")
-            return NamedTuple("outputs", events=str, picks=str)(events=gamma_events_filt_csv, picks=gamma_picks_filt_csv)
+            return NamedTuple("outputs", events=str, picks=str)(
+                events=gamma_events_filt_csv, picks=gamma_picks_filt_csv
+            )
     else:
         if not fs.exists(f"{bucket}/{gamma_events_csv}"):
             print(f"{bucket}/{gamma_events_csv} does not exist")
-            return NamedTuple("outputs", events=str, picks=str)(events=gamma_events_filt_csv, picks=gamma_picks_filt_csv)
+            return NamedTuple("outputs", events=str, picks=str)(
+                events=gamma_events_filt_csv, picks=gamma_picks_filt_csv
+            )
 
     # %%
     if protocol == "file":
@@ -132,23 +136,32 @@ def filt_gamma(
     # %% copy to results/phase_association
     if not os.path.exists(f"{root_path}/{region}/results/phase_association"):
         os.makedirs(f"{root_path}/{region}/results/phase_association")
-    os.system(f"cp {root_path}/{gamma_events_filt_csv} {root_path}/{region}/results/phase_association/events_{jday:03d}.csv")
-    os.system(f"cp {root_path}/{gamma_picks_filt_csv} {root_path}/{region}/results/phase_association/picks_{jday:03d}.csv")
-    
+    os.system(
+        f"cp {root_path}/{gamma_events_filt_csv} {root_path}/{region}/results/phase_association/events_{jday:03d}.csv"
+    )
+    os.system(
+        f"cp {root_path}/{gamma_picks_filt_csv} {root_path}/{region}/results/phase_association/picks_{jday:03d}.csv"
+    )
+
     if protocol != "file":
         fs.put(
             f"{root_path}/{gamma_events_filt_csv}",
             f"{bucket}/{region}/results/phase_association/events_{jday:03d}.csv",
         )
-        print(f"Uploaded {root_path}/{gamma_events_filt_csv} to {bucket}/{region}/results/phase_association/events_{jday:03d}.csv")
+        print(
+            f"Uploaded {root_path}/{gamma_events_filt_csv} to {bucket}/{region}/results/phase_association/events_{jday:03d}.csv"
+        )
         fs.put(
             f"{root_path}/{gamma_picks_filt_csv}",
             f"{bucket}/{region}/results/phase_association/picks_{jday:03d}.csv",
         )
-        print(f"Uploaded {root_path}/{gamma_picks_filt_csv} to {bucket}/{region}/results/phase_association/picks_{jday:03d}.csv")
+        print(
+            f"Uploaded {root_path}/{gamma_picks_filt_csv} to {bucket}/{region}/results/phase_association/picks_{jday:03d}.csv"
+        )
 
     outputs = NamedTuple("outputs", events=str, picks=str)
     return outputs(events=gamma_events_filt_csv, picks=gamma_picks_filt_csv)
+
 
 if __name__ == "__main__":
     import json
@@ -192,8 +205,9 @@ if __name__ == "__main__":
     # jdays = [201]
 
     config["world_size"] = world_size
+
     @dsl.pipeline
-    def run_pipeline(root_path: str, region: str, config: Dict, bucket:str, protocol:str, token: Dict = None):
+    def run_pipeline(root_path: str, region: str, config: Dict, bucket: str, protocol: str, token: Dict = None):
         with dsl.ParallelFor(items=jdays, parallelism=world_size) as item:
             gamma_op = filt_gamma(
                 root_path=root_path,
@@ -213,11 +227,11 @@ if __name__ == "__main__":
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={
-            "region": region, 
+            "region": region,
             "root_path": "./",
             "bucket": "quakeflow_catalog",
             "protocol": protocol,
-            "token": token, 
+            "token": token,
             "config": config,
         },
         run_name=f"filter-gamma-{year}",

@@ -9,6 +9,7 @@ def run_gamma(
     region: str,
     config: Dict,
     rank: int = 0,
+    wolrd_size: int = 1,
     picks_csv: str = None,
     protocol: str = "file",
     bucket: str = "",
@@ -64,17 +65,6 @@ def run_gamma(
         with fs.open(f"{bucket}/{station_json}", "r") as fp:
             stations = pd.read_json(fp, orient="index")
     stations["id"] = stations.index
-    if ("minlongitude" not in config) or ("maxlongitude" not in config):
-        config["latitude0"] = stations["latitude"].mean()
-        config["longitude0"] = stations["longitude"].mean()
-        delta_lat = stations["latitude"].max() - stations["latitude"].min()
-        delta_lon = stations["longitude"].max() - stations["longitude"].min()
-        config["minlongitude"] = stations["longitude"].min() - 0.5 * delta_lon
-        config["maxlongitude"] = stations["longitude"].max() + 0.5 * delta_lon
-        config["minlatitude"] = stations["latitude"].min() - 0.5 * delta_lat
-        config["maxlatitude"] = stations["latitude"].max() + 0.5 * delta_lat
-        config["degree2km"] = 111.1949
-
     if "longitude0" not in config:
         config["longitude0"] = (config["minlongitude"] + config["maxlongitude"]) / 2
     if "latitude0" not in config:
@@ -97,14 +87,17 @@ def run_gamma(
     # earthquake location
     config["vel"] = {"p": 6.0, "s": 6.0 / 1.75}
     config["dims"] = ["x(km)", "y(km)", "z(km)"]
-    config["x(km)"] = (
-        np.array([config["minlongitude"] - config["longitude0"], config["maxlongitude"] - config["longitude0"]])
-        * config["degree2km"]
-        * np.cos(np.deg2rad(config["latitude0"]))
-    )
-    config["y(km)"] = (
-        np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
-        * config["degree2km"]
+    # config["x(km)"] = (
+    #     np.array([config["minlongitude"] - config["longitude0"], config["maxlongitude"] - config["longitude0"]])
+    #     * config["degree2km"]
+    #     * np.cos(np.deg2rad(config["latitude0"]))
+    # )
+    # config["y(km)"] = (
+    #     np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
+    #     * config["degree2km"]
+    # )
+    config["x(km)"], config["y(km)"] = proj(
+        [config["minlongitude"], config["maxlongitude"]], [config["minlatitude"], config["maxlatitude"]]
     )
     if "gamma" not in config:
         config["z(km)"] = (0, 60)
@@ -142,6 +135,9 @@ def run_gamma(
     ## filter picks without amplitude measurements
     if config["use_amplitude"]:
         picks = picks[picks["amp"] != -1]
+
+    ## %%
+    config["ncpu"] = 8
 
     for k, v in config.items():
         print(f"{k}: {v}")
@@ -240,6 +236,7 @@ def run_gamma(
 
 if __name__ == "__main__":
     import json
+    import multiprocessing as mp
     import os
     import sys
 
@@ -250,10 +247,11 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         root_path = sys.argv[1]
         region = sys.argv[2]
-    if not os.path.exists(f"{root_path}/{region}/config.json"):
-        config = {}
-    else:
-        with open(f"{root_path}/{region}/config.json", "r") as fp:
-            config = json.load(fp)
+    with open(f"{root_path}/{region}/config.json", "r") as fp:
+        config = json.load(fp)
 
-    run_gamma.execute(root_path=root_path, region=region, config=config)
+    # run_gamma.execute(root_path=root_path, region=region, config=config)
+
+    ncpu = 16
+    for i in range(ncpu):
+        run_gamma.execute(root_path=root_path, region=region, config=config, rank=i, wolrd_size=ncpu)

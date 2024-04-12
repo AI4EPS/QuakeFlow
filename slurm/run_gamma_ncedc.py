@@ -59,7 +59,16 @@ def run_gamma(
     except Exception as e:
         print(f"Error reading {picks_csv}: {e}")
         return NamedTuple("outputs", events=str, picks=str)(events=gamma_events_csv, picks=gamma_picks_csv)
-    picks.rename(columns={"station_id": "id", "phase_time": "timestamp", "phase_type": "type", "phase_score": "prob", "phase_amplitude": "amp"}, inplace=True)
+    picks.rename(
+        columns={
+            "station_id": "id",
+            "phase_time": "timestamp",
+            "phase_type": "type",
+            "phase_score": "prob",
+            "phase_amplitude": "amp",
+        },
+        inplace=True,
+    )
     # picks["id"] = picks["id"].apply(lambda x: ".".join(x.split(".")[:2])) # remove channel
 
     ## read stations
@@ -116,7 +125,7 @@ def run_gamma(
 
     # DBSCAN
     # config["dbscan_eps"] = estimate_eps(stations, config["vel"]["p"])  # s
-    config["dbscan_eps"] = 10 #s
+    config["dbscan_eps"] = 10  # s
     config["dbscan_min_samples"] = 3
 
     ## Eikonal for 1D velocity model
@@ -128,7 +137,6 @@ def run_gamma(
     # # h = 3
     # vel = {"z": zz, "p": vp, "s": vs}
     # config["eikonal"] = {"vel": vel, "h": h, "xlim": config["x(km)"], "ylim": config["y(km)"], "zlim": config["z(km)"]}
-
 
     # set number of cpus
     config["ncpu"] = 32
@@ -192,7 +200,16 @@ def run_gamma(
         ## add assignment to picks
         assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
         picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({"event_index": int})
-        picks.rename(columns={"id": "station_id", "timestamp": "phase_time", "type": "phase_type", "prob": "phase_score", "amp": "phase_amplitude"}, inplace=True)
+        picks.rename(
+            columns={
+                "id": "station_id",
+                "timestamp": "phase_time",
+                "type": "phase_type",
+                "prob": "phase_score",
+                "amp": "phase_amplitude",
+            },
+            inplace=True,
+        )
         picks.sort_values(["phase_time"], inplace=True)
         with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
             picks.to_csv(
@@ -231,12 +248,16 @@ def run_gamma(
             f"{root_path}/{gamma_events_csv}",
             f"{bucket}/{region}/results/phase_association/events_{jday:03d}.csv",
         )
-        print(f"Uploaded {root_path}/{gamma_events_csv} to {bucket}/{region}/results/phase_association/events_{jday:03d}.csv")
+        print(
+            f"Uploaded {root_path}/{gamma_events_csv} to {bucket}/{region}/results/phase_association/events_{jday:03d}.csv"
+        )
         fs.put(
             f"{root_path}/{gamma_picks_csv}",
             f"{bucket}/{region}/results/phase_association/picks_{jday:03d}.csv",
         )
-        print(f"Uploaded {root_path}/{gamma_picks_csv} to {bucket}/{region}/results/phase_association/picks_{jday:03d}.csv")
+        print(
+            f"Uploaded {root_path}/{gamma_picks_csv} to {bucket}/{region}/results/phase_association/picks_{jday:03d}.csv"
+        )
 
     outputs = NamedTuple("outputs", events=str, picks=str)
     return outputs(events=gamma_events_csv, picks=gamma_picks_csv)
@@ -272,7 +293,6 @@ if __name__ == "__main__":
     root_path = "local"
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
         config = json.load(fp)
-
     year = 2023
 
     ## Local
@@ -292,8 +312,9 @@ if __name__ == "__main__":
     # world_size = min(64, len(jdays))
     world_size = len(jdays)
     config["world_size"] = world_size
+
     @dsl.pipeline
-    def run_pipeline(root_path: str, region: str, config: Dict, bucket:str, protocol:str, token: Dict = None):
+    def run_pipeline(root_path: str, region: str, config: Dict, bucket: str, protocol: str, token: Dict = None):
         with dsl.ParallelFor(items=jdays, parallelism=world_size) as item:
             gamma_op = run_gamma(
                 root_path=root_path,
@@ -312,11 +333,11 @@ if __name__ == "__main__":
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={
-            "region": region, 
+            "region": region,
             "root_path": "./",
             "bucket": "quakeflow_catalog",
             "protocol": protocol,
-            "token": token, 
+            "token": token,
             "config": config,
         },
         run_name=f"gamma-{year}",

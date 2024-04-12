@@ -24,6 +24,10 @@ station_path = f"{input_bucket}/FDSNstationXML"
 waveform_path = f"{input_bucket}/continuous_waveforms/"
 dataset_path = f"{output_bucket}/SC/catalog"
 
+result_path = "dataset"
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
+
 # %%
 ## https://scedc.caltech.edu/data/stp/STP_Manual_v1.01.pdf
 # Defining a function to parse event location information
@@ -137,26 +141,42 @@ def parse(jday):
             if len(picks) >= 3:
                 print(jday, event_id, network, station, len(picks))
 
+    # %% save all events
+    if len(events) == 0:
+        return None
+    events = pd.DataFrame(events)
+    events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
+
+    if not os.path.exists(f"{result_path}/{jday.split('/')[-2]}"):
+        os.makedirs(f"{result_path}/{jday.split('/')[-2]}", exist_ok=True)
+    events.to_csv(f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv", index=False)
+    output_fs.put(
+        f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv",
+        f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv",
+    )
+
+    # %% save only picks with P/S pairs
     if len(phases_ps) == 0:
-        return 0
+        return None
 
     phases_ps = pd.concat(phases_ps)
-    events = pd.DataFrame(events)
     phases = pd.concat(phases)
-    events = events[events.event_id.isin(event_ids)]
+    # events = events[events.event_id.isin(event_ids)]
     phases = phases[phases.event_id.isin(event_ids)]
 
-    # add timezone utc to phase_time
-    events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
     phases["phase_time"] = phases["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
     phases_ps["phase_time"] = phases_ps["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
 
-    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv", "w") as fp:
-        events.to_csv(fp, index=False)
-    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv", "w") as fp:
-        phases.to_csv(fp, index=False)
-    with output_fs.open(f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_ps.csv", "w") as fp:
-        phases_ps.to_csv(fp, index=False)
+    phases.to_csv(f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv", index=False)
+    phases_ps.to_csv(f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_ps.csv", index=False)
+    output_fs.put(
+        f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv",
+        f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase.csv",
+    )
+    output_fs.put(
+        f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_ps.csv",
+        f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_ps.csv",
+    )
 
 
 # %%
@@ -172,10 +192,18 @@ if __name__ == "__main__":
     file_list = sorted(file_list, reverse=True)
     ncpu = mp.cpu_count() * 2
     pbar = tqdm(total=len(file_list))
+    processes = []
     with mp.get_context("spawn").Pool(ncpu) as pool:
         for f in file_list:
-            pool.apply_async(parse, args=(f,), callback=lambda _: pbar.update())
-        pool.close()
-        pool.join()
+            proc = pool.apply_async(parse, args=(f,), callback=lambda _: pbar.update())
+            processes.append(proc)
+        for proc in processes:
+            output = proc.get()
+            if output is not None:
+                print(output)
+
+        #     pool.apply_async(parse, args=(f,), callback=lambda _: pbar.update())
+        # pool.close()
+        # pool.join()
 
     pbar.close()
