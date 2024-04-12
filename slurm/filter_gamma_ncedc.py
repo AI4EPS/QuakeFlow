@@ -205,10 +205,11 @@ if __name__ == "__main__":
                 protocol=protocol,
                 token=token,
             )
-            gamma_op.set_cpu_request("2100m")
-            gamma_op.set_memory_request("12000Mi")
+            gamma_op.set_cpu_request("1100m")
+            gamma_op.set_memory_request("5000Mi")
 
-    client = Client("https://4fedc9c19a233c34-dot-us-west1.pipelines.googleusercontent.com")
+
+    client = Client("https://36ca05fb3e7bbc04-dot-us-west1.pipelines.googleusercontent.com")
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={

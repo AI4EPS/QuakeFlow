@@ -289,7 +289,8 @@ if __name__ == "__main__":
     print(f"{len(jdays) = }")
     # jdays = [201]
 
-    world_size = min(64, len(jdays))
+    # world_size = min(64, len(jdays))
+    world_size = len(jdays)
     config["world_size"] = world_size
     @dsl.pipeline
     def run_pipeline(root_path: str, region: str, config: Dict, bucket:str, protocol:str, token: Dict = None):
@@ -307,7 +308,7 @@ if __name__ == "__main__":
             gamma_op.set_cpu_request("2100m")
             gamma_op.set_memory_request("12000Mi")
 
-    client = Client("https://4fedc9c19a233c34-dot-us-west1.pipelines.googleusercontent.com")
+    client = Client("https://36ca05fb3e7bbc04-dot-us-west1.pipelines.googleusercontent.com")
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={
