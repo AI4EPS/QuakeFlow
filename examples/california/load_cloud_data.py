@@ -14,7 +14,7 @@ from sklearn.cluster import DBSCAN
 
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 # %%
-root_path = "local"
+root_path = "../../slurm/local"
 region = "ca"
 
 # only begin_time, end_time and spatial range are required in this code

@@ -252,7 +252,7 @@ if __name__ == "__main__":
             phasenet_op.set_memory_request("12000Mi")
             # phasenet_op.set_retry(3)
 
-    client = Client("https://73c46fe6295f8196-dot-us-west1.pipelines.googleusercontent.com")
+    client = Client("https://4fedc9c19a233c34-dot-us-west1.pipelines.googleusercontent.com")
     run = client.create_run_from_pipeline_func(
         run_pipeline,
         arguments={"token": token, "region": "NC", "root_path": "./", "config": {"world_size": world_size}},
