@@ -144,6 +144,7 @@ def parse(jday):
     # %% save all events
     if len(events) == 0:
         return None
+    phases = pd.concat(phases)
     events = pd.DataFrame(events)
     events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
 
@@ -154,13 +155,18 @@ def parse(jday):
         f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv",
         f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.event.csv",
     )
+    phases.to_csv(f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_raw.csv", index=False)
+    output_fs.put(
+        f"{result_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_raw.csv",
+        f"{dataset_path}/{jday.split('/')[-2]}/{jday.split('/')[-1]}.phase_raw.csv",
+    )
 
     # %% save only picks with P/S pairs
     if len(phases_ps) == 0:
+        raise
         return None
 
     phases_ps = pd.concat(phases_ps)
-    phases = pd.concat(phases)
     # events = events[events.event_id.isin(event_ids)]
     phases = phases[phases.event_id.isin(event_ids)]
 

@@ -1,0 +1,76 @@
+name: dev
+
+workdir: .
+
+num_nodes: 1
+
+resources:
+
+  cloud: gcp # aws
+  region: us-west1 # gcp
+  # region: us-west-2 # aws
+  # instance_type: n2-highmem-16
+  # accelerators: P100:1
+  # cpus: 16+
+  cpus: 16
+  # disk_size: 300
+  # disk_tier: high
+  # use_spot: True
+  # spot_recovery: FAILOVER
+  # image_id: docker:zhuwq0/quakeflow:latest
+
+# # envs:
+#   JOB: quakeflow
+#   NCPU: 1
+#   ROOT_PATH: /data
+#   MODEL_NAME: phasenet_plus
+#   WANDB_API_KEY: cb014c63ac451036ca406582b41d32ae83154289
+
+file_mounts:
+
+  # /data/waveforms:
+  #   name: waveforms
+  #   source: waveforms_combined
+  #   mode: MOUNT
+
+  # /dataset/stations:
+  #   name: stations
+  #   source: stations
+  #   mode: COPY
+
+  # /data/waveforms: waveforms_combined
+  # /dataset/stations: stations
+
+  # ~/.ssh/id_rsa.pub: ~/.ssh/id_rsa.pub
+  # ~/.ssh/id_rsa: ~/.ssh/id_rsa
+  # ~/.config/rclone/rclone.conf: ~/.config/rclone/rclone.conf
+
+  /opt/GaMMA: ../../GaMMA
+
+setup: |
+  echo "Begin setup."                                                           
+  echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc                         
+  pip install h5py tqdm wandb pandas numpy scipy                                
+  pip install fsspec gcsfs                                                      
+  pip install obspy pyproj                                                      
+  # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+  # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+  pip install -e /opt/GaMMA
+
+run: |
+  num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
+  master_addr=`echo "$SKYPILOT_NODE_IPS" | head -n1`
+  [[ ${SKYPILOT_NUM_GPUS_PER_NODE} -gt $NCPU ]] && nproc_per_node=${SKYPILOT_NUM_GPUS_PER_NODE} || nproc_per_node=$NCPU
+  if [ "${SKYPILOT_NODE_RANK}" == "0" ]; then
+    ls -al /opt
+    ls -al /data
+  fi
+  python run_gamma.py --num_node $num_nodes --node_rank $SKYPILOT_NODE_RANK
+  # torchrun \
+  #   --nproc_per_node=${nproc_per_node} \
+  #   --node_rank=${SKYPILOT_NODE_RANK} \
+  #   --nnodes=$num_nodes \
+  #   --master_addr=$master_addr \
+  #   --master_port=8008 \
+  #   train.py --model $MODEL_NAME --batch-size=256 --hdf5-file /dataset/train.h5 --test-hdf5-file /dataset/test.h5 \
+  #   --workers 12 --stack-event --flip-polarity --drop-channel --output /checkpoint/$MODEL_NAME --wandb --wandb-project $MODEL_NAME --resume True

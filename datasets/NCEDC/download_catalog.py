@@ -358,6 +358,8 @@ def process(year):
         tmp_name = ".".join(phase_filename.split(".")[:2])
         events.to_csv(f"{result_path}/catalog/{tmp_name}.event.csv", index=False)
         output_fs.put(f"{result_path}/catalog/{tmp_name}.event.csv", f"{dataset_path}/{tmp_name}.event.csv")
+        phases.to_csv(f"{result_path}/catalog/{tmp_name}.phase_raw.csv", index=False)
+        output_fs.put(f"{result_path}/catalog/{tmp_name}.phase_raw.csv", f"{dataset_path}/{tmp_name}.phase_raw.csv")
 
         # %%
         phases_ps = []
@@ -371,6 +373,7 @@ def process(year):
             if len(picks) >= 3:
                 print(event_id, network, station, len(picks))
         if len(phases_ps) == 0:
+            raise
             continue
         phases_ps = pd.concat(phases_ps)
         # events = events[events.event_id.isin(event_ids)]
