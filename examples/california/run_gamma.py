@@ -258,7 +258,7 @@ def run_gamma(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Run Gamma on NCEDC/SCEDC data")
     parser.add_argument("--num_nodes", type=int, default=366)
     parser.add_argument("--node_rank", type=int, default=0)
     parser.add_argument("--year", type=int, default=2023)
