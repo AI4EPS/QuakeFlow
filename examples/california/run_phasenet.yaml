@@ -20,8 +20,11 @@ resources:
   # image_id: docker:zhuwq0/quakeflow:latest
 
 envs:
-  REGION: SC
-  BRANCH: scedc
+  # REGION: SC
+  # BRANCH: scedc
+  REGION: NC
+  BRANCH: ncedc
+  YEAR: 2022
 
 file_mounts:
 
@@ -49,14 +52,14 @@ setup: |
   echo "Begin setup."                                                           
   echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc                         
   pip install h5py tqdm wandb pandas numpy scipy                                
-  pip install fsspec gcsfs                                                      
+  pip install fsspec gcsfs s3fs                                                     
   pip install obspy pyproj                                                      
   # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
   # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
   ### PhaseNet
   pip install tensorflow==2.14.0
-  [ ! -d "PhaseNet" ] && git clone --branch $BRANCH https://github.com/AI4EPS/PhaseNet.git
-  # cd PhaseNet && git checkout $BRANCH
+  [ ! -d "PhaseNet" ] && git clone https://github.com/AI4EPS/PhaseNet.git
+  cd PhaseNet && git checkout $BRANCH
   ### GaMMA
   # pip install -e /opt/GaMMA
 
@@ -68,4 +71,4 @@ run: |
     ls -al /opt
     ls -al /data
   fi
-  python run_phasenet.py --model_path PhaseNet --num_node $num_nodes --node_rank $SKYPILOT_NODE_RANK --region $REGION
+  python run_phasenet.py --model_path PhaseNet --num_node $num_nodes --node_rank $SKYPILOT_NODE_RANK --region $REGION --year $YEAR

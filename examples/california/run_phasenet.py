@@ -24,7 +24,6 @@ def parse_fname(mseed, region):
         location = fname[10:12].rstrip("_")
         year = fname[13:17]
         jday = fname[17:20]
-        station_id = f"{station}.{network}.{location}.{instrument}"
     elif region == "NC":
         fname = mseed.split("/")[-1].split(".")
         station = fname[0]
@@ -35,6 +34,8 @@ def parse_fname(mseed, region):
         assert fname[4] == "D"
         year = fname[5]
         jday = fname[6]
+
+    station_id = f"{station}.{network}.{location}.{instrument}"
 
     return station_id, network, station, location, instrument, component, year, jday
 
@@ -92,29 +93,52 @@ def collect_mseeds(
         def process(rank, nodes, folder):
             print(f"{rank}/{nodes}: {folder}")
 
-            if region == "SC":
-                # mseed_list = fs.glob(f"{bucket}/{folder}/{year}/{year}_???/*_{year}???.ms")
-                # mseed_list = fs_data.glob(f"{bucket}/{folder}/{year}/{year}_???/*.ms")
-                mseed_list = []
-                for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
-                    mseed_list.extend([f"{protocol}://{root}/{f}" for f in files])
-            elif region == "NC":
-                # mseed_list = fs_data.glob(f"{bucket}/{folder}/??/{year}/???.??/*.{year}.???")
-                mseed_list = []
-                for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
-                    mseed_list.extend([f"{protocol}://{root}/{f}" for f in files])
+            if not os.path.exists(f"{tmp_dir}/{rank}_{nodes}.txt"):
+                if region == "SC":
+                    # mseed_list = fs.glob(f"{bucket}/{folder}/{year}/{year}_???/*_{year}???.ms")
+                    # mseed_list = fs_data.glob(f"{bucket}/{folder}/{year}/{year}_???/*.ms")
+                    mseed_list = []
+                    for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
+                        mseed_list.extend([f"{protocol}://{root}/{f}" for f in files if f != ""])
+                elif region == "NC":
+                    # mseed_list = fs_data.glob(f"{bucket}/{folder}/??/{year}/???.??/*.{year}.???")
+                    mseed_list = []
+                    for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
+                        mseed_list.extend(
+                            [
+                                f"{protocol}://{root}/{f}"
+                                for f in files
+                                if (f != "")
+                                and (not f.endswith(".orig"))
+                                and (not f.endswith(".request"))
+                                and (not f.endswith(".old"))
+                                and (not f.endswith(".txt"))
+                                and (not f.endswith("a"))  # hast.076a, mod.076a, pacp.076a
+                                and (not f.endswith("b"))  # ybh.002b
+                            ]
+                        )
 
-            if len(mseed_list) == 0:
-                return None
+                if len(mseed_list) == 0:
+                    return None
 
-            mseed_list = sorted(mseed_list)
-            with open(f"{tmp_dir}/{rank}_{nodes}.txt", "w") as fp:
-                fp.write("\n".join(mseed_list))
+                mseed_list = sorted(mseed_list)
+                with open(f"{tmp_dir}/{rank}_{nodes}.txt", "w") as fp:
+                    fp.write("\n".join(mseed_list))
+
+            else:
+                with open(f"{tmp_dir}/{rank}_{nodes}.txt", "r") as fp:
+                    mseed_list = fp.read().splitlines()
 
             # %% Group by station
             groups = defaultdict(list)
             for mseed in mseed_list:
-                station_id, network, station, location, instrument, component, year, jday = parse_fname(mseed, region)
+                try:
+                    station_id, network, station, location, instrument, component, year, jday = parse_fname(
+                        mseed, region
+                    )
+                except:
+                    print(f"Error: {mseed}")
+                    raise
 
                 if (component in valid_components) and (instrument in valid_instruments):
                     key = f"{year}_{jday}/{network}.{station}.{location}.{instrument}"
@@ -157,8 +181,9 @@ def collect_mseeds(
         os.makedirs(f"{mseed_dir}")
     mseed_list = sorted(list(set(mseed_list)))
     years = sorted(list(set([x.split("/")[maxdepth + 2] for x in mseed_list])))  # 2: s3://
+    years = years[:-1]  # remove last year
     print(f"Years: {years}")
-    for year in years:
+    for year in tqdm(years):
         mseed_by_year = [x for x in mseed_list if x.split("/")[maxdepth + 2] == year]
         with open(f"{mseed_dir}/{year}_3c.txt", "w") as fp:
             fp.write("\n".join(mseed_by_year))
@@ -205,13 +230,23 @@ def split_mseed_list(
     print(f"Number to process by node {node_rank}/{num_nodes}: {len(mseed_list)}")
 
     folder = f"{region}/phasenet"
-    processed = fs.glob(f"{bucket}/{folder}/{year}/????_???/*.csv")
+    if region == "SC":
+        processed = fs.glob(f"{bucket}/{folder}/{year}/{year}_???/*.csv")
+    elif region == "NC":
+        # processed = fs.glob(f"{bucket}/{folder}/??/{year}/{year}.??/*.csv")
+        networks = fs.ls(f"{bucket}/{folder}/")
+        processed = []
+        for network in networks:
+            print(network)
+            processed.extend(fs.glob(f"{network}/{year}/{year}.???/*.csv"))
+    else:
+        raise ValueError(f"Invalid region: {region}")
     processed = set(processed)
     mseed_csv_set = set()
     mapping_dit = {}
     for mseed in tqdm(mseed_list, desc="Filter processed"):
-        tmp = mseed.split(",")[0].lstrip("s3://").split("/")
-        subdir = "/".join(tmp[2:-1])
+        tmp = mseed.split(",")[0].replace("s3://", "").split("/")
+        subdir = "/".join(tmp[2:-1])  # e.g., phasenet/BG/2023/2023.001/
         fname = tmp[-1].rstrip(".mseed").rstrip(".ms") + ".csv"
         tmp_name = f"{bucket}/{folder}/{subdir}/{fname}"
         mseed_csv_set.add(tmp_name)
