@@ -10,8 +10,9 @@ import pandas as pd
 from HinetPy import Client
 
 # %%
-# codes = ["0101", "0103"]
+codes = ["0101", "0103"]
 codes = ["0101"]
+# codes = ["0103"]
 USERNAME = ""
 PASSWORD = ""
 TIMEOUT = 6000  # seconds
@@ -65,11 +66,11 @@ stations.set_index("station_id", inplace=True)
 stations.to_json(f"{root_path}/{region}/results/data/stations.json", orient="index", indent=2)
 
 # %%
-start_date = pd.to_datetime("2010-01-01")
-end_date = pd.to_datetime("2024-03-01")
+start_date = pd.to_datetime("2000-01-01")
+end_date = pd.to_datetime("2024-06-25")
 # end_date = pd.to_datetime(datetime.now().strftime("%Y-%m-%d"))
 span = 60  # minutes
-dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span), inclusive="left")[-1::-2]
+dates = pd.date_range(start_date, end_date, freq=pd.Timedelta(minutes=span), inclusive="left")[-3::-3]
 
 # %%
 fails = 0
@@ -81,7 +82,9 @@ for date in dates:
 
     for code in codes:
 
-        if os.path.exists(f"{outdir}/{code}_{date.strftime('%Y%m%d%H%M')}_{span}.cnt") and os.path.exists(f"{outdir}/{code}_{date.strftime('%Y%m%d')}.ch"):
+        if os.path.exists(f"{outdir}/{code}_{date.strftime('%Y%m%d%H%M')}_{span}.cnt") and os.path.exists(
+            f"{outdir}/{code}_{date.strftime('%Y%m%d')}.ch"
+        ):
             print(f"Data already exists for {date}")
             continue
 
@@ -104,7 +107,7 @@ for date in dates:
         thread.join(TIMEOUT)
         if thread.is_alive():
             print(f"Timeout for {code} {date}")
-        
+
         # check if data is downloaded
         if not os.path.exists(f"{outdir}/{code}_{date.strftime('%Y%m%d%H%M')}_{span}.cnt"):
             fails += 1
