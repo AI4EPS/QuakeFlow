@@ -30,6 +30,7 @@ if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
     ls -al /data
     ls -al ./
 fi
+echo "Running PhaseNet on (node_rank, num_node) = ($NODE_RANK, $NUM_NODE)"
 python run_phasenet.py --model_path PhaseNet --num_node $NUM_NODE --node_rank $NODE_RANK --region $REGION --year $YEAR
 """,
     workdir=".",
@@ -54,13 +55,14 @@ task.set_resources(
 # )
 
 for NODE_RANK in range(NUM_NODE):
+    print(f"\n****** Launching job on node {NODE_RANK}/{NUM_NODE} *****\n")
     task.update_envs({"NODE_RANK": NODE_RANK})
     if NODE_RANK < NUM_NODE - 1:
-        # job_id, handle = sky.launch(task, cluster_name="mycluster")
-        # job_id, handle = sky.launch(task)
-        sky.jobs.launch(task)
-    else:
         # job_id, handle = sky.launch(task, cluster_name="mycluster", detach_run=True)
         # job_id, handle = sky.launch(task, detach_run=True)
         sky.jobs.launch(task, detach_run=True)
+    else:
+        # job_id, handle = sky.launch(task, cluster_name="mycluster")
+        # job_id, handle = sky.launch(task)
+        sky.jobs.launch(task)
     # print(f"Rank {NODE_RANK} running on job_id={job_id}: {handle}")
