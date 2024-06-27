@@ -59,7 +59,7 @@ setup: |
   ### PhaseNet
   pip install tensorflow==2.14.0
   [ ! -d "PhaseNet" ] && git clone https://github.com/AI4EPS/PhaseNet.git
-  cd PhaseNet && git checkout $BRANCH
+  cd PhaseNet && git checkout $BRANCH && git pull origin $BRANCH && cd ..
   ### GaMMA
   # pip install -e /opt/GaMMA
 

@@ -3,7 +3,7 @@ import argparse
 import json
 import os
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from glob import glob
 from pathlib import Path
 from typing import Dict, List
@@ -38,6 +38,21 @@ def parse_fname(mseed, region):
     station_id = f"{station}.{network}.{location}.{instrument}"
 
     return station_id, network, station, location, instrument, component, year, jday
+
+
+def filter_empty_files(processed, fs, ncpu=32):
+    def file_not_empty(csv):
+        return fs.info(csv)["size"] > 0
+
+    with ThreadPoolExecutor(max_workers=ncpu) as executor:
+        future_to_csv = {executor.submit(file_not_empty, csv): csv for csv in processed}
+        csvs = []
+        for future in tqdm(as_completed(future_to_csv), total=len(processed), desc="Filter empty"):
+            csv = future_to_csv[future]
+            if future.result():
+                csvs.append(csv)
+
+    return csvs
 
 
 def collect_mseeds(
@@ -241,6 +256,8 @@ def split_mseed_list(
             processed.extend(fs.glob(f"{network}/{year}/{year}.???/*.csv"))
     else:
         raise ValueError(f"Invalid region: {region}")
+
+    processed = filter_empty_files(processed, fs)
     processed = set(processed)
     mseed_csv_set = set()
     mapping_dit = {}
@@ -265,6 +282,7 @@ def split_mseed_list(
         f"{bucket}/{region}/phasenet/mseed_list/{year}_{node_rank:03d}_{num_nodes:03d}.txt",
     )
     print(
+        os.getcwd(),
         f"{bucket}/{region}/phasenet/mseed_list/{year}_{node_rank:03d}_{num_nodes:03d}.txt",
     )
 
@@ -300,9 +318,9 @@ def run_phasenet(
         json.dump(token, fp)
 
     # %%
-    os.system(
-        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_list={mseed_list}  --format=mseed --amplitude --batch_size=1 --sampling_rate=100 --highpass_filter=1.0 --result_dir={root_path}/{region}/picks_{year}/"
-    )
+    cmd = f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_list={mseed_list}  --format=mseed --amplitude --batch_size=1 --sampling_rate=100 --highpass_filter=1.0 --result_dir={root_path}/{region}/picks_{year}/"
+    print(cmd)
+    os.system(cmd)
 
     return 0
 
