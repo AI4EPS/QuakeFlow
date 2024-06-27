@@ -2,19 +2,15 @@
 import argparse
 import json
 import os
-from pathlib import Path
-from typing import Dict, List, NamedTuple
+from typing import Dict, NamedTuple
 
+import fsspec
+import numpy as np
 import pandas as pd
-from kfp import compiler, dsl
-from kfp.client import Client
+from gamma.utils import association
+from pyproj import Proj
 
 
-# @dsl.component(packages_to_install=["fsspec", "gcsfs", "s3fs", "tqdm", "numpy", "pyproj", "pandas", "gmma"])
-@dsl.component(
-    base_image="zhuwq0/gamma-ncedc:v1.1",
-    packages_to_install=["fsspec", "gcsfs", "s3fs", "tqdm", "numpy", "pyproj", "pandas"],
-)
 def run_gamma(
     root_path: str,
     region: str,
@@ -24,14 +20,6 @@ def run_gamma(
     bucket: str = "",
     token: Dict = None,
 ):
-    import json
-    import os
-
-    import fsspec
-    import numpy as np
-    import pandas as pd
-    from gamma.utils import association, estimate_eps
-    from pyproj import Proj
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
@@ -69,6 +57,20 @@ def run_gamma(
         except Exception as e:
             print(f"Error reading {picks_csv}: {e}")
             return NamedTuple("outputs", events=str, picks=str)(events=gamma_events_csv, picks=gamma_picks_csv)
+
+        # ###################
+        # # stations = pd.read_json("tests/bo20240616/stations.json", orient="index")
+        # # stations["station_id"] = stations.index
+        # # gamma_picks = pd.read_csv("tests/bo20240616/gamma_picks_20230101_30min.csv")
+        # # phasenet_picks = pd.read_csv("tests/bo20240616/phasenet_picks_20230101_30min.csv")
+        # # phasenet_picks["phase_time"] = pd.to_datetime(phasenet_picks["phase_time"])
+        # # gamma_picks["phase_time"] = pd.to_datetime(gamma_picks["phase_time"])
+        # root_path = "./"
+        # gamma_events_csv = f"tests/bo20240616/gamma_events_{jday:03d}.csv"
+        # gamma_picks_csv = f"tests/bo20240616/gamma_picks_{jday:03d}.csv"
+        # picks = pd.read_csv("tests/bo20240616/phasenet_picks_20230101_30min.csv")
+        # ###################
+
         picks.rename(
             columns={
                 "station_id": "id",
@@ -91,6 +93,11 @@ def run_gamma(
         # stations["id"] = stations["id"].apply(lambda x: ".".join(x.split(".")[:2])) # remove channel
         # stations = stations.groupby("id").first().reset_index()
 
+        # ###################
+        # stations = pd.read_json("tests/bo20240616/stations.json", orient="index")
+        # stations["id"] = stations.index
+        # ###################
+
         if "longitude0" not in config:
             config["longitude0"] = (config["minlongitude"] + config["maxlongitude"]) / 2
         if "latitude0" not in config:
@@ -110,7 +117,7 @@ def run_gamma(
         if config["method"] == "GMM":  ## GaussianMixture
             config["oversample_factor"] = 1
 
-        # earthquake location
+        ## earthquake location
         config["vel"] = {"p": 6.0, "s": 6.0 / 1.75}
         config["dims"] = ["x(km)", "y(km)", "z(km)"]
         config["x(km)"] = (
@@ -133,23 +140,18 @@ def run_gamma(
             (None, None),  # t
         )
 
-        # DBSCAN
+        ## DBSCAN
         # config["dbscan_eps"] = estimate_eps(stations, config["vel"]["p"])  # s
         config["dbscan_eps"] = 10  # s
         config["dbscan_min_samples"] = 10
 
-        ### Eikonal for 1D velocity model
-        ### Southern California
+        ## Eikonal for 1D velocity model
+        # Southern California
         # zz = [0.0, 5.5, 16.0, 32.0]
         # vp = [5.5, 5.5,  6.7,  7.8]
         # vp_vs_ratio = 1.73
         # vs = [v / vp_vs_ratio for v in vp]
-        # h = 0.3
-        # # h = 3
-        # vel = {"z": zz, "p": vp, "s": vs}
-        # config["eikonal"] = {"vel": vel, "h": h, "xlim": config["x(km)"], "ylim": config["y(km)"], "zlim": config["z(km)"]}
-
-        ### Northern California (Gil7)
+        # Northern California (Gil7)
         zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
         vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
         vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
@@ -163,10 +165,10 @@ def run_gamma(
             "zlim": config["z(km)"],
         }
 
-        # set number of cpus
+        ## set number of cpus
         config["ncpu"] = 32
 
-        # filtering
+        ## filtering
         config["min_picks_per_eq"] = 5
         config["min_p_picks_per_eq"] = 0
         config["min_s_picks_per_eq"] = 0
@@ -189,12 +191,6 @@ def run_gamma(
 
         if len(events) > 0:
             ## create catalog
-            # events = pd.DataFrame(
-            #     events,
-            #     columns=["time"]
-            #     + config["dims"]
-            #     + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
-            # )
             events = pd.DataFrame(events)
             events[["longitude", "latitude"]] = events.apply(
                 lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
@@ -202,25 +198,7 @@ def run_gamma(
             events["depth_km"] = events["z(km)"]
             events.sort_values("time", inplace=True)
             with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
-                events.to_csv(
-                    fp,
-                    index=False,
-                    float_format="%.3f",
-                    date_format="%Y-%m-%dT%H:%M:%S.%f",
-                    # columns=[
-                    #     "time",
-                    #     "magnitude",
-                    #     "longitude",
-                    #     "latitude",
-                    #     # "depth(m)",
-                    #     "depth_km",
-                    #     "sigma_time",
-                    #     "sigma_amp",
-                    #     "cov_time_amp",
-                    #     "event_index",
-                    #     "gamma_score",
-                    # ],
-                )
+                events.to_csv(fp, index=False, float_format="%.3f", date_format="%Y-%m-%dT%H:%M:%S.%f")
 
             ## add assignment to picks
             assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
@@ -237,20 +215,7 @@ def run_gamma(
             )
             picks.sort_values(["phase_time"], inplace=True)
             with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
-                picks.to_csv(
-                    fp,
-                    index=False,
-                    date_format="%Y-%m-%dT%H:%M:%S.%f",
-                    # columns=[
-                    #     "station_id",
-                    #     "phase_time",
-                    #     "phase_type",
-                    #     "phase_score",
-                    #     "phase_amplitude",
-                    #     "event_index",
-                    #     "gamma_score",
-                    # ],
-                )
+                picks.to_csv(fp, index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
 
             if protocol != "file":
                 fs.put(f"{root_path}/{gamma_events_csv}", f"{bucket}/{gamma_events_csv}")
@@ -292,16 +257,22 @@ def run_gamma(
     # return outputs(events=gamma_events_csv, picks=gamma_picks_csv)
 
 
-if __name__ == "__main__":
-    import json
-    import os
-    import sys
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Gamma on NCEDC/SCEDC data")
+    parser.add_argument("--num_nodes", type=int, default=366)
+    parser.add_argument("--node_rank", type=int, default=0)
+    parser.add_argument("--year", type=int, default=2023)
+    parser.add_argument("--root_path", type=str, default="local")
+    parser.add_argument("--region", type=str, default="Cal")
+    parser.add_argument("--bucket", type=str, default="quakeflow_catalog")
+    return parser.parse_args()
 
-    import fsspec
-    import numpy as np
-    import pandas as pd
+
+if __name__ == "__main__":
 
     os.environ["OMP_NUM_THREADS"] = "8"
+
+    args = parse_args()
 
     protocol = "gs"
     token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
@@ -310,78 +281,31 @@ if __name__ == "__main__":
 
     fs = fsspec.filesystem(protocol, token=token)
 
-    # root_path = "local"
-    # region = "ncedc"
-    # # if len(sys.argv) > 1:
-    # #     root_path = sys.argv[1]
-    # #     region = sys.argv[2]
-    # with open(f"{root_path}/{region}/config.json", "r") as fp:
-    #     config = json.load(fp)
+    region = args.region
+    root_path = args.root_path
+    bucket = args.bucket
+    num_nodes = args.num_nodes
+    node_rank = args.node_rank
+    year = args.year
 
-    # region = "NC"
-    region = "Cal"
-    bucket = "quakeflow_catalog"
-    root_path = "local"
+    # %%
+    calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
+    jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
+    jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
+
+    # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
         config = json.load(fp)
-    year = 2023
+    config["world_size"] = num_nodes
 
-    calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
-    # jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
-    jdays = [i for i in range(1, calc_jdays(year) + 1)]
-    processed = fs.glob(f"{bucket}/{region}/gamma/{year}/gamma_events_???.csv")
-    processed = [int(p.split("_")[-1].split(".")[0]) for p in processed]
-    jdays = list(set(jdays) - set(processed))
-    print(f"{len(jdays) = }")
-    jdays = [f"{year}.{i:03d}" for i in jdays]
-
-    # ## Local
-    run_gamma.execute(
+    # %%
+    print(f"{jdays[node_rank] = }")
+    run_gamma(
         root_path=root_path,
         region=region,
         config=config,
-        jdays=jdays,
+        jdays=jdays[node_rank],
         protocol=protocol,
         token=token,
         bucket="quakeflow_catalog",
-    )
-    raise
-
-    ### GCP
-    world_size = 64
-    # jdays = [list(x) for x in np.array_split(jdays, world_size)]
-    jdays = [jdays[i::world_size] for i in range(world_size)]
-    config["world_size"] = world_size
-
-    @dsl.pipeline
-    def run_pipeline(root_path: str, region: str, config: Dict, bucket: str, protocol: str, token: Dict = None):
-        with dsl.ParallelFor(items=jdays, parallelism=world_size) as item:
-            gamma_op = run_gamma(
-                root_path=root_path,
-                region=region,
-                config=config,
-                # year=year,
-                jdays=item,
-                bucket=bucket,
-                protocol=protocol,
-                token=token,
-            )
-            gamma_op.set_cpu_request("4100m")
-            gamma_op.set_memory_request("22000Mi")
-            gamma_op.set_caching_options(False)
-            gamma_op.set_retry(3)
-
-    client = Client("https://51c1a0de2d2ba7a6-dot-us-west1.pipelines.googleusercontent.com")
-    run = client.create_run_from_pipeline_func(
-        run_pipeline,
-        arguments={
-            "region": region,
-            "root_path": "./",
-            "bucket": "quakeflow_catalog",
-            "protocol": protocol,
-            "token": token,
-            "config": config,
-        },
-        run_name=f"gamma-{year}",
-        enable_caching=False,
     )

@@ -163,6 +163,7 @@ def parse(jday):
 
     # %% save only picks with P/S pairs
     if len(phases_ps) == 0:
+        raise
         return None
 
     phases_ps = pd.concat(phases_ps)

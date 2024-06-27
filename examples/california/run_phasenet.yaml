@@ -1,0 +1,74 @@
+name: dev
+
+workdir: .
+
+num_nodes: 1
+
+resources:
+
+  cloud: gcp # aws
+  region: us-west1 # gcp
+  # region: us-west-2 # aws
+  # instance_type: n2-highmem-16
+  # accelerators: P100:1
+  # cpus: 16+
+  cpus: 16
+  # disk_size: 300
+  # disk_tier: high
+  # use_spot: True
+  # spot_recovery: FAILOVER
+  # image_id: docker:zhuwq0/quakeflow:latest
+
+envs:
+  # REGION: SC
+  # BRANCH: scedc
+  REGION: NC
+  BRANCH: ncedc
+  YEAR: 2022
+
+file_mounts:
+
+  # /data/waveforms:
+  #   name: waveforms
+  #   source: waveforms_combined
+  #   mode: MOUNT
+
+  # /dataset/stations:
+  #   name: stations
+  #   source: stations
+  #   mode: COPY
+
+  # /data/waveforms: waveforms_combined
+  # /dataset/stations: stations
+
+  # ~/.ssh/id_rsa.pub: ~/.ssh/id_rsa.pub
+  # ~/.ssh/id_rsa: ~/.ssh/id_rsa
+  # ~/.config/rclone/rclone.conf: ~/.config/rclone/rclone.conf
+
+  # /opt/GaMMA: ../../GaMMA
+  # /opt/PhaseNet: ../../PhaseNet
+
+setup: |
+  echo "Begin setup."                                                           
+  echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc                         
+  pip install h5py tqdm wandb pandas numpy scipy                                
+  pip install fsspec gcsfs s3fs                                                     
+  pip install obspy pyproj                                                      
+  # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+  # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+  ### PhaseNet
+  pip install tensorflow==2.14.0
+  [ ! -d "PhaseNet" ] && git clone https://github.com/AI4EPS/PhaseNet.git
+  cd PhaseNet && git checkout $BRANCH && git pull origin $BRANCH && cd ..
+  ### GaMMA
+  # pip install -e /opt/GaMMA
+
+run: |
+  num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
+  master_addr=`echo "$SKYPILOT_NODE_IPS" | head -n1`
+  [[ ${SKYPILOT_NUM_GPUS_PER_NODE} -gt $NCPU ]] && nproc_per_node=${SKYPILOT_NUM_GPUS_PER_NODE} || nproc_per_node=$NCPU
+  if [ "${SKYPILOT_NODE_RANK}" == "0" ]; then
+    ls -al /opt
+    ls -al /data
+  fi
+  python run_phasenet.py --model_path PhaseNet --num_node $num_nodes --node_rank $SKYPILOT_NODE_RANK --region $REGION --year $YEAR

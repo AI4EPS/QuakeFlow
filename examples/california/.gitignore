@@ -1,0 +1,9 @@
+eikonal/
+local/
+tests/
+mseed_list_NC/
+mseed_list_SC/
+tmp_NC/
+tmp_SC/
+NC/
+SC/
