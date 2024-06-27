@@ -358,6 +358,8 @@ def process(year):
         tmp_name = ".".join(phase_filename.split(".")[:2])
         events.to_csv(f"{result_path}/catalog/{tmp_name}.event.csv", index=False)
         output_fs.put(f"{result_path}/catalog/{tmp_name}.event.csv", f"{dataset_path}/{tmp_name}.event.csv")
+        phases.to_csv(f"{result_path}/catalog/{tmp_name}.phase_raw.csv", index=False)
+        output_fs.put(f"{result_path}/catalog/{tmp_name}.phase_raw.csv", f"{dataset_path}/{tmp_name}.phase_raw.csv")
 
         # %%
         phases_ps = []
