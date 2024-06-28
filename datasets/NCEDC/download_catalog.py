@@ -310,6 +310,8 @@ def process(year):
         events = []
         phases = []
         for event_id in catalog:
+            if len(catalog[event_id]["picks"]) == 0:
+                continue
             events.append(catalog[event_id]["event"])
             phase = pd.DataFrame(catalog[event_id]["picks"])
             phase["event_id"] = event_id
@@ -373,7 +375,6 @@ def process(year):
             if len(picks) >= 3:
                 print(event_id, network, station, len(picks))
         if len(phases_ps) == 0:
-            raise
             continue
         phases_ps = pd.concat(phases_ps)
         # events = events[events.event_id.isin(event_ids)]
