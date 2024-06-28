@@ -42,20 +42,26 @@ def parse_inventory_csv(inventory):
                         "longitude": channel.longitude,
                         "latitude": channel.latitude,
                         "elevation_m": channel.elevation,
-                        "local_depth_m": -channel.depth,
-                        "depth_km": -(channel.elevation - channel.depth) / 1000,
+                        "local_depth_m": channel.depth,
+                        "depth_km": round(-channel.elevation / 1000, 4),
                         # "depth_km": channel.depth,
-                        "begin_time": channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                        if channel.start_date is not None
-                        else None,
-                        "end_time": channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                        if channel.end_date is not None
-                        else None,
+                        "begin_time": (
+                            channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                            if channel.start_date is not None
+                            else None
+                        ),
+                        "end_time": (
+                            channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                            if channel.end_date is not None
+                            else None
+                        ),
                         "azimuth": channel.azimuth,
                         "dip": channel.dip,
-                        "sensitivity": channel.response.instrument_sensitivity.value
-                        if channel.response.instrument_sensitivity
-                        else None,
+                        "sensitivity": (
+                            channel.response.instrument_sensitivity.value
+                            if channel.response.instrument_sensitivity
+                            else None
+                        ),
                         "site": station.site.name,
                         "sensor": sensor_description,
                     }
@@ -75,10 +81,11 @@ for network in input_fs.glob(f"{station_path}/*"):
         with input_fs.open(xml) as f:
             inv += obspy.read_inventory(f)
 
+# %%
 stations = parse_inventory_csv(inv)
 
-for network, sta in stations.groupby(["network"]):
-    print(network)
+# %%
+for network, sta in stations.groupby("network"):
     with output_fs.open(f"{output_bucket}/station/{network}.csv", "wb") as f:
         sta.to_csv(f, index=False)
 

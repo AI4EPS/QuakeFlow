@@ -373,7 +373,6 @@ def process(year):
             if len(picks) >= 3:
                 print(event_id, network, station, len(picks))
         if len(phases_ps) == 0:
-            raise
             continue
         phases_ps = pd.concat(phases_ps)
         # events = events[events.event_id.isin(event_ids)]
