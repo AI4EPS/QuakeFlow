@@ -1,12 +1,45 @@
+import argparse
+import json
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+import fsspec
 import sky
 
-NUM_NODE = 3
-REGION = "NC"
-YEAR = 2022
-BRANCH = "ncedc"
+# NUM_NODES = 128
+# YEAR = 2022
+# REGION = "NC"
+# BRANCH = "ncedc"
+# REGION = "SC"
+# BRANCH = "scedc"
+
+###### Hardcoded #######
+token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+with open(token_json, "r") as fp:
+    token = json.load(fp)
+fs = fsspec.filesystem("gs", token=token)
+###### Hardcoded #######
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_nodes", type=int, default=128)
+    parser.add_argument("--year", type=int, default=2022)
+    parser.add_argument("--region", type=str, default="NC")
+    parser.add_argument("--branch", type=str, default="ncedc")
+    return parser.parse_args()
+
+
+args = parse_args()
+NUM_NODES = args.num_nodes
+YEAR = args.year
+REGION = args.region
+BRANCH = args.branch
+
 
 task = sky.Task(
-    name="run_phasenet",
+    name=f"run-phasenet-{REGION}-{YEAR}",
     setup="""
 echo "Begin setup."                                                           
 echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
@@ -35,7 +68,7 @@ python run_phasenet.py --model_path PhaseNet --num_node $NUM_NODE --node_rank $N
 """,
     workdir=".",
     num_nodes=1,
-    envs={"NUM_NODE": NUM_NODE, "NODE_RANK": 0, "BRANCH": BRANCH, "REGION": REGION, "YEAR": YEAR},
+    envs={"NUM_NODE": NUM_NODES, "NODE_RANK": 0, "BRANCH": BRANCH, "REGION": REGION, "YEAR": YEAR},
 )
 task.set_resources(
     sky.Resources(
@@ -54,15 +87,39 @@ task.set_resources(
 #     },
 # )
 
-for NODE_RANK in range(NUM_NODE):
-    print(f"\n****** Launching job on node {NODE_RANK}/{NUM_NODE} *****\n")
-    task.update_envs({"NODE_RANK": NODE_RANK})
-    if NODE_RANK < NUM_NODE - 1:
-        # job_id, handle = sky.launch(task, cluster_name="mycluster", detach_run=True)
-        # job_id, handle = sky.launch(task, detach_run=True)
-        sky.jobs.launch(task, detach_run=True)
-    else:
-        # job_id, handle = sky.launch(task, cluster_name="mycluster")
-        # job_id, handle = sky.launch(task)
-        sky.jobs.launch(task)
-    # print(f"Rank {NODE_RANK} running on job_id={job_id}: {handle}")
+jobs = []
+sky.status(refresh=True)
+with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
+    for NODE_RANK in range(NUM_NODES):
+
+        ###### Hardcoded #######
+        mseed_file = f"gs://quakeflow_catalog/{REGION}/phasenet/mseed_list/{YEAR}_{NODE_RANK:03d}_{NUM_NODES:03d}.txt"
+        with fs.open(mseed_file, "r") as fp:
+            mseed_list = fp.readlines()
+        print(f"{mseed_file}, {len(mseed_list) = }")
+        if len(mseed_list) == 0:
+            print(f"Skipping {mseed_file}...")
+            continue
+        ###### Hardcoded #######
+
+        task.update_envs({"NODE_RANK": NODE_RANK})
+        cluster_name = f"phasenet-{REGION}-{YEAR}-{NODE_RANK:03d}"
+        status = sky.status(cluster_names=[f"{cluster_name}"])
+        if len(status) == 0:
+            print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
+            jobs.append(
+                executor.submit(
+                    sky.launch,
+                    task,
+                    cluster_name=f"{cluster_name}",
+                    idle_minutes_to_autostop=10,
+                    down=True,
+                    detach_run=True,
+                )
+            )
+            time.sleep(10)
+        else:
+            print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
+
+for job in jobs:
+    print(job.result())

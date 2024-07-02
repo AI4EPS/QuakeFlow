@@ -257,8 +257,10 @@ def split_mseed_list(
     else:
         raise ValueError(f"Invalid region: {region}")
 
-    processed = filter_empty_files(processed, fs)
+    print(f"Processed mseed: {len(processed)}")
+    # processed = filter_empty_files(processed, fs)
     processed = set(processed)
+
     mseed_csv_set = set()
     mapping_dit = {}
     for mseed in tqdm(mseed_list, desc="Filter processed"):
