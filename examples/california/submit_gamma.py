@@ -82,7 +82,7 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
         cluster_name = f"gamma-{NODE_RANK:02d}"
         status = sky.status(cluster_names=[f"{cluster_name}"])
         if len(status) == 0:
-            print(f"Launching cluster {cluster_name}-{NUM_NODES}...")
+            print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
             jobs.append(
                 executor.submit(
                     sky.launch,
@@ -101,6 +101,10 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
             #     )
             # )
             time.sleep(5)
+        else:
+            if not status[0]["to_down"]:
+                sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
+            print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
 
 for job in jobs:
     print(job.result())

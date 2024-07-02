@@ -119,6 +119,8 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
             )
             time.sleep(10)
         else:
+            if not status[0]["to_down"]:
+                sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
             print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
 
 for job in jobs:
