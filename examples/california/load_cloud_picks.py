@@ -89,7 +89,8 @@ if __name__ == "__main__":
     # %%
     root_path = "local"
     regions = ["NC", "SC"]
-    year = "2023"
+    # year = "2023"
+    years = ["2022"]
     bucket = "quakeflow_catalog"
     folder = "phasenet"
 
@@ -115,36 +116,37 @@ if __name__ == "__main__":
     fs = fsspec.filesystem(protocol, token=token)
 
     # %%
-    if not os.path.exists(f"{root_path}/Cal/{folder}/csv_list/{year}.csv"):
-        scan_csv(regions, year, root_path, fs, bucket, folder)
+    for year in years:
+        if not os.path.exists(f"{root_path}/Cal/{folder}/csv_list/{year}.csv"):
+            scan_csv(regions, year, root_path, fs, bucket, folder)
 
-    # %%
-    csv_list = pd.read_csv(f"{root_path}/Cal/{folder}/csv_list/{year}.csv", dtype=str)
+        # %%
+        csv_list = pd.read_csv(f"{root_path}/Cal/{folder}/csv_list/{year}.csv", dtype=str)
 
-    # for jday, csvs in csv_list.groupby("jday"):
-    #     read_csv(csvs, year, jday, root_path, fs, bucket, folder)
-    #     raise
+        # for jday, csvs in csv_list.groupby("jday"):
+        #     read_csv(csvs, year, jday, root_path, fs, bucket, folder)
+        #     raise
 
-    # ncpu = os.cpu_count()
-    ncpu = 64
-    print(f"Number of processors: {ncpu}")
-    csv_by_jday = csv_list.groupby("jday")
-    pbar = tqdm(total=len(csv_by_jday), desc="Loading csv files")
+        # ncpu = os.cpu_count()
+        ncpu = 64
+        print(f"Number of processors: {ncpu}")
+        csv_by_jday = csv_list.groupby("jday")
+        pbar = tqdm(total=len(csv_by_jday), desc="Loading csv files")
 
-    with mp.Pool(ncpu) as pool:
-        jobs = []
-        for jday, csvs in csv_by_jday:
-            job = pool.apply_async(
-                read_csv, (csvs, year, jday, root_path, fs, bucket, folder), callback=lambda _: pbar.update()
-            )
-            jobs.append(job)
-        pool.close()
-        pool.join()
-        for job in jobs:
-            output = job.get()
-            if output:
-                print(output)
+        with mp.Pool(ncpu) as pool:
+            jobs = []
+            for jday, csvs in csv_by_jday:
+                job = pool.apply_async(
+                    read_csv, (csvs, year, jday, root_path, fs, bucket, folder), callback=lambda _: pbar.update()
+                )
+                jobs.append(job)
+            pool.close()
+            pool.join()
+            for job in jobs:
+                output = job.get()
+                if output:
+                    print(output)
 
-    pbar.close()
+        pbar.close()
 
 # %%
