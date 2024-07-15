@@ -3,7 +3,7 @@ import argparse
 import json
 import os
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from glob import glob
 from pathlib import Path
 from typing import Dict, List
@@ -42,17 +42,180 @@ def parse_fname(mseed, region):
 
 def filter_empty_files(processed, fs, ncpu=32):
     def file_not_empty(csv):
-        return fs.info(csv)["size"] > 0
+        # return fs.info(csv)["size"] > 0
+        empty = False
+        # if fs.info(csv)["size"] == 0:
+        #     empty = True
+        # else:
+        try:
+            df = pd.read_csv(fs.open(csv))
+            if len(df) == 0:
+                empty = True
+        except:
+            empty = True
+        return not empty
 
     with ThreadPoolExecutor(max_workers=ncpu) as executor:
-        future_to_csv = {executor.submit(file_not_empty, csv): csv for csv in processed}
+        job_to_csv = {executor.submit(file_not_empty, csv): csv for csv in processed}
         csvs = []
-        for future in tqdm(as_completed(future_to_csv), total=len(processed), desc="Filter empty"):
-            csv = future_to_csv[future]
-            if future.result():
+        for job in tqdm(as_completed(job_to_csv), total=len(processed), desc="Filter empty"):
+            csv = job_to_csv[job]
+            if job.result():
                 csvs.append(csv)
 
     return csvs
+
+
+# def collect_mseeds_bucket(
+#     root_path: str,
+#     region: str,
+#     year=2023,
+#     node_rank: int = 0,
+#     num_nodes: int = 1,
+#     protocol: str = "s3",
+#     bucket: str = "",
+#     token: Dict = None,
+# ) -> int:
+
+#     # %%
+#     fs_result = fsspec.filesystem("gs", token=token)
+#     if fs_result.exists(f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt"):
+#         return None
+
+#     # %%
+#     if region == "SC":
+#         protocol = "s3"
+#         bucket = "scedc-pds"
+#         folder = "continuous_waveforms"
+#         maxdepth = 2
+#     elif region == "NC":
+#         protocol = "s3"
+#         bucket = "ncedc-pds"
+#         folder = "continuous_waveforms"
+#         maxdepth = 3
+#     else:
+#         raise ValueError(f"Invalid region: {region}")
+#     fs_data = fsspec.filesystem(protocol=protocol, anon=True)
+
+#     # %%
+#     valid_instruments = ["BH", "HH", "EH", "HN", "DP"]
+#     valid_components = ["3", "2", "1", "E", "N", "Z"]
+
+#     # %%
+#     if not os.path.exists(f"mseed_list_3c_{region}.txt"):
+
+#         tmp_dir = f"tmp_{region}"
+#         if not os.path.exists(f"{tmp_dir}"):
+#             os.makedirs(f"{tmp_dir}")
+
+#         folder_list = []
+#         print(f"{bucket}/{folder}", maxdepth)
+
+#         for root, dirs, files in fs_data.walk(f"{bucket}/{folder}", maxdepth=maxdepth):
+#             print(f"{root}: {len(dirs)} dirs, {len(files)} files")
+#             folder_list.extend([f"{root}/{d}" for d in dirs])
+#         print(f"Number of folders: {len(folder_list)}")
+
+#         def process(rank, nodes, folder):
+#             print(f"{rank}/{nodes}: {folder}")
+
+#             if not os.path.exists(f"{tmp_dir}/{rank}_{nodes}.txt"):
+#                 if region == "SC":
+#                     # mseed_list = fs.glob(f"{bucket}/{folder}/{year}/{year}_???/*_{year}???.ms")
+#                     # mseed_list = fs_data.glob(f"{bucket}/{folder}/{year}/{year}_???/*.ms")
+#                     mseed_list = []
+#                     for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
+#                         mseed_list.extend([f"{protocol}://{root}/{f}" for f in files if f != ""])
+#                 elif region == "NC":
+#                     # mseed_list = fs_data.glob(f"{bucket}/{folder}/??/{year}/???.??/*.{year}.???")
+#                     mseed_list = []
+#                     for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
+#                         mseed_list.extend(
+#                             [
+#                                 f"{protocol}://{root}/{f}"
+#                                 for f in files
+#                                 if (f != "")
+#                                 and (not f.endswith(".orig"))
+#                                 and (not f.endswith(".request"))
+#                                 and (not f.endswith(".old"))
+#                                 and (not f.endswith(".txt"))
+#                                 and (not f.endswith("a"))  # hast.076a, mod.076a, pacp.076a
+#                                 and (not f.endswith("b"))  # ybh.002b
+#                             ]
+#                         )
+
+#                 if len(mseed_list) == 0:
+#                     return None
+
+#                 mseed_list = sorted(mseed_list)
+#                 with open(f"{tmp_dir}/{rank}_{nodes}.txt", "w") as fp:
+#                     fp.write("\n".join(mseed_list))
+
+#             else:
+#                 with open(f"{tmp_dir}/{rank}_{nodes}.txt", "r") as fp:
+#                     mseed_list = fp.read().splitlines()
+
+#             # %% Group by station
+#             groups = defaultdict(list)
+#             for mseed in mseed_list:
+#                 try:
+#                     station_id, network, station, location, instrument, component, year, jday = parse_fname(
+#                         mseed, region
+#                     )
+#                 except:
+#                     print(f"Error: {mseed}")
+#                     raise
+
+#                 if (component in valid_components) and (instrument in valid_instruments):
+#                     key = f"{year}_{jday}/{network}.{station}.{location}.{instrument}"
+#                     groups[key].append(mseed)
+#                 # else:
+#                 #     print(f"Invalid component: {mseed}")
+
+#             mseed_3c = []
+#             if len(groups) > 0:
+#                 for key in groups.keys():
+#                     mseed_3c.append(",".join(sorted(groups[key])))
+
+#             with open(f"{tmp_dir}/{rank}_{nodes}_3c.txt", "w") as fp:
+#                 fp.write("\n".join(mseed_3c))
+
+#             return mseed_3c
+
+#         num_cores = 32
+#         nodes = len(folder_list)
+#         with ThreadPoolExecutor(max_workers=num_cores) as executor:
+#             futures = [executor.submit(process, rank, nodes, folder) for rank, folder in enumerate(folder_list)]
+
+#         mseed_list = []
+#         for future in futures:
+#             result = future.result()
+#             if result is not None:
+#                 mseed_list.extend(result)
+
+#         print(f"Total number of mseed files: {len(mseed_list)}")
+#         with open(f"minseed_list_3c_{region}.txt", "w") as fp:
+#             fp.write("\n".join(mseed_list))
+
+#     else:
+#         with open(f"mseed_list_3c_{region}.txt", "r") as fp:
+#             mseed_list = fp.read().splitlines()
+
+#     # split by year
+#     mseed_dir = f"mseed_list_{region}"
+#     if not os.path.exists(f"{mseed_dir}"):
+#         os.makedirs(f"{mseed_dir}")
+#     mseed_list = sorted(list(set(mseed_list)))
+#     years = sorted(list(set([x.split("/")[maxdepth + 2] for x in mseed_list])))  # 2: s3://
+#     years = years[:-1]  # remove last year
+#     print(f"Years: {years}")
+#     for year in tqdm(years):
+#         mseed_by_year = [x for x in mseed_list if x.split("/")[maxdepth + 2] == year]
+#         with open(f"{mseed_dir}/{year}_3c.txt", "w") as fp:
+#             fp.write("\n".join(mseed_by_year))
+#         fs_result.put(f"{mseed_dir}/{year}_3c.txt", f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt")
+
+#     return 0
 
 
 def collect_mseeds(
@@ -65,11 +228,14 @@ def collect_mseeds(
     bucket: str = "",
     token: Dict = None,
 ) -> int:
+    """
+    Collect mseed files by year
+    """
 
     # %%
     fs_result = fsspec.filesystem("gs", token=token)
-    if fs_result.exists(f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt"):
-        return None
+    # if fs_result.exists(f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt"):
+    #     return None
 
     # %%
     if region == "SC":
@@ -91,118 +257,62 @@ def collect_mseeds(
     valid_components = ["3", "2", "1", "E", "N", "Z"]
 
     # %%
-    if not os.path.exists(f"mseed_list_3c_{region}.txt"):
+    jdays = []
+    if region == "SC":
+        print(f"{bucket}/{folder}/{year}/{year}_???")
+        jdays.extend(fs_data.glob(f"{bucket}/{folder}/{year}/{year}_???"))
+    elif region == "NC":
+        networks = fs_data.glob(f"{bucket}/{folder}/??")
+        for network in networks:
+            print(f"{network}/{year}/{year}.???")
+            jdays.extend(fs_data.glob(f"{network}/{year}/{year}.???"))
 
-        tmp_dir = f"tmp_{region}"
-        if not os.path.exists(f"{tmp_dir}"):
-            os.makedirs(f"{tmp_dir}")
+    def scan_mseed(path):
+        if region == "SC":
+            year, jday = path.split("/")[-1].split("_")
+            mseeds = fs_data.glob(f"{path}/*_{year}{jday}.ms")
+        elif region == "NC":
+            year, jday = path.split("/")[-1].split(".")
+            mseeds = fs_data.glob(f"{path}/*.D.{year}.{jday}")
+        mseeds = [f"{protocol}://{mseed}" for mseed in mseeds]
+        return mseeds
 
-        folder_list = []
-        print(f"{bucket}/{folder}", maxdepth)
-
-        for root, dirs, files in fs_data.walk(f"{bucket}/{folder}", maxdepth=maxdepth):
-            print(f"{root}: {len(dirs)} dirs, {len(files)} files")
-            folder_list.extend([f"{root}/{d}" for d in dirs])
-        print(f"Number of folders: {len(folder_list)}")
-
-        def process(rank, nodes, folder):
-            print(f"{rank}/{nodes}: {folder}")
-
-            if not os.path.exists(f"{tmp_dir}/{rank}_{nodes}.txt"):
-                if region == "SC":
-                    # mseed_list = fs.glob(f"{bucket}/{folder}/{year}/{year}_???/*_{year}???.ms")
-                    # mseed_list = fs_data.glob(f"{bucket}/{folder}/{year}/{year}_???/*.ms")
-                    mseed_list = []
-                    for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
-                        mseed_list.extend([f"{protocol}://{root}/{f}" for f in files if f != ""])
-                elif region == "NC":
-                    # mseed_list = fs_data.glob(f"{bucket}/{folder}/??/{year}/???.??/*.{year}.???")
-                    mseed_list = []
-                    for root, dirs, files in fs_data.walk(f"{folder}", maxdepth=1):
-                        mseed_list.extend(
-                            [
-                                f"{protocol}://{root}/{f}"
-                                for f in files
-                                if (f != "")
-                                and (not f.endswith(".orig"))
-                                and (not f.endswith(".request"))
-                                and (not f.endswith(".old"))
-                                and (not f.endswith(".txt"))
-                                and (not f.endswith("a"))  # hast.076a, mod.076a, pacp.076a
-                                and (not f.endswith("b"))  # ybh.002b
-                            ]
-                        )
-
-                if len(mseed_list) == 0:
-                    return None
-
-                mseed_list = sorted(mseed_list)
-                with open(f"{tmp_dir}/{rank}_{nodes}.txt", "w") as fp:
-                    fp.write("\n".join(mseed_list))
-
-            else:
-                with open(f"{tmp_dir}/{rank}_{nodes}.txt", "r") as fp:
-                    mseed_list = fp.read().splitlines()
-
-            # %% Group by station
-            groups = defaultdict(list)
-            for mseed in mseed_list:
-                try:
-                    station_id, network, station, location, instrument, component, year, jday = parse_fname(
-                        mseed, region
-                    )
-                except:
-                    print(f"Error: {mseed}")
-                    raise
-
-                if (component in valid_components) and (instrument in valid_instruments):
-                    key = f"{year}_{jday}/{network}.{station}.{location}.{instrument}"
-                    groups[key].append(mseed)
-                # else:
-                #     print(f"Invalid component: {mseed}")
-
-            mseed_3c = []
-            if len(groups) > 0:
-                for key in groups.keys():
-                    mseed_3c.append(",".join(sorted(groups[key])))
-
-            with open(f"{tmp_dir}/{rank}_{nodes}_3c.txt", "w") as fp:
-                fp.write("\n".join(mseed_3c))
-
-            return mseed_3c
-
-        num_cores = 32
-        nodes = len(folder_list)
-        with ThreadPoolExecutor(max_workers=num_cores) as executor:
-            futures = [executor.submit(process, rank, nodes, folder) for rank, folder in enumerate(folder_list)]
-
-        mseed_list = []
-        for future in futures:
-            result = future.result()
-            if result is not None:
-                mseed_list.extend(result)
-
-        print(f"Total number of mseed files: {len(mseed_list)}")
-        with open(f"minseed_list_3c_{region}.txt", "w") as fp:
-            fp.write("\n".join(mseed_list))
-
-    else:
-        with open(f"mseed_list_3c_{region}.txt", "r") as fp:
-            mseed_list = fp.read().splitlines()
-
-    # split by year
-    mseed_dir = f"mseed_list_{region}"
-    if not os.path.exists(f"{mseed_dir}"):
-        os.makedirs(f"{mseed_dir}")
+    num_cores = 32
+    mseed_list = []
+    with ThreadPoolExecutor(max_workers=num_cores) as executor:
+        jobs = [executor.submit(scan_mseed, jday) for jday in jdays]
+        for job in as_completed(jobs):
+            mseed_list.extend(job.result())
     mseed_list = sorted(list(set(mseed_list)))
-    years = sorted(list(set([x.split("/")[maxdepth + 2] for x in mseed_list])))  # 2: s3://
-    years = years[:-1]  # remove last year
-    print(f"Years: {years}")
-    for year in tqdm(years):
-        mseed_by_year = [x for x in mseed_list if x.split("/")[maxdepth + 2] == year]
-        with open(f"{mseed_dir}/{year}_3c.txt", "w") as fp:
-            fp.write("\n".join(mseed_by_year))
-        fs_result.put(f"{mseed_dir}/{year}_3c.txt", f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt")
+
+    # %% Group by station
+    groups = defaultdict(list)
+    for mseed in mseed_list:
+        try:
+            station_id, network, station, location, instrument, component, year, jday = parse_fname(mseed, region)
+        except:
+            print(f"Error: {mseed}")
+            raise
+
+        if (component in valid_components) and (instrument in valid_instruments):
+            key = f"{year}_{jday}/{network}.{station}.{location}.{instrument}"
+            groups[key].append(mseed)
+        # else:
+        #     print(f"Invalid component: {mseed}")
+
+    mseed_3c = []
+    if len(groups) > 0:
+        for key in groups.keys():
+            mseed_3c.append(",".join(sorted(groups[key])))
+
+    if not os.path.exists(f"{root_path}/{region}/mseed_list"):
+        os.makedirs(f"{root_path}/{region}/mseed_list", exist_ok=True)
+    with open(f"{root_path}/{region}/mseed_list/{year}_3c.txt", "w") as fp:
+        fp.write("\n".join(mseed_3c))
+
+    fs_result.put(
+        f"{root_path}/{region}/mseed_list/{year}_3c.txt", f"quakeflow_catalog/{region}/mseed_list/{year}_3c.txt"
+    )
 
     return 0
 
@@ -258,7 +368,7 @@ def split_mseed_list(
         raise ValueError(f"Invalid region: {region}")
 
     print(f"Processed mseed: {len(processed)}")
-    # processed = filter_empty_files(processed, fs)
+    processed = filter_empty_files(processed, fs)
     processed = set(processed)
 
     mseed_csv_set = set()
@@ -316,6 +426,11 @@ def run_phasenet(
     # if len(mseed_list[node_rank::num_nodes]) == 0:
     #     return 0
 
+    with open(f"{mseed_list}", "r") as fp:
+        lines = fp.read().splitlines()
+    if len(lines) == 0:
+        return 0
+
     with open("application_default_credentials.json", "w") as fp:
         json.dump(token, fp)
 
@@ -345,7 +460,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     protocol = "gs"
-    token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+    token_json = f"application_default_credentials.json"
     with open(token_json, "r") as fp:
         token = json.load(fp)
 
@@ -356,12 +471,6 @@ if __name__ == "__main__":
     node_rank = args.node_rank
     year = args.year
     print(f"{year = }")
-
-    # %%
-    token_file = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
-    if os.path.exists(token_file):
-        with open(token_file, "r") as fp:
-            token = json.load(fp)
 
     # %%
     # stations = pd.read_csv("stations_ncedc.csv")

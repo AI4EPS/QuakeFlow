@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import fsspec
 import sky
+from tqdm import tqdm
 
 # NUM_NODES = 128
 # YEAR = 2022
@@ -76,7 +77,9 @@ task.set_resources(
         region="us-west1",  # GCP
         # region="us-west-2",  # AWS
         accelerators=None,
-        cpus=16,
+        cpus=8,
+        disk_tier="low",
+        disk_size=50,  # GB
         memory=None,
         use_spot=True,
     ),
@@ -88,22 +91,37 @@ task.set_resources(
 # )
 
 jobs = []
-sky.status(refresh=True)
+try:
+    sky.status(refresh=True)
+except Exception as e:
+    print(e)
+
 with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
     for NODE_RANK in range(NUM_NODES):
 
-        ###### Hardcoded #######
-        mseed_file = f"gs://quakeflow_catalog/{REGION}/phasenet/mseed_list/{YEAR}_{NODE_RANK:03d}_{NUM_NODES:03d}.txt"
-        with fs.open(mseed_file, "r") as fp:
-            mseed_list = fp.readlines()
-        print(f"{mseed_file}, {len(mseed_list) = }")
-        if len(mseed_list) == 0:
-            print(f"Skipping {mseed_file}...")
-            continue
-        ###### Hardcoded #######
-
         task.update_envs({"NODE_RANK": NODE_RANK})
         cluster_name = f"phasenet-{REGION}-{YEAR}-{NODE_RANK:03d}"
+
+        status = sky.status(cluster_names=[f"{cluster_name}"], refresh=True)
+        if len(status) > 0:
+            if status[0]["status"].value == "INIT":
+                sky.down(f"{cluster_name}")
+            if (not status[0]["to_down"]) and (not status[0]["status"].value == "INIT"):
+                sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
+            print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
+            continue
+
+        ###### Hardcoded #######
+        mseed_file = f"gs://quakeflow_catalog/{REGION}/phasenet/mseed_list/{YEAR}_{NODE_RANK:03d}_{NUM_NODES:03d}.txt"
+        if fs.exists(mseed_file):
+            with fs.open(mseed_file, "r") as fp:
+                mseed_list = fp.readlines()
+            print(f"{mseed_file}, {len(mseed_list) = }")
+            if len(mseed_list) == 0:
+                print(f"Skipping {mseed_file}...")
+                continue
+        ###### Hardcoded #######
+
         status = sky.status(cluster_names=[f"{cluster_name}"])
         if len(status) == 0:
             print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
@@ -114,14 +132,11 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
                     cluster_name=f"{cluster_name}",
                     idle_minutes_to_autostop=10,
                     down=True,
+                    detach_setup=True,
                     detach_run=True,
                 )
             )
             time.sleep(10)
-        else:
-            if not status[0]["to_down"]:
-                sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
-            print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
 
 for job in jobs:
     print(job.result())

@@ -63,6 +63,8 @@ def read_csv(rows, year, jday, root_path, fs, bucket, folder="phasenet", regions
                 picks_ = pd.read_csv(f, dtype=str)
             picks.append(picks_)
 
+        if len(picks) == 0:
+            continue
         picks = pd.concat(picks, ignore_index=True)
         if not os.path.exists(f"{root_path}/{region}/{folder}/{year}"):
             os.makedirs(f"{root_path}/{region}/{folder}/{year}", exist_ok=True)
@@ -73,14 +75,16 @@ def read_csv(rows, year, jday, root_path, fs, bucket, folder="phasenet", regions
         )
         picks["source"] = region
         picks_total.append(picks)
-    picks_total = pd.concat(picks_total, ignore_index=True)
-    if not os.path.exists(f"{root_path}/Cal/{folder}/{year}"):
-        os.makedirs(f"{root_path}/Cal/{folder}/{year}", exist_ok=True)
-    picks_total.to_csv(f"{root_path}/Cal/{folder}/{year}/{year}.{jday}.csv", index=False)
-    fs.put(
-        f"{root_path}/Cal/{folder}/{year}/{year}.{jday}.csv",
-        f"{bucket}/Cal/{folder}_merged/{year}/{year}.{jday}.csv",
-    )
+
+    if len(picks_total) > 0:
+        picks_total = pd.concat(picks_total, ignore_index=True)
+        if not os.path.exists(f"{root_path}/Cal/{folder}/{year}"):
+            os.makedirs(f"{root_path}/Cal/{folder}/{year}", exist_ok=True)
+        picks_total.to_csv(f"{root_path}/Cal/{folder}/{year}/{year}.{jday}.csv", index=False)
+        fs.put(
+            f"{root_path}/Cal/{folder}/{year}/{year}.{jday}.csv",
+            f"{bucket}/Cal/{folder}_merged/{year}/{year}.{jday}.csv",
+        )
 
 
 # %%
@@ -90,7 +94,11 @@ if __name__ == "__main__":
     root_path = "local"
     regions = ["NC", "SC"]
     # year = "2023"
-    years = ["2022"]
+    # years = range(2017, 2021)
+    # years = range(2011, 2017)
+    # years = range(2008, 2011)
+    # years = range(2005, 2008)
+    years = range(1999, 2005)
     bucket = "quakeflow_catalog"
     folder = "phasenet"
 
@@ -117,8 +125,8 @@ if __name__ == "__main__":
 
     # %%
     for year in years:
-        if not os.path.exists(f"{root_path}/Cal/{folder}/csv_list/{year}.csv"):
-            scan_csv(regions, year, root_path, fs, bucket, folder)
+        # if not os.path.exists(f"{root_path}/Cal/{folder}/csv_list/{year}.csv"):
+        scan_csv(regions, year, root_path, fs, bucket, folder)
 
         # %%
         csv_list = pd.read_csv(f"{root_path}/Cal/{folder}/csv_list/{year}.csv", dtype=str)
@@ -131,9 +139,11 @@ if __name__ == "__main__":
         ncpu = 64
         print(f"Number of processors: {ncpu}")
         csv_by_jday = csv_list.groupby("jday")
-        pbar = tqdm(total=len(csv_by_jday), desc="Loading csv files")
+        pbar = tqdm(total=len(csv_by_jday), desc=f"Loading csv files (year {year})")
 
-        with mp.Pool(ncpu) as pool:
+        # with mp.Pool(ncpu) as pool:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(ncpu) as pool:
             jobs = []
             for jday, csvs in csv_by_jday:
                 job = pool.apply_async(
