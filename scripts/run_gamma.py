@@ -1,27 +1,25 @@
 from typing import Dict, List, NamedTuple
+import json
+import os
 
-from kfp import dsl
+import fsspec
+import numpy as np
+import pandas as pd
+from gamma.utils import association, estimate_eps
+from pyproj import Proj
 
 
-@dsl.component(base_image="zhuwq0/quakeflow:latest")
 def run_gamma(
     root_path: str,
     region: str,
     config: Dict,
-    rank: int = 0,
+    node_rank: int = 0,
+    num_nodes: int = 1,
     picks_csv: str = None,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
 ) -> NamedTuple("outputs", events=str, picks=str):
-    import json
-    import os
-
-    import fsspec
-    import numpy as np
-    import pandas as pd
-    from gamma.utils import association, estimate_eps
-    from pyproj import Proj
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
@@ -33,11 +31,12 @@ def run_gamma(
 
     # %%
     # station_csv = data_path / "stations.csv"
-    station_json = f"{region}/results/data/stations.json"
+    station_json = f"{region}/results/network/stations.json"
     if picks_csv is None:
-        picks_csv = f"{region}/results/phase_picking/phase_picks_{rank:03d}.csv"
-    gamma_events_csv = f"{result_path}/gamma_events_{rank:03d}.csv"
-    gamma_picks_csv = f"{result_path}/gamma_picks_{rank:03d}.csv"
+        # picks_csv = f"{region}/results/picking/phase_picks_{node_rank:03d}_{num_nodes:03d}.csv"
+        picks_csv = f"{region}/phasenet/phasenet_picks_{node_rank:03d}_{num_nodes:03d}.csv"
+    gamma_events_csv = f"{result_path}/gamma_events_{node_rank:03d}_{num_nodes:03d}.csv"
+    gamma_picks_csv = f"{result_path}/gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv"
 
     # %%
     ## read picks
@@ -209,16 +208,20 @@ def run_gamma(
     # %% copy to results/phase_association
     if not os.path.exists(f"{root_path}/{region}/results/phase_association"):
         os.makedirs(f"{root_path}/{region}/results/phase_association")
-    os.system(f"cp {root_path}/{gamma_events_csv} {root_path}/{region}/results/phase_association/events_{rank:03d}.csv")
-    os.system(f"cp {root_path}/{gamma_picks_csv} {root_path}/{region}/results/phase_association/picks_{rank:03d}.csv")
+    os.system(
+        f"cp {root_path}/{gamma_events_csv} {root_path}/{region}/results/phase_association/events_{node_rank:03d}_{num_nodes:03d}.csv"
+    )
+    os.system(
+        f"cp {root_path}/{gamma_picks_csv} {root_path}/{region}/results/phase_association/picks_{node_rank:03d}_{num_nodes:03d}.csv"
+    )
     if protocol != "file":
         fs.put(
             f"{root_path}/{gamma_events_csv}",
-            f"{bucket}/{region}/results/phase_association/events_{rank:03d}.csv",
+            f"{bucket}/{region}/results/phase_association/events_{node_rank:03d}_{num_nodes:03d}.csv",
         )
         fs.put(
             f"{root_path}/{gamma_picks_csv}",
-            f"{bucket}/{region}/results/phase_association/picks_{rank:03d}.csv",
+            f"{bucket}/{region}/results/phase_association/picks_{node_rank:03d}_{num_nodes:03d}.csv",
         )
 
     outputs = NamedTuple("outputs", events=str, picks=str)
@@ -240,4 +243,4 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_gamma.execute(root_path=root_path, region=region, config=config)
+    run_gamma(root_path=root_path, region=region, config=config)

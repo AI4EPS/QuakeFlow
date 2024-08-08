@@ -1,10 +1,4 @@
 {
-    "kubeflow": {
-        "num_nodes": 1
-    },
-    "skypilot": {
-        "num_nodes": 1
-    },
     "gamma": {
         "zmin_km": 0,
         "zmax_km": 60
@@ -61,7 +55,8 @@
             ],
             "provider": [
                 "SCEDC"
-            ]
+            ],
+            "num_nodes": 1
         },
         "Hawaii": {
             "minlatitude": 18.39,

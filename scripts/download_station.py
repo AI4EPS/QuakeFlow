@@ -1,10 +1,7 @@
 # %%
 from typing import Dict
 
-from kfp import dsl
 
-
-@dsl.component(base_image="zhuwq0/quakeflow:latest")
 def download_station(
     root_path: str, region: str, config: Dict, protocol: str = "file", bucket: str = "", token: Dict = None
 ):
@@ -189,12 +186,16 @@ def download_station(
                             "elevation_m": channel.elevation,
                             "depth_km": -channel.elevation / 1e3,
                             # "depth_km": channel.depth,
-                            "begin_time": channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.start_date is not None
-                            else None,
-                            "end_time": channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.end_date is not None
-                            else None,
+                            "begin_time": (
+                                channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                                if channel.start_date is not None
+                                else None
+                            ),
+                            "end_time": (
+                                channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                                if channel.end_date is not None
+                                else None
+                            ),
                             "azimuth": channel.azimuth,
                             "dip": channel.dip,
                             "sensitivity": channel.response.instrument_sensitivity.value,
@@ -311,15 +312,15 @@ def download_station(
     if protocol != "file":
         fs.put(f"{root_path}/{data_dir}/stations.png", f"{bucket}/{data_dir}/stations.png")
 
-    # %% copy to results/data
-    if not os.path.exists(f"{root_path}/{region}/results/data"):
-        os.makedirs(f"{root_path}/{region}/results/data", exist_ok=True)
+    # %% copy to results/network
+    if not os.path.exists(f"{root_path}/{region}/results/network"):
+        os.makedirs(f"{root_path}/{region}/results/network", exist_ok=True)
 
     for file in ["inventory.xml", "stations.csv", "stations.json", "stations.png"]:
-        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/data/{file}")
+        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/network/{file}")
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/data/{file}")
-    os.system(f"cp -r {root_path}/{data_dir}/inventory/ {root_path}/{region}/results/data/inventory/")
+            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/network/{file}")
+    os.system(f"cp -r {root_path}/{data_dir}/inventory/ {root_path}/{region}/results/network/inventory/")
 
 
 if __name__ == "__main__":
@@ -335,30 +336,4 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_station.execute(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
-
-    # # %%
-    # import os
-
-    # from kfp import compiler
-    # from kfp.client import Client
-
-    # bucket = "quakeflow_share"
-    # protocol = "gs"
-    # token = None
-    # token_file = "/Users/weiqiang/.config/gcloud/application_default_credentials.json"
-    # if os.path.exists(token_file):
-    #     with open(token_file, "r") as fp:
-    #         token = json.load(fp)
-
-    # @dsl.pipeline
-    # def test_download_station():
-    #     download_station(
-    #         root_path=root_path, region=region, config=config, protocol=protocol, bucket=bucket, token=token
-    #     )
-
-    # client = Client("3a1395ae1e4ad10-dot-us-west1.pipelines.googleusercontent.com")
-    # run = client.create_run_from_pipeline_func(
-    #     test_download_station,
-    #     arguments={},
-    # )
+    download_station(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
