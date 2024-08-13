@@ -3,10 +3,7 @@ import json
 import multiprocessing as mp
 import os
 import sys
-
-from datetime import timezone
 from glob import glob
-
 import numpy as np
 import obspy
 import pandas as pd
@@ -29,7 +26,6 @@ def fillin_missing_picks(picks, events, stations, config):
     vp_vs_ratio = config["vp_vs_ratio"]
     min_phase_score = config["min_phase_score"]
 
-    ############################################ Fillin missing P and S picks ############################################
     pivoted = picks.pivot(index=["event_index", "station_id"], columns="phase_type", values="traveltime")
     pivoted.columns.name = None
     pivoted = pivoted.reset_index()
@@ -67,7 +63,6 @@ def fillin_missing_picks(picks, events, stations, config):
     print(picks_ps.iloc[:10])
     picks = picks_ps
 
-    ############################################ Fillin missing P and S picks ############################################
     return picks
 
 
@@ -79,7 +74,6 @@ def predict_full_picks(picks, events, stations, config):
     eikonal = config["eikonal"]
     min_phase_score = config["min_phase_score"]
 
-    ############################################ Generate full picks ############################################
     if picks is None:
         event_index = events["event_index"].values
         station_id = stations["station_id"].values
@@ -127,7 +121,6 @@ def predict_full_picks(picks, events, stations, config):
     print(picks_full.iloc[:10])
 
     picks = picks_full
-    ############################################ Generate full picks ############################################
     return picks
 
 
@@ -191,9 +184,6 @@ def extract_template_numpy(
                 except Exception as e:
                     print(e)
                     continue
-
-                # print(trace.data)
-                # raise
 
     ## Cut templates
     for (idx_eve, idx_sta, phase_type), pick in picks.iterrows():
@@ -266,7 +256,6 @@ def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, 
     event_pairs = set()
     neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
     for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating event pairs")):
-        # event_pairs.extend([[i, j] for j in neighs if i < j])
         for j in neighs[:max_neighbors]:
             if i < j:
                 event_pairs.add((i, j))
@@ -296,54 +285,6 @@ def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, 
 
 
 # %%
-def correlate_traces(trace1, trace2, chan_inds, max_shift=85, min_cc=0.6, delta_tt=None):
-    # init value of best_sub_shift doesn't matter because we are checking the weight
-    best_weight = -1.0
-    best_sub_shift = -1.0
-    best_i = 0
-    for i in chan_inds:
-        fcc = np.abs(correlate(trace1[i], trace2[i], max_shift, normalize=None))
-        # height has to be small enough to get the second peak (if any)
-        peak_inds, _ = find_peaks(fcc, height=0.1)
-        # need at least two peaks to compute weight
-        if len(peak_inds) < 2:
-            continue
-        # get the two best peaks
-        inds = np.argsort(fcc[peak_inds])[-2:][::-1]
-        top_ind = peak_inds[inds[0]]
-        # continue if the peak is at/near the edge
-        if not 2 < top_ind < len(fcc) - 2:
-            continue
-        top_cc = fcc[top_ind]
-        # cross-correlation coefficient is too low
-        if top_cc < min_cc:
-            continue
-        sec_ind = peak_inds[inds[1]]
-        sec_cc = fcc[sec_ind]
-        shift = top_ind - max_shift
-        # get subsample rate precision
-        x = np.array([-1, 0, 1]) + shift
-        y = np.array(fcc[top_ind - 1 : top_ind + 2])
-        f = interp1d(x, y, kind="quadratic")
-        xnew = np.arange(-0.999, 1.0, 0.001) + shift
-        ynew = f(xnew)
-        sub_ind = np.argmax(ynew)
-        sub_shift = xnew[sub_ind]
-        # compute weight
-        diff = top_cc - sec_cc
-        weight = (0.1 + 3.0 * diff) * top_cc**2
-        if weight > best_weight:
-            best_weight = weight
-            best_sub_shift = sub_shift + delta_tt[i]
-            best_i = i
-
-    # if best_weight > -1.0:
-    #     print(f"{sub_shift = :.3f}, {weight = :.3f}, {top_cc = :.3f}, {diff = :.3f}{delta_tt[best_i] = :.3f}")
-
-    return best_weight, best_sub_shift
-
-
-# %%
 def cut_templates(root_path, region, config):
 
     # %%
@@ -356,15 +297,6 @@ def cut_templates(root_path, region, config):
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    # config["time_before_p"] = 0.3
-    # config["time_after_p"] = 2.5 - config["time_before_p"]
-    # config["time_before_s"] = 0.3
-    # config["time_after_s"] = 4.0 - config["time_before_s"]
-    # config["time_window"] = max(
-    #     (config["time_before_p"] + config["time_after_p"]), (config["time_before_s"] + config["time_after_s"])
-    # )
-    # config["nt"] = int(round(config["time_window"] * config["sampling_rate"]))
-    # config["max_epicenter_dist"] = 200.0
     time_before_p = 0.3
     time_after_p = 2.5 - time_before_p
     time_before_s = 0.3
@@ -606,256 +538,6 @@ def cut_templates(root_path, region, config):
         max_pair_dist=config["cctorch"]["min_pair_dist_km"],
         fname=config["cctorch"]["pair_file"],
     )
-
-    # %%
-    # i = 0
-    # normalize2d = lambda x: (x - x.mean(axis=-1, keepdims=True)) / (x.std(axis=-1, keepdims=True) + 1e-6) / 6
-    # for (idx_eve, phase_type), picks_ in picks.groupby(["idx_eve", "phase_type"]):
-    #     idx_pick = picks_["idx_pick"].values
-    #     ic = 2
-    #     data = normalize2d(template_array[idx_pick, ic, 0, :])
-    #     vmax = np.abs(data).max()
-    #     plt.figure()
-    #     plt.imshow(data, aspect="auto", cmap="bwr", interpolation="none", vmin=-vmax, vmax=vmax)
-    #     plt.colorbar()
-    #     plt.savefig("debug_template.png")
-    #     plt.show()
-    #     i += 1
-    #     if i > 10:
-    #         break
-
-    # # %%
-    # neigh = NearestNeighbors(radius=config["cctorch"]["max_pair_dist"], n_jobs=-1)
-    # neigh.fit(events[["x_km", "y_km", "z_km"]].values)
-    # pairs = set()
-    # neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
-
-    # # idx_sta_dict = picks.groupby("idx_eve")["idx_sta"].apply(set).to_dict()
-    # for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating pairs")):
-    #     # n = 0
-    #     for j in neighs[: config["cctorch"]["max_neighbors"]]:
-    #         # if i not in idx_sta_dict or j not in idx_sta_dict:
-    #         #     continue
-    #         # if len(idx_sta_dict[i] & idx_sta_dict[j]) < MIN_LINKS:
-    #         #     continue
-
-    #         if i > j:
-    #             pairs.add((j, i))
-    #         else:
-    #             pairs.add((i, j))
-
-    #         # n += 1
-    #         # if n >= MAX_NEIGHBORS:
-    #         #     break
-
-    # pairs = list(pairs)
-    # print(f"{len(pairs) = } {len(events) = }")
-
-    # # raise
-
-    # # %%
-    # normalize2d = lambda x: (x - x.mean(axis=-1, keepdims=True)) / (x.std(axis=-1, keepdims=True) + 1e-6) / 6
-    # cc_array = []
-    # dt_array = []
-    # max_dt = {"P": 0.5, "S": 0.85}
-
-    # picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
-    # # picks.set_index(["idx_eve", "idx_sta", "phase_type"], inplace=True)
-    # picks.set_index(["idx_pick"], inplace=True)
-    # # idx_pick_dict = picks["idx_pick"].to_dict()  ## much faster than using .loc
-    # # idx_pick_dict = picks.index.to_dict()
-
-    # # for ii, (i, j) in enumerate(tqdm(pairs)):
-    # #     for idx_sta in stations.index:
-    # #         for phase_type in ["P", "S"]:
-
-    # #             # if (i, idx_sta, phase_type) not in picks.index or (j, idx_sta, phase_type) not in picks.index:
-    # #             #     continue
-    # #             # tt1 = traveltime_array[picks.loc[(i, idx_sta, phase_type), "idx_pick"], :, 0]
-    # #             # tt2 = traveltime_array[picks.loc[(j, idx_sta, phase_type), "idx_pick"], :, 0]
-
-    # #             if (i, idx_sta, phase_type) not in idx_pick_dict or (j, idx_sta, phase_type) not in idx_pick_dict:
-    # #                 continue
-
-    # idx_eve_dict = picks["idx_eve"].to_dict()
-    # idx_sta_dict = picks["idx_sta"].to_dict()
-    # phase_type_dict = picks["phase_type"].to_dict()
-
-    # # for idx_pick, jdx_pick in tqdm(pairs, desc="Correlating traces"):
-    # for iii, (idx_pick, jdx_pick) in enumerate(tqdm(pairs, desc="Correlating traces")):
-    #     # idx_eve1 = picks.loc[idx_pick, "idx_eve"]
-    #     # idx_eve2 = picks.loc[jdx_pick, "idx_eve"]
-    #     # idx_sta = picks.loc[idx_pick, "idx_sta"]
-    #     # phase_type = picks.loc[idx_pick, "phase_type"]
-    #     idx_eve1 = idx_eve_dict[idx_pick]
-    #     idx_eve2 = idx_eve_dict[jdx_pick]
-    #     idx_sta = idx_sta_dict[idx_pick]
-    #     phase_type = phase_type_dict[idx_pick]
-
-    #     # idx_pick = idx_pick_dict[(i, idx_sta, phase_type)]
-    #     data1 = normalize2d(template_array[idx_pick, :, 0, :])
-    #     # jdx_pick = idx_pick_dict[(j, idx_sta, phase_type)]
-    #     data2 = normalize2d(template_array[jdx_pick, :, 0, :])
-
-    #     # print(f"{idx_pick = }, {jdx_pick = }")
-    #     # print(f"{idx_eve1 = }, {idx_eve2 = }, {idx_sta = }, {phase_type = }")
-    #     # print(f"{template_array[idx_pick, :, 0, :][:10] = }, {template_array[jdx_pick, :, 0, :][:10] = }")
-    #     # raise
-
-    #     norm = np.sqrt(np.sum(data1**2, axis=-1, keepdims=True) * np.sum(data2**2, axis=-1, keepdims=True))
-    #     if norm.all() == 0:
-    #         continue
-
-    #     # mask1 = traveltime_mask[idx_pick_dict[(i, idx_sta, phase_type)], :, 0]
-    #     # mask2 = traveltime_mask[idx_pick_dict[(j, idx_sta, phase_type)], :, 0]
-    #     mask1 = traveltime_mask[idx_pick, :, 0]
-    #     mask2 = traveltime_mask[jdx_pick, :, 0]
-    #     if not (mask1.any() and mask2.any()):
-    #         continue
-
-    #     ich = np.arange(3)[mask1 & mask2].tolist()
-    #     if len(ich) == 0:
-    #         continue
-
-    #     # tt1 = traveltime_array[idx_pick_dict[(i, idx_sta, phase_type)], ich, 0]
-    #     # tt2 = traveltime_array[idx_pick_dict[(j, idx_sta, phase_type)], ich, 0]
-    #     tt1 = traveltime_array[idx_pick, ich, 0]
-    #     tt2 = traveltime_array[jdx_pick, ich, 0]
-
-    #     # phase_type = picks.loc[idx_pick, "phase_type"]
-
-    #     cc_weight, cc_shift = correlate_traces(
-    #         data1,
-    #         data2,
-    #         ich,
-    #         max_shift=int(max_dt[phase_type] * config["sampling_rate"]),
-    #         min_cc=config["cctorch"]["min_cc_score"],
-    #         delta_tt=(tt1 - tt2) * config["sampling_rate"],
-    #     )
-    #     if (cc_weight == -1.0) or (cc_shift == -1.0):
-    #         continue
-    #     cc_shift = cc_shift / config["sampling_rate"]
-
-    #     # if cc_weight < MIN_CC_WEIGHT:
-    #     #     continue
-
-    #     # cc_weight = np.random.uniform(0.0, 1.0)
-    #     # cc_shift = tt1[-1] - tt2[-1]
-
-    #     # assert tt1[0] == tt1[1]
-
-    #     dt_array.append(
-    #         {
-    #             # "idx_eve1": i,
-    #             # "idx_eve2": j,
-    #             # "idx_sta": idx_sta,
-    #             # "idx_eve1": picks.loc[idx_pick, "idx_eve"],
-    #             # "idx_eve2": picks.loc[jdx_pick, "idx_eve"],
-    #             # "idx_sta": picks.loc[idx_pick, "idx_sta"],
-    #             "idx_eve1": idx_eve1,
-    #             "idx_eve2": idx_eve2,
-    #             "idx_sta": idx_sta,
-    #             "phase_type": phase_type,
-    #             "dt": cc_shift,
-    #             "weight": cc_weight,
-    #         }
-    #     )
-
-    #     if iii > 100:
-    #         break
-
-    # # %%
-    # dt_array = pd.DataFrame(dt_array)
-    # print(dt_array)
-    # plt.figure()
-    # plt.hist(dt_array[dt_array["phase_type"] == "P"]["dt"], bins=100, alpha=0.5)
-    # plt.hist(dt_array[dt_array["phase_type"] == "S"]["dt"], bins=100, alpha=0.5)
-    # # bins = np.linspace(-20, 20, 41)
-    # # plt.hist(dt_array[dt_array["phase_type"] == "P"]["dt"], bins=bins, alpha=0.5)
-    # # plt.hist(dt_array[dt_array["phase_type"] == "S"]["dt"], bins=bins, alpha=0.5)
-    # plt.yscale("log")
-    # plt.savefig("debug_dt.png")
-
-    # plt.figure()
-    # plt.hist(dt_array[dt_array["phase_type"] == "P"]["weight"], bins=100, alpha=0.5)
-    # plt.hist(dt_array[dt_array["phase_type"] == "S"]["weight"], bins=100, alpha=0.5)
-    # # bins = np.linspace(-20, 20, 41)
-    # # plt.hist(dt_array[dt_array["phase_type"] == "P"]["dt"], bins=bins, alpha=0.5)
-    # # plt.hist(dt_array[dt_array["phase_type"] == "S"]["dt"], bins=bins, alpha=0.5)
-    # plt.yscale("log")
-    # plt.savefig("debug_weight.png")
-
-    # # %%
-    # stations.reset_index(inplace=True)
-    # stations["network_station"] = stations["network"] + "." + stations["station"]
-    # dt_array = dt_array.merge(stations[["network_station", "idx_sta"]], on="idx_sta", how="left")
-    # # dt_array = (
-    # #     dt_array.groupby(["idx_eve1", "idx_eve2", "network_station", "phase_type"])
-    # #     .apply(lambda x: x.nlargest(1, "weight"))
-    # #     .reset_index(drop=True)
-    # # )
-    # dt_array.sort_values("weight", ascending=False, inplace=True)
-    # dt_array = dt_array.groupby(["idx_eve1", "idx_eve2", "network_station", "phase_type"]).first().reset_index()
-    # dt_array.drop(columns=["network_station"], inplace=True)
-    # stations.set_index("idx_sta", inplace=True)
-
-    # # %%
-    # # fitler (idx_eve1, idx_eve2) pairs with at least MIN_OBS observations, and select MAX_OBS observations with the highest weight
-    # dt_array = (
-    #     dt_array.groupby(["idx_eve1", "idx_eve2"])
-    #     .apply(
-    #         lambda x: (
-    #             x.nlargest(config["cctorch"]["max_obs"], "weight") if len(x) >= config["cctorch"]["min_obs"] else None
-    #         )
-    #     )
-    #     .reset_index(drop=True)
-    # )
-
-    # # %%
-    # # dt_array = dt_array.groupby(["idx_eve1", "idx_eve2"]).filter(
-    # #     lambda x: (x["phase_type"] == "P").sum() >= MIN_CC_NUM_P
-    # #     and (x["phase_type"] == "S").sum() >= MIN_CC_NUM_S
-    # #     and len(x) >= MIN_CC_NUM
-    # # )
-
-    # plt.figure()
-    # plt.hist(dt_array[dt_array["phase_type"] == "P"]["dt"], bins=100, alpha=0.5)
-    # plt.hist(dt_array[dt_array["phase_type"] == "S"]["dt"], bins=100, alpha=0.5)
-    # plt.yscale("log")
-    # plt.savefig("debug_dt_2.png")
-    # plt.show()
-
-    # plt.figure()
-    # plt.hist(dt_array[dt_array["phase_type"] == "P"]["weight"], bins=100, alpha=0.5)
-    # plt.hist(dt_array[dt_array["phase_type"] == "S"]["weight"], bins=100, alpha=0.5)
-    # plt.yscale("log")
-    # plt.savefig("debug_weight_2.png")
-    # plt.show()
-
-    # # %%
-    # event_idx_dict = events["event_index"].to_dict()  ##  faster than using .loc
-    # # station_id_dict = (stations["station"] + stations["instrument"]).to_dict()
-    # station_id_dict = stations["station"].to_dict()
-    # # with open(f"cctorch/dt.cc", "w") as fp:
-    # with open(f"{root_path}/{result_path}/dt.cc", "w") as fp:
-
-    #     for (i, j), record in tqdm(dt_array.groupby(["idx_eve1", "idx_eve2"])):
-    #         # event_id1 = events.loc[i]["event_id"]
-    #         # event_id2 = events.loc[j]["event_id"]
-    #         event_idx1 = event_idx_dict[i]
-    #         event_idx2 = event_idx_dict[j]
-    #         fp.write(f"# {event_idx1} {event_idx2} 0.000\n")
-    #         for k, record_ in record.iterrows():
-    #             idx_sta = record_["idx_sta"]
-    #             # station_id = stations.loc[idx_sta]["station"] + stations.loc[idx_sta]["instrument"]
-    #             station_id = station_id_dict[idx_sta]
-    #             phase_type = record_["phase_type"]
-    #             fp.write(f"{station_id} {record_['dt']: .4f} {record_['weight']:.4f} {phase_type}\n")
-
-    # # # %%
-    # # generate_pairs(
-    # #     events, min_pair_dist=config["cctorch"]["min_pair_dist_km"], fname=config["cctorch"]["pair_file"]
-    # # )
 
 
 # %%
