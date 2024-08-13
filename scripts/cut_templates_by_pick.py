@@ -477,6 +477,7 @@ def cut_templates(root_path, region, config):
         json.dump(config["cctorch"], f, indent=4, sort_keys=True)
 
     # %%
+    config["cctorch"]["reference_t0"] = reference_t0
     events = events[["idx_eve", "x_km", "y_km", "z_km", "event_index", "event_time", "event_timestamp"]]
     stations = stations[["idx_sta", "x_km", "y_km", "z_km", "station_id", "component", "network", "station"]]
     picks = picks[["idx_eve", "idx_sta", "phase_type", "phase_score", "phase_time", "phase_timestamp", "phase_source"]]
@@ -484,7 +485,8 @@ def cut_templates(root_path, region, config):
     stations.set_index("idx_sta", inplace=True)
     picks.sort_values(by=["idx_eve", "idx_sta", "phase_type"], inplace=True)
     picks["idx_pick"] = np.arange(len(picks))
-    config["cctorch"]["reference_t0"] = reference_t0
+
+    picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
 
     dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"))
     ncpu = min(32, mp.cpu_count())
