@@ -35,7 +35,7 @@ def run_adloc(
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     # %%
-    result_path = f"{root_path}{region}/adloc"
+    result_path = f"{root_path}/{region}/adloc"
     if not os.path.exists(result_path):
         os.makedirs(result_path)
     figure_path = f"{root_path}/{region}/adloc/figures"
