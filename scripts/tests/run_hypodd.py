@@ -177,6 +177,7 @@ plt.show()
 
 fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 ax[0].scatter(events_true["longitude"], events_true["latitude"], s=5, alpha=0.5, label="True")
+ax[0].set_title(f"True: {len(events_true)} events")
 ax[1].scatter(events_hypodd["longitude"], events_hypodd["latitude"], s=5, alpha=0.5, label="Hypodd")
-
+ax[1].set_title(f"Hypodd: {len(events_hypodd)} events")
 # %%

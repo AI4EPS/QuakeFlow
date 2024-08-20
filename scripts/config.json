@@ -45,8 +45,10 @@
             "maxlatitude": 36.205,
             "minlongitude": -118.004,
             "maxlongitude": -117.004,
+            "mindepth": 0,
+            "maxdepth": 30,
             "starttime": "2019-07-04T00:00:00",
-            "endtime": "2019-07-10T00:00:00",
+            "endtime": "2019-07-17T00:00:00",
             "channel_priorities": [
                 "HH[321ENZ]",
                 "EH[321ENZ]",

@@ -13,6 +13,7 @@ if [ ! -d "$root_path/$region/hypodd" ]; then
   mkdir -p $root_path/$region/hypodd
 fi
 
+mv $root_path/$region/hypodd/dt.cc $root_path/$region/hypodd/dt_old.cc 
 cp $root_path/$region/cctorch/dt.cc $root_path/$region/hypodd/dt.cc 
 cd $root_path/$region/hypodd
 

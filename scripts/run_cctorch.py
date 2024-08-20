@@ -54,8 +54,10 @@ else:
 num_gpu = torch.cuda.device_count()
 if num_gpu == 0:
     if os.uname().sysname == "Darwin":
-        os.system(f"python {base_cmd} --device=mps")
+        cmd = f"python {base_cmd} --device=cpu"
     else:
-        os.system(f"python {base_cmd} --device=cpu")
+        cmd = f"python {base_cmd} --device=cpu"
 else:
-    os.system(f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}")
+    cmd = f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}"
+print(cmd)
+os.system(cmd)
