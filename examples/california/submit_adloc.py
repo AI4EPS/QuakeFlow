@@ -20,14 +20,14 @@ YEAR = args.year
 REGION = args.region
 
 task = sky.Task(
-    name="run_gamma",
+    name="run_adloc",
     setup="""
 echo "Begin setup."                                                           
 echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
-pip install -U h5py tqdm wandb pandas numpy scipy
+pip install -U h5py tqdm wandb pandas numpy scipy scikit-learn
 pip install -U fsspec gcsfs                                                    
 pip install -U obspy pyproj
-pip install -e /opt/GaMMA
+pip install -e /opt/ADLoc
 """,
     run="""
 num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
@@ -37,7 +37,7 @@ if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
     ls -al /data
     ls -al ./
 fi
-python run_gamma.py --num_node $NUM_NODES --node_rank $NODE_RANK
+python run_adloc.py --num_node $NUM_NODES --node_rank $NODE_RANK
 """,
     workdir=".",
     num_nodes=1,
@@ -46,7 +46,7 @@ python run_gamma.py --num_node $NUM_NODES --node_rank $NODE_RANK
 
 task.set_file_mounts(
     {
-        "/opt/GaMMA": "../../GaMMA",
+        "/opt/ADLoc": "../../ADLoc",
     },
 )
 # task.set_storage_mounts({
@@ -69,7 +69,7 @@ task.set_resources(
 
 # for NODE_RANK in range(NUM_NODES):
 #     task.update_envs({"NODE_RANK": NODE_RANK})
-#     cluster_name = f"gamma-{NODE_RANK:02d}"
+#     cluster_name = f"adloc-{NODE_RANK:02d}"
 #     print(f"Launching cluster {cluster_name}-{NUM_NODES}...")
 #     sky.jobs.launch(
 #         task,
@@ -86,7 +86,7 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
     for NODE_RANK in range(NUM_NODES):
 
         task.update_envs({"NODE_RANK": NODE_RANK})
-        cluster_name = f"gamma-{NODE_RANK:02d}"
+        cluster_name = f"adloc-{NODE_RANK:02d}"
 
         status = sky.status(cluster_names=[f"{cluster_name}"], refresh=True)
         if len(status) > 0:
