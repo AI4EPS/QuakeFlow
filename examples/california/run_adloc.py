@@ -163,13 +163,13 @@ def run_adloc(
         config["eikonal"] = init_eikonal2d(config["eikonal"])
 
         # %% config for location
-        config["min_picks"] = 6
-        config["min_picks_ratio"] = 0.5
+        config["min_picks"] = 6  # for sampling not for filtering
+        config["min_picks_ratio"] = 0.5  # for sampling
         config["max_residual_time"] = 1.0
         config["max_residual_amplitude"] = 1.0
         config["min_score"] = 0.5
-        config["min_p_picks"] = 1.5
-        config["min_s_picks"] = 1.5
+        config["min_p_picks"] = 1.5  # for filtering
+        config["min_s_picks"] = 1.5  # for filtering
 
         config["bfgs_bounds"] = (
             (config["xlim_km"][0] - 1, config["xlim_km"][1] + 1),  # x
