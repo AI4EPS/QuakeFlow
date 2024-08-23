@@ -5,6 +5,7 @@ import os
 from typing import Dict, NamedTuple
 
 import fsspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from gamma.utils import association
@@ -113,22 +114,17 @@ def run_gamma(
         config["use_amplitude"] = True
         config["method"] = "BGMM"
         if config["method"] == "BGMM":  ## BayesianGaussianMixture
-            config["oversample_factor"] = 5
+            config["oversample_factor"] = 2
         if config["method"] == "GMM":  ## GaussianMixture
             config["oversample_factor"] = 1
 
         ## earthquake location
         config["vel"] = {"p": 6.0, "s": 6.0 / 1.75}
         config["dims"] = ["x(km)", "y(km)", "z(km)"]
-        config["x(km)"] = (
-            np.array([config["minlongitude"] - config["longitude0"], config["maxlongitude"] - config["longitude0"]])
-            * config["degree2km"]
-            * np.cos(np.deg2rad(config["latitude0"]))
-        )
-        config["y(km)"] = (
-            np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
-            * config["degree2km"]
-        )
+        xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
+        xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
+        config["x(km)"] = (xmin, xmax)
+        config["y(km)"] = (ymin, ymax)
         if "gamma" not in config:
             config["z(km)"] = (0, 60)
         else:
@@ -143,7 +139,7 @@ def run_gamma(
         ## DBSCAN
         # config["dbscan_eps"] = estimate_eps(stations, config["vel"]["p"])  # s
         config["dbscan_eps"] = 10  # s
-        config["dbscan_min_samples"] = 10
+        config["dbscan_min_samples"] = 6
 
         ## Eikonal for 1D velocity model
         # Southern California
@@ -199,6 +195,20 @@ def run_gamma(
             events.sort_values("time", inplace=True)
             with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
                 events.to_csv(fp, index=False, float_format="%.3f", date_format="%Y-%m-%dT%H:%M:%S.%f")
+
+            # plt.figure()
+            # plt.scatter(
+            #     events["longitude"],
+            #     events["latitude"],
+            #     c=events["depth_km"],
+            #     s=max(0.1, min(10, 5000 / len(events))),
+            #     alpha=0.3,
+            #     linewidths=0,
+            #     cmap="viridis_r",
+            # )
+            # plt.colorbar()
+            # plt.title(f"Number of events: {len(events)}")
+            # plt.savefig(f"{root_path}/{gamma_events_csv.replace('.csv', '')}_scaler60_oversample8.png")
 
             ## add assignment to picks
             assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])

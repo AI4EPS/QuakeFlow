@@ -77,6 +77,14 @@ def run_adloc(
         # drop unnecessary columns
         picks.drop(["id", "timestamp", "type", "amp", "prob", "event_idx"], axis=1, inplace=True, errors="ignore")
 
+        # # increase weight for P/S pairs
+        # phase_counts = (
+        #     picks.groupby(["event_index", "station_id"])["phase_type"].nunique().reset_index(name="phase_count")
+        # )
+        # merged = picks.merge(phase_counts, on=["event_index", "station_id"])
+        # merged.loc[merged["phase_count"] == 2, "phase_score"] *= 1.5
+        # picks = merged.drop(columns=["phase_count"])
+
         # stations = pd.read_csv(stations_file, sep="\t")
         if protocol == "file":
             stations = pd.read_json(station_json, orient="index")
@@ -155,13 +163,13 @@ def run_adloc(
         config["eikonal"] = init_eikonal2d(config["eikonal"])
 
         # %% config for location
-        config["min_picks"] = 5
-        config["min_picks_ratio"] = 0.2
-        config["max_residual_time"] = 1.5
+        config["min_picks"] = 6
+        config["min_picks_ratio"] = 0.5
+        config["max_residual_time"] = 1.0
         config["max_residual_amplitude"] = 1.0
-        config["min_score"] = 0.3
-        config["min_p_picks"] = 2
-        config["min_s_picks"] = 2
+        config["min_score"] = 0.5
+        config["min_p_picks"] = 1.5
+        config["min_s_picks"] = 1.5
 
         config["bfgs_bounds"] = (
             (config["xlim_km"][0] - 1, config["xlim_km"][1] + 1),  # x
@@ -264,7 +272,13 @@ def run_adloc(
             # )
 
             # plotting_ransac(
-            #     stations, f"{root_path}/{figure_path}", config, picks, events_init, events, suffix=f"_ransac_sst_{iter}"
+            #     stations,
+            #     f"{root_path}/{figure_path}",
+            #     config,
+            #     picks,
+            #     events_init,
+            #     events,
+            #     suffix=f"_ransac_sst_{iter}_{config['min_picks']}_s{config['min_score']}_r{config['min_picks_ratio']}_p{config['min_p_picks']}_s{config['min_s_picks']}",
             # )
 
             if iter == 0:

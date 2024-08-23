@@ -20,10 +20,8 @@ if __name__ == "__main__":
     # %%
     token_file = ""
 
-    # Creating a GCS filesystem instance with the key file
     fs = fsspec.filesystem("gcs", token=token_file)
 
-    # Example: Listing files in a bucket
     folders = fs.ls("berkeley-mbari-das/")
 
     hdf5_files = []
