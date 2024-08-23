@@ -285,7 +285,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     protocol = "gs"
-    token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
+    token_json = f"application_default_credentials.json"
+    # token_json = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
     with open(token_json, "r") as fp:
         token = json.load(fp)
 
