@@ -1,24 +1,9 @@
 # %%
-import argparse
-import json
 import os
-from datetime import datetime
-from pathlib import Path
 
-import h5py
-import numpy as np
 import pandas as pd
-import scipy
+from args import parse_args
 from tqdm import tqdm
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
-    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
-    parser.add_argument("--dt_cc", action="store_true", help="run convert_dtcc.py")
-    return parser.parse_args()
-
 
 args = parse_args()
 
@@ -32,14 +17,14 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 
 # %%
 ############################################# Station Format ######################################################
-station_json = f"{region}/results/data/stations.json"
-stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+# station_json = f"{region}/results/data/stations.json"
+# stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+# station_csv = f"{region}/cctorch/cctorch_stations.csv"
+station_csv = f"{region}/adloc/ransac_stations_sst.csv"
+stations = pd.read_csv(f"{root_path}/{station_csv}")
+stations.set_index("station_id", inplace=True)
 
 shift_topo = stations["elevation_m"].max() / 1e3
-# shift_topo = stations["elevation_m"].max()/1e3 + 3.0
-# shift_topo = 0.0 ## prevent air quakes
-# shift_topo = 3.0
-
 converted_hypoinverse = []
 converted_hypodd = {}
 
@@ -68,18 +53,22 @@ with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = f"{region}/results/phase_association/picks.csv"
-events_csv = f"{region}/results/phase_association/events.csv"
+picks_csv = f"{region}/adloc/ransac_picks_sst.csv"
+events_csv = f"{region}/adloc/ransac_events_sst.csv"
 
-picks = pd.read_csv(f"{root_path}/{picks_csv}", parse_dates=["phase_time"])
-events = pd.read_csv(f"{root_path}/{events_csv}", parse_dates=["time"])
+picks = pd.read_csv(f"{root_path}/{picks_csv}")
+events = pd.read_csv(f"{root_path}/{events_csv}")
+picks["phase_time"] = pd.to_datetime(picks["phase_time"], format="mixed")
+events["time"] = pd.to_datetime(events["time"])
+events["magnitude"] = 1.0
+events["sigma_time"] = 1.0
 
 # events.sort_values("time", inplace=True)
 picks = picks.loc[picks["event_index"].isin(events["event_index"])]
 
 lines = []
 picks_by_event = picks.groupby("event_index").groups
-for i, event in tqdm(events.iterrows(), desc="Convert gamma catalog", total=len(events)):
+for i, event in tqdm(events.iterrows(), desc="Convert catalog", total=len(events)):
     # event_time = datetime.strptime(event["time"], "%Y-%m-%dT%H:%M:%S.%f")
     event_time = event["time"]
     lat = event["latitude"]
@@ -120,6 +109,4 @@ with open(f"{root_path}/{result_path}/phase.txt", "w") as fp:
     fp.writelines(lines)
 
 # %%
-if args.dt_cc:
-    os.system("python convert_dtcc.py")
-    os.system("cp templates/dt.cc relocation/hypodd/")
+os.system(f"bash run_hypodd_ct.sh {root_path} {region}")

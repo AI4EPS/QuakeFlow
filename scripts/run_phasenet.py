@@ -1,5 +1,11 @@
 # %%
+import json
+import os
+from glob import glob
 from typing import Dict, List
+
+import fsspec
+from args import parse_args
 
 
 def run_phasenet(
@@ -14,10 +20,6 @@ def run_phasenet(
     bucket: str = "",
     token: Dict = None,
 ) -> str:
-    import os
-    from glob import glob
-
-    import fsspec
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
@@ -62,7 +64,7 @@ def run_phasenet(
 
     # %%
     os.system(
-        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv --response_xml={root_path}/{region}/results/network/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{node_rank:03d} --batch_size=1"
+        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv --response_xml={root_path}/{region}/results/network/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{node_rank:03d}_{num_nodes:03d} --batch_size=1"
     )
 
     if protocol != "file":
@@ -87,15 +89,10 @@ def run_phasenet(
 
 
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)

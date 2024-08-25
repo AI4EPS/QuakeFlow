@@ -1,35 +1,37 @@
 # %%
+import json
+import os
+import time
+from collections import defaultdict
+from datetime import timezone
 from typing import Dict
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import fsspec
+import matplotlib
+import matplotlib.pyplot as plt
+import obspy
+import obspy.clients.fdsn
+import pandas as pd
+import pyproj
+from args import parse_args
+
+matplotlib.use("Agg")
 
 
 def download_station(
     root_path: str, region: str, config: Dict, protocol: str = "file", bucket: str = "", token: Dict = None
 ):
-    import json
-    import os
-    import time
-    from collections import defaultdict
-    from datetime import timezone
-
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-    import fsspec
-    import matplotlib
-    import matplotlib.pyplot as plt
-    import obspy
-    import obspy.clients.fdsn
-    import pandas as pd
-    import pyproj
-
-    matplotlib.use("Agg")
 
     # %%
     fs = fsspec.filesystem(protocol, token=token)
     if not os.path.exists(root_path):
         os.makedirs(root_path)
-    data_dir = f"{region}/obspy"
-    if not os.path.exists(f"{root_path}/{data_dir}"):
-        os.makedirs(f"{root_path}/{data_dir}")
+
+    result_dir = f"{region}/obspy"
+    if not os.path.exists(f"{root_path}/{result_dir}"):
+        os.makedirs(f"{root_path}/{result_dir}")
 
     print(json.dumps(config, indent=4))
 
@@ -42,9 +44,9 @@ def download_station(
         print("Downloading station response...")
         inventory = obspy.Inventory()
         for provider in config["provider"]:
-            if os.path.exists(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml"):
-                print(f"Loading existing {root_path}/{data_dir}/inventory_{provider.lower()}.xml")
-                inventory += obspy.read_inventory(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml")
+            if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml"):
+                print(f"Loading existing {root_path}/{result_dir}/inventory_{provider.lower()}.xml")
+                inventory += obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml")
                 continue
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
             max_retry = 10
@@ -82,19 +84,19 @@ def download_station(
                 print(
                     f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
                 )
-                stations.write(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
+                stations.write(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
                 if protocol != "file":
                     fs.put(
-                        f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml",
-                        f"{bucket}/{data_dir}/inventory_{provider.lower()}.xml",
+                        f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml",
+                        f"{bucket}/{result_dir}/inventory_{provider.lower()}.xml",
                     )
                 inventory += stations
 
-        inventory.write(f"{root_path}/{data_dir}/inventory.xml", format="STATIONXML")
+        inventory.write(f"{root_path}/{result_dir}/inventory.xml", format="STATIONXML")
 
         # save inventory by station
-        if not os.path.exists(f"{root_path}/{data_dir}/inventory/"):
-            os.makedirs(f"{root_path}/{data_dir}/inventory/")
+        if not os.path.exists(f"{root_path}/{result_dir}/inventory/"):
+            os.makedirs(f"{root_path}/{result_dir}/inventory/")
 
         for net in inventory:
             for sta in net:
@@ -103,16 +105,15 @@ def download_station(
                         network=net.code, station=sta.code, location=chn.location_code, channel=chn.code[:-1] + "*"
                     )
                     inv.write(
-                        f"{root_path}/{data_dir}/inventory/{net.code}.{sta.code}.{chn.location_code}.{chn.code[:-1]}.xml",
+                        f"{root_path}/{result_dir}/inventory/{net.code}.{sta.code}.{chn.location_code}.{chn.code[:-1]}.xml",
                         format="STATIONXML",
                     )
 
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/inventory/", f"{bucket}/{data_dir}/inventory/")
-            fs.put(f"{root_path}/{data_dir}/inventory.xml", f"{bucket}/{data_dir}/inventory.xml")
+            fs.put(f"{root_path}/{result_dir}/inventory/", f"{bucket}/{result_dir}/inventory/")
+            fs.put(f"{root_path}/{result_dir}/inventory.xml", f"{bucket}/{result_dir}/inventory.xml")
 
     # %%
-
     def parse_inventory_json(inventory, mseed_ids=[]):
         comp = ["3", "2", "1", "U", "V", "E", "N", "Z"]
         order = {key: i for i, key in enumerate(comp)}
@@ -210,8 +211,8 @@ def download_station(
         return channel_list
 
     for provider in config["provider"]:
-        if os.path.exists(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml"):
-            inventory = obspy.read_inventory(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml")
+        if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml"):
+            inventory = obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml")
         stations = parse_inventory_csv(inventory)
         stations[["x_km", "y_km"]] = stations.apply(
             lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1
@@ -222,39 +223,39 @@ def download_station(
         stations[["x_km", "y_km", "z_km"]] = stations[["x_km", "y_km", "z_km"]].round(2)
         stations = stations.sort_values(by=["network", "station", "location", "channel"])
         stations = stations.groupby(["network", "station", "location", "channel"]).first().reset_index()
-        stations.to_csv(f"{root_path}/{data_dir}/stations_{provider.lower()}.csv", index=False)
+        stations.to_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}.csv", index=False)
         if protocol != "file":
             fs.put(
-                f"{root_path}/{data_dir}/stations_{provider.lower()}.csv",
-                f"{bucket}/{data_dir}/stations_{provider.lower()}.csv",
+                f"{root_path}/{result_dir}/stations_{provider.lower()}.csv",
+                f"{bucket}/{result_dir}/stations_{provider.lower()}.csv",
             )
 
         stations = parse_inventory_json(inventory)
         if len(stations) > 0:
-            with open(f"{root_path}/{data_dir}/stations_{provider.lower()}.json", "w") as f:
+            with open(f"{root_path}/{result_dir}/stations_{provider.lower()}.json", "w") as f:
                 json.dump(stations, f, indent=4)
             if protocol != "file":
                 fs.put(
-                    f"{root_path}/{data_dir}/stations_{provider.lower()}.json",
-                    f"{bucket}/{data_dir}/stations_{provider.lower()}.json",
+                    f"{root_path}/{result_dir}/stations_{provider.lower()}.json",
+                    f"{bucket}/{result_dir}/stations_{provider.lower()}.json",
                 )
 
     # %% merge stations
     stations = []
     for provider in config["provider"]:
-        tmp = pd.read_csv(f"{root_path}/{data_dir}/stations_{provider.lower()}.csv", dtype={"location": str})
+        tmp = pd.read_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}.csv", dtype={"location": str})
         tmp["provider"] = provider
         stations.append(tmp)
     stations = pd.concat(stations)
     stations = stations.groupby(["network", "station", "location", "channel"], dropna=False).first().reset_index()
     print(f"Merged {len(stations)} channels")
-    stations.to_csv(f"{root_path}/{data_dir}/stations.csv", index=False)
+    stations.to_csv(f"{root_path}/{result_dir}/stations.csv", index=False)
     if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/stations.csv", f"{bucket}/{data_dir}/stations.csv")
+        fs.put(f"{root_path}/{result_dir}/stations.csv", f"{bucket}/{result_dir}/stations.csv")
 
     stations = {}
     for provider in config["provider"]:
-        with open(f"{root_path}/{data_dir}/stations_{provider.lower()}.json") as f:
+        with open(f"{root_path}/{result_dir}/stations_{provider.lower()}.json") as f:
             tmp = json.load(f)
         for key, value in tmp.items():
             if key not in stations:
@@ -262,10 +263,10 @@ def download_station(
                 stations[key]["provider"] = provider
     if len(stations) > 0:
         print(f"Merged {len(stations)} stations")
-        with open(f"{root_path}/{data_dir}/stations.json", "w") as f:
+        with open(f"{root_path}/{result_dir}/stations.json", "w") as f:
             json.dump(stations, f, indent=4)
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/stations.json", f"{bucket}/{data_dir}/stations.json")
+            fs.put(f"{root_path}/{result_dir}/stations.json", f"{bucket}/{result_dir}/stations.json")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):
@@ -306,34 +307,32 @@ def download_station(
 
     stations = pd.DataFrame.from_dict(stations, orient="index")
     events = None
-    if os.path.exists(f"{root_path}/{data_dir}/events.csv"):
-        events = pd.read_csv(f"{root_path}/{data_dir}/events.csv")
-    visulization(config, events, stations, f"{root_path}/{data_dir}/stations.png")
+    if os.path.exists(f"{root_path}/{result_dir}/events.csv"):
+        events = pd.read_csv(f"{root_path}/{result_dir}/events.csv")
+    visulization(config, events, stations, f"{root_path}/{result_dir}/stations.png")
     if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/stations.png", f"{bucket}/{data_dir}/stations.png")
+        fs.put(f"{root_path}/{result_dir}/stations.png", f"{bucket}/{result_dir}/stations.png")
 
     # %% copy to results/network
     if not os.path.exists(f"{root_path}/{region}/results/network"):
         os.makedirs(f"{root_path}/{region}/results/network", exist_ok=True)
 
     for file in ["inventory.xml", "stations.csv", "stations.json", "stations.png"]:
-        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/network/{file}")
+        os.system(f"cp {root_path}/{result_dir}/{file} {root_path}/{region}/results/network/{file}")
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/network/{file}")
-    os.system(f"cp -r {root_path}/{data_dir}/inventory/ {root_path}/{region}/results/network/inventory/")
+            fs.put(f"{root_path}/{result_dir}/{file}", f"{bucket}/{region}/results/network/{file}")
+    os.system(f"cp -r {root_path}/{result_dir}/inventory/ {root_path}/{region}/results/network/inventory/")
 
 
 if __name__ == "__main__":
-    import json
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
+
+    config.update(config["obspy"])
 
     download_station(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)

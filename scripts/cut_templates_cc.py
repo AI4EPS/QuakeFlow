@@ -4,17 +4,16 @@ import multiprocessing as mp
 import os
 import sys
 from glob import glob
+
+import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
+from adloc.eikonal2d import calc_traveltime, init_eikonal2d
+from args import parse_args
+from pyproj import Proj
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
-from adloc.eikonal2d import init_eikonal2d, calc_traveltime
-from pyproj import Proj
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from obspy.signal.cross_correlation import correlate
-from scipy.interpolate import interp1d
 
 np.random.seed(42)
 
@@ -242,7 +241,7 @@ def extract_template_numpy(
 
 
 # %%
-def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="event_pairs.txt"):
+def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="pairs.txt"):
     ncpu = min(32, mp.cpu_count())
     neigh = NearestNeighbors(radius=max_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
     neigh.fit(events[["x_km", "y_km", "z_km"]].values)
@@ -288,30 +287,27 @@ def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, 
 def cut_templates(root_path, region, config):
 
     # %%
-    root_path = "local"
-    region = "Ridgecrest"
-    result_path = f"cctorch"
+    data_path = f"{region}/adloc"
+    result_path = f"{region}/cctorch"
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
-    with open(f"{root_path}/{region}/config.json", "r") as fp:
-        config = json.load(fp)
-
+    ## TODO: move to config
+    sampling_rate = 100.0
     time_before_p = 0.3
     time_after_p = 2.5 - time_before_p
     time_before_s = 0.3
     time_after_s = 4.0 - time_before_s
     time_window = max((time_before_p + time_after_p), (time_before_s + time_after_s))
-    nt = int(round(time_window * config["sampling_rate"]))
+    nt = int(round(time_window * sampling_rate))
     max_epicenter_dist = 200.0
     max_pair_dist = 10
     max_neighbors = 50
     min_cc_score = 0.5
     min_obs = 8
     max_obs = 100
-    sampling_rate = 100.0
 
-    config["cctorch"].update(
+    config.update(
         {
             "time_before_p": time_before_p,
             "time_after_p": time_after_p,
@@ -319,8 +315,8 @@ def cut_templates(root_path, region, config):
             "time_after_s": time_after_s,
             "time_window": time_window,
             "nt": nt,
-            "max_epicenter_dist": max_epicenter_dist,
-            "max_pair_dist": max_pair_dist,
+            "max_epicenter_dist_km": max_epicenter_dist,
+            "max_pair_dist_km": max_pair_dist,
             "max_neighbors": max_neighbors,
             "min_cc_score": min_cc_score,
             "min_obs": min_obs,
@@ -330,7 +326,7 @@ def cut_templates(root_path, region, config):
     )
 
     # %%
-    stations = pd.read_csv(f"{root_path}/{region}/adloc/ransac_stations_sst.csv")
+    stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations_sst.csv")
     stations = stations[stations["network"] == "CI"]
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
     # stations = stations[stations["station_id"].isin(picks["station_id"].unique())]
@@ -338,22 +334,13 @@ def cut_templates(root_path, region, config):
     print(stations.iloc[:5])
 
     # %%
-    # events = pd.read_csv(f"{root_path}/{region}/adloc/ransac_events_sst.csv", parse_dates=["time"])
-    events = pd.read_csv(f"tests/events.csv")
+    events = pd.read_csv(f"{root_path}/{data_path}/ransac_events_sst.csv", parse_dates=["time"])
     events.rename(columns={"time": "event_time"}, inplace=True)
     events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
     reference_t0 = events["event_time"].min()
     events["event_timestamp"] = events["event_time"].apply(lambda x: (x - reference_t0).total_seconds())
     print(f"{len(events) = }")
     print(events.iloc[:5])
-
-    plt.figure()
-    plt.scatter(events["longitude"], events["latitude"], s=2)
-    # plt.plot(stations["longitude"], stations["latitude"], "v")
-    # plt.plot(picks["longitude"], picks["latitude"], "x")
-    plt.title(f"{len(events)} events")
-    plt.savefig("debug_events.png")
-    # raise
 
     # %%
     lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
@@ -429,8 +416,8 @@ def cut_templates(root_path, region, config):
         )
 
     print(f"{len(picks) = }")
-    picks = picks[picks["dist_km"] < config["cctorch"]["max_epicenter_dist"]]
-    print(f"{len(picks) = } with dist_km < {config['cctorch']['max_epicenter_dist']} km")
+    picks = picks[picks["dist_km"] < config["max_epicenter_dist_km"]]
+    print(f"{len(picks) = } with dist_km < {config['max_epicenter_dist_km']} km")
 
     # %% Reindex event and station to make it continuous
     stations["idx_sta"] = np.arange(len(stations))
@@ -445,28 +432,28 @@ def cut_templates(root_path, region, config):
 
     # %%
     pair_fname = f"{root_path}/{result_path}/pairs.txt"
-    config["cctorch"]["pair_file"] = pair_fname
+    config["pair_file"] = pair_fname
 
     # %%
     nch = 3  ## [E,N,Z] components
-    nt = config["cctorch"]["nt"]
+    nt = config["nt"]
     npk = len(picks)
     nev = len(events)
     nst = len(stations)
     print(f"npk: {npk}, nev: {nev}, nch: {nch}, nst: {nst}, nt: {nt}")
     template_shape = (npk, 3, 1, nt)
     traveltime_shape = (npk, 3, 1)
-    config["cctorch"]["template_shape"] = template_shape
-    config["cctorch"]["traveltime_shape"] = traveltime_shape
+    config["template_shape"] = template_shape
+    config["traveltime_shape"] = traveltime_shape
 
     template_fname = f"{root_path}/{result_path}/template.dat"
     traveltime_fname = f"{root_path}/{result_path}/traveltime.dat"
     traveltime_index_fname = f"{root_path}/{result_path}/traveltime_index.dat"
     traveltime_mask_fname = f"{root_path}/{result_path}/traveltime_mask.dat"
-    config["cctorch"]["template_file"] = template_fname
-    config["cctorch"]["traveltime_file"] = traveltime_fname
-    config["cctorch"]["traveltime_index_file"] = traveltime_index_fname
-    config["cctorch"]["traveltime_mask_file"] = traveltime_mask_fname
+    config["template_file"] = template_fname
+    config["traveltime_file"] = traveltime_fname
+    config["traveltime_index_file"] = traveltime_index_fname
+    config["traveltime_mask_file"] = traveltime_mask_fname
 
     template_array = np.memmap(template_fname, dtype=np.float32, mode="w+", shape=template_shape)
     traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="w+", shape=traveltime_shape)
@@ -474,10 +461,10 @@ def cut_templates(root_path, region, config):
     traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="w+", shape=traveltime_shape)
 
     with open(f"{root_path}/{result_path}/config.json", "w") as f:
-        json.dump(config["cctorch"], f, indent=4, sort_keys=True)
+        json.dump(config, f, indent=4, sort_keys=True)
 
     # %%
-    config["cctorch"]["reference_t0"] = reference_t0
+    config["reference_t0"] = reference_t0
     events = events[["idx_eve", "x_km", "y_km", "z_km", "event_index", "event_time", "event_timestamp"]]
     stations = stations[["idx_sta", "x_km", "y_km", "z_km", "station_id", "component", "network", "station"]]
     picks = picks[["idx_eve", "idx_sta", "phase_type", "phase_score", "phase_time", "phase_timestamp", "phase_source"]]
@@ -518,7 +505,7 @@ def cut_templates(root_path, region, config):
                         events,
                         picks,
                         stations,
-                        config["cctorch"],
+                        config,
                         lock,
                     ),
                     callback=pbar_update,
@@ -537,8 +524,8 @@ def cut_templates(root_path, region, config):
         picks,
         events,
         stations,
-        max_pair_dist=config["cctorch"]["min_pair_dist_km"],
-        fname=config["cctorch"]["pair_file"],
+        max_pair_dist=config["min_pair_dist_km"],
+        fname=config["pair_file"],
     )
 
 
@@ -546,20 +533,14 @@ def cut_templates(root_path, region, config):
 if __name__ == "__main__":
 
     # %%
-    root_path = "local"
-    # region = "demo"
-    region = "debug"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
-    # with open(f"{root_path}/{region}/config.json", "r") as fp:
-    #     config = json.load(fp)
-    config = None
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
-    # %%
-    result_path = f"{region}/cctorch"
-    if not os.path.exists(f"{root_path}/{result_path}"):
-        os.makedirs(f"{root_path}/{result_path}")
+    with open(f"{root_path}/{region}/config.json", "r") as fp:
+        config = json.load(fp)
+
+    config.update(config["cctorch"])
 
     # %%
     print(json.dumps(config, indent=4, sort_keys=True))

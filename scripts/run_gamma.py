@@ -1,10 +1,10 @@
-from typing import Dict, List, NamedTuple
 import json
 import os
+from typing import Dict, NamedTuple
 
 import fsspec
-import numpy as np
 import pandas as pd
+from args import parse_args
 from gamma.utils import association, estimate_eps
 from pyproj import Proj
 
@@ -25,16 +25,15 @@ def run_gamma(
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     # %%
+    data_path = f"{region}/phasenet"
     result_path = f"{region}/gamma"
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
     # %%
-    # station_csv = data_path / "stations.csv"
-    station_json = f"{region}/results/network/stations.json"
+    station_json = f"{region}/obspy/stations.json"
     if picks_csv is None:
-        # picks_csv = f"{region}/results/picking/phase_picks_{node_rank:03d}_{num_nodes:03d}.csv"
-        picks_csv = f"{region}/phasenet/phasenet_picks_{node_rank:03d}_{num_nodes:03d}.csv"
+        picks_csv = f"{data_path}/phasenet_picks_{node_rank:03d}_{num_nodes:03d}.csv"
     gamma_events_csv = f"{result_path}/gamma_events_{node_rank:03d}_{num_nodes:03d}.csv"
     gamma_picks_csv = f"{result_path}/gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv"
 
@@ -83,19 +82,12 @@ def run_gamma(
     # earthquake location
     config["vel"] = {"p": 6.0, "s": 6.0 / 1.75}
     config["dims"] = ["x(km)", "y(km)", "z(km)"]
-    config["x(km)"] = (
-        np.array([config["minlongitude"] - config["longitude0"], config["maxlongitude"] - config["longitude0"]])
-        * config["degree2km"]
-        * np.cos(np.deg2rad(config["latitude0"]))
-    )
-    config["y(km)"] = (
-        np.array([config["minlatitude"] - config["latitude0"], config["maxlatitude"] - config["latitude0"]])
-        * config["degree2km"]
-    )
-    if "gamma" not in config:
-        config["z(km)"] = (0, 60)
-    else:
-        config["z(km)"] = [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]]
+    xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
+    xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
+    zmin, zmax = config["mindepth"], config["maxdepth"]
+    config["x(km)"] = (xmin, xmax)
+    config["y(km)"] = (ymin, ymax)
+    config["z(km)"] = (zmin, zmax)
     config["bfgs_bounds"] = (
         (config["x(km)"][0] - 1, config["x(km)"][1] + 1),  # x
         (config["y(km)"][0] - 1, config["y(km)"][1] + 1),  # y
@@ -140,12 +132,6 @@ def run_gamma(
 
     if len(events) > 0:
         ## create catalog
-        # events = pd.DataFrame(
-        #     events,
-        #     columns=["time"]
-        #     + config["dims"]
-        #     + ["magnitude", "sigma_time", "sigma_amp", "cov_time_amp", "event_index", "gamma_score"],
-        # )
         events = pd.DataFrame(events)
         events[["longitude", "latitude"]] = events.apply(
             lambda x: pd.Series(proj(longitude=x["x(km)"], latitude=x["y(km)"], inverse=True)), axis=1
@@ -153,46 +139,13 @@ def run_gamma(
         events["depth_km"] = events["z(km)"]
         events.sort_values("time", inplace=True)
         with open(f"{root_path}/{gamma_events_csv}", "w") as fp:
-            events.to_csv(
-                fp,
-                index=False,
-                float_format="%.3f",
-                date_format="%Y-%m-%dT%H:%M:%S.%f",
-                # columns=[
-                #     "time",
-                #     "magnitude",
-                #     "longitude",
-                #     "latitude",
-                #     # "depth(m)",
-                #     "depth_km",
-                #     "sigma_time",
-                #     "sigma_amp",
-                #     "cov_time_amp",
-                #     "event_index",
-                #     "gamma_score",
-                # ],
-            )
-        # events = events[['time', 'magnitude', 'longitude', 'latitude', 'depth(m)', 'sigma_time', 'sigma_amp', 'gamma_score']]
-
+            events.to_csv(fp, index=False, float_format="%.3f", date_format="%Y-%m-%dT%H:%M:%S.%f")
         ## add assignment to picks
         assignments = pd.DataFrame(assignments, columns=["pick_index", "event_index", "gamma_score"])
         picks = picks.join(assignments.set_index("pick_index")).fillna(-1).astype({"event_index": int})
         picks.sort_values(["phase_time"], inplace=True)
         with open(f"{root_path}/{gamma_picks_csv}", "w") as fp:
-            picks.to_csv(
-                fp,
-                index=False,
-                date_format="%Y-%m-%dT%H:%M:%S.%f",
-                # columns=[
-                #     "station_id",
-                #     "phase_time",
-                #     "phase_type",
-                #     "phase_score",
-                #     "phase_amplitude",
-                #     "event_index",
-                #     "gamma_score",
-                # ],
-            )
+            picks.to_csv(fp, index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
 
         if protocol != "file":
             fs.put(f"{root_path}/{gamma_events_csv}", f"{bucket}/{gamma_events_csv}")
@@ -229,17 +182,13 @@ def run_gamma(
 
 
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
 
     os.environ["OMP_NUM_THREADS"] = "8"
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
+
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

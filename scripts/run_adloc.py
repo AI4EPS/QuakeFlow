@@ -2,20 +2,21 @@
 import json
 import multiprocessing as mp
 import os
+import sys
+from typing import Dict, List, NamedTuple
 
+import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pyproj import Proj
-
 from adloc.eikonal2d import init_eikonal2d
 from adloc.sacloc2d import ADLoc
 from adloc.utils import invert_location, invert_location_iter
+from args import parse_args
+from pyproj import Proj
 
 # from utils import plotting_ransac
 from utils.plotting import plotting_ransac
-from typing import Dict, List, NamedTuple
-import fsspec
 
 
 # %%
@@ -43,11 +44,11 @@ def run_adloc(
         os.makedirs(figure_path)
 
     # %%
-    data_path = f"{root_path}/{region}/"
-    picks_file = os.path.join(data_path, f"gamma/gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv")
-    events_file = os.path.join(data_path, f"gamma/gamma_events_{node_rank:03d}_{num_nodes:03d}.csv")
+    data_path = f"{root_path}/{region}/gamma"
+    picks_file = os.path.join(data_path, f"gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv")
+    events_file = os.path.join(data_path, f"gamma_events_{node_rank:03d}_{num_nodes:03d}.csv")
     # stations_file = os.path.join(data_path, "stations.csv")
-    stations_file = f"{data_path}/results/network/stations.json"
+    stations_file = f"{root_path}/{region}/obspy/stations.json"
 
     picks = pd.read_csv(picks_file)
     picks["phase_time"] = pd.to_datetime(picks["phase_time"])
@@ -127,13 +128,13 @@ def run_adloc(
     config["eikonal"] = init_eikonal2d(config["eikonal"])
 
     # %% config for location
-    config["min_picks"] = 8
-    config["min_picks_ratio"] = 0.2
+    config["min_picks"] = 6
+    config["min_picks_ratio"] = 0.5
     config["max_residual_time"] = 1.0
     config["max_residual_amplitude"] = 1.0
-    config["min_score"] = 0.6
-    config["min_s_picks"] = 2
-    config["min_p_picks"] = 2
+    config["min_score"] = 0.5
+    config["min_s_picks"] = 1.5
+    config["min_p_picks"] = 1.5
 
     config["bfgs_bounds"] = (
         (config["xlim_km"][0] - 1, config["xlim_km"][1] + 1),  # x
@@ -258,17 +259,10 @@ def run_adloc(
 
 # %%
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
-    os.environ["OMP_NUM_THREADS"] = "8"
-
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 

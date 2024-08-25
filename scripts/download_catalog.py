@@ -1,36 +1,35 @@
 # %%
+import json
+import os
+import re
+from datetime import timezone
 from typing import Dict
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import fsspec
+import matplotlib
+import matplotlib.pyplot as plt
+import obspy
+import obspy.clients.fdsn
+import pandas as pd
+import pyproj
+from args import parse_args
+
+matplotlib.use("Agg")
 
 
 def download_catalog(
     root_path: str, region: str, config: Dict, protocol: str = "file", bucket: str = "", token: Dict = None
 ):
-    import json
-    import os
-    import re
-    from datetime import timezone
-    from pathlib import Path
-
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-    import fsspec
-    import matplotlib
-    import matplotlib.pyplot as plt
-    import obspy
-    import obspy.clients.fdsn
-    import pandas as pd
-    import pyproj
-    from obspy.clients.fdsn import header
-
-    matplotlib.use("Agg")
 
     # %%
     fs = fsspec.filesystem(protocol, token=token)
     if not os.path.exists(root_path):
         os.makedirs(root_path)
-    data_dir = f"{region}/obspy"
-    if not os.path.exists(f"{root_path}/{data_dir}"):
-        os.makedirs(f"{root_path}/{data_dir}")
+    result_path = f"{region}/obspy"
+    if not os.path.exists(f"{root_path}/{result_path}"):
+        os.makedirs(f"{root_path}/{result_path}")
 
     print(json.dumps(config, indent=4))
 
@@ -44,9 +43,9 @@ def download_catalog(
 
         catalog = obspy.Catalog()
         for provider in config["provider"]:
-            if os.path.exists(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml"):
-                print(f"Loading existing {root_path}/{data_dir}/catalog_{provider.lower()}.xml")
-                catalog += obspy.read_events(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml")
+            if os.path.exists(f"{root_path}/{result_path}/catalog_{provider.lower()}.xml"):
+                print(f"Loading existing {root_path}/{result_path}/catalog_{provider.lower()}.xml")
+                catalog += obspy.read_events(f"{root_path}/{result_path}/catalog_{provider.lower()}.xml")
                 continue
 
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
@@ -65,24 +64,24 @@ def download_catalog(
                 print(f"{provider} failed: {e}")
             if events is not None:
                 print(f"Dowloaded {len(events)} events from {provider.lower()}")
-                events.write(f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml", format="QUAKEML")
+                events.write(f"{root_path}/{result_path}/catalog_{provider.lower()}.xml", format="QUAKEML")
                 if protocol != "file":
                     fs.put(
-                        f"{root_path}/{data_dir}/catalog_{provider.lower()}.xml",
-                        f"{bucket}/{data_dir}/catalog_{provider.lower()}.xml",
+                        f"{root_path}/{result_path}/catalog_{provider.lower()}.xml",
+                        f"{bucket}/{result_path}/catalog_{provider.lower()}.xml",
                     )
                 catalog += events
 
         if len(catalog) > 0:
-            catalog.write(f"{root_path}/{data_dir}/catalog.xml", format="QUAKEML")
+            catalog.write(f"{root_path}/{result_path}/catalog.xml", format="QUAKEML")
             if protocol != "file":
-                fs.put(f"{root_path}/{data_dir}/catalog.xml", f"{bucket}/{data_dir}/catalog.xml")
+                fs.put(f"{root_path}/{result_path}/catalog.xml", f"{bucket}/{result_path}/catalog.xml")
 
     # %%
-    if not os.path.exists(f"{root_path}/{data_dir}/catalog.xml"):  # no events
+    if not os.path.exists(f"{root_path}/{result_path}/catalog.xml"):  # no events
         return 0
 
-    catalog = obspy.read_events(f"{root_path}/{data_dir}/catalog.xml")
+    catalog = obspy.read_events(f"{root_path}/{result_path}/catalog.xml")
 
     def parase_catalog(catalog):
         events = {}
@@ -119,9 +118,9 @@ def download_catalog(
         events["depth_km"] = events["depth_km"].round(3)
         events[["x_km", "y_km", "z_km"]] = events[["x_km", "y_km", "z_km"]].round(3)
         events.sort_values("time", inplace=True)
-        events.to_csv(f"{root_path}/{data_dir}/catalog.csv", index=False)
+        events.to_csv(f"{root_path}/{result_path}/catalog.csv", index=False)
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/catalog.csv", f"{bucket}/{data_dir}/catalog.csv")
+            fs.put(f"{root_path}/{result_path}/catalog.csv", f"{bucket}/{result_path}/catalog.csv")
 
     # %%
     def visulization(config, events=None, stations=None, fig_name="catalog.png"):
@@ -147,6 +146,7 @@ def download_catalog(
                     marker=".",
                     label="events",
                 )
+                ax.set_title(f"{config['provider']}: {len(events)} events")
         if stations is not None:
             ax.scatter(
                 stations.longitude,
@@ -161,30 +161,26 @@ def download_catalog(
         plt.savefig(fig_name, dpi=300, bbox_inches="tight")
 
     stations = None
-    if os.path.exists(f"{root_path}/{data_dir}/stations.csv"):
-        stations = pd.read_csv(f"{root_path}/{data_dir}/stations.csv")
-    visulization(config, events, stations, f"{root_path}/{data_dir}/catalog.png")
+    if os.path.exists(f"{root_path}/{result_path}/stations.csv"):
+        stations = pd.read_csv(f"{root_path}/{result_path}/stations.csv")
+    visulization(config, events, stations, f"{root_path}/{result_path}/catalog.png")
     if protocol != "file":
-        fs.put(f"{root_path}/{data_dir}/catalog.png", f"{bucket}/{data_dir}/catalog.png")
+        fs.put(f"{root_path}/{result_path}/catalog.png", f"{bucket}/{result_path}/catalog.png")
 
     # %% copy to results/network
     if not os.path.exists(f"{root_path}/{region}/results/network"):
         os.makedirs(f"{root_path}/{region}/results/network")
     for file in ["catalog.csv", "catalog.png"]:
-        os.system(f"cp {root_path}/{data_dir}/{file} {root_path}/{region}/results/network/{file}")
+        os.system(f"cp {root_path}/{result_path}/{file} {root_path}/{region}/results/network/{file}")
         if protocol != "file":
-            fs.put(f"{root_path}/{data_dir}/{file}", f"{bucket}/{region}/results/network/{file}")
+            fs.put(f"{root_path}/{result_path}/{file}", f"{bucket}/{region}/results/network/{file}")
 
 
 if __name__ == "__main__":
-    import json
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)

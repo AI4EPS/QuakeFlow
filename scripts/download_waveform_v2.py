@@ -1,19 +1,18 @@
 # %%
 import json
-import os
-import threading
 import multiprocessing as mp
+import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from glob import glob
+from typing import Dict, List
 
 import fsspec
 import numpy as np
 import obspy
 import obspy.clients.fdsn
 import pandas as pd
-from typing import Dict, List
+from args import parse_args
 
 
 def map_remote_path(provider, bucket, starttime, network, station, location, instrument, component):
@@ -315,15 +314,10 @@ def download_waveform(
 
 
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)

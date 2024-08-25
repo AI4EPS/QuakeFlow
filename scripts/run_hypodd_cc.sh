@@ -32,7 +32,7 @@ dt.cc
 
 *
 * event file:
-event.sel
+events.dat
 *
 * station file:
 stations.dat

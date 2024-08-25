@@ -1,12 +1,13 @@
 # %%
+import json
+import os
 from typing import Dict
+
+import fsspec
+from args import parse_args
 
 
 def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket: str, token: Dict) -> Dict:
-    import json
-    import os
-
-    import fsspec
 
     fs = fsspec.filesystem(protocol, token=token)
     if not os.path.exists(root_path):
@@ -22,7 +23,6 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
         "location",
         "relocation",
         "mechanism",
-        "results",
     ]:
         if not os.path.exists(f"{root_path}/{data_dir}/results/{subfolder}"):
             os.makedirs(f"{root_path}/{data_dir}/results/{subfolder}", exist_ok=True)
@@ -31,10 +31,8 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
     ## default values
     config_region["num_nodes"] = 1
     ## submodules config
-    if "default" in config:
-        config_region.update(config["default"])
     if "obspy" in config:
-        config_region.update(config["obspy"])
+        config_region["obspy"] = config["obspy"]
     if "phasenet" in config:
         config_region["phasenet"] = config["phasenet"]
     if "gamma" in config:
@@ -51,6 +49,7 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
 
     with open(f"{root_path}/{data_dir}/config.json", "w") as fp:
         json.dump(config_region, fp, indent=4)
+
     if protocol != "file":
         fs.put(f"{root_path}/{data_dir}/config.json", f"{bucket}/{data_dir}/config.json")
     print(json.dumps(config_region, indent=4))
@@ -59,15 +58,10 @@ def set_config(root_path: str, region: str, config: Dict, protocol: str, bucket:
 
 
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
 
     with open("config.json", "r") as fp:
         config = json.load(fp)
