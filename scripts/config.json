@@ -1,7 +1,20 @@
 {
+    "obspy": {
+        "sampling_rate": 100,
+        "channel": "HH*,BH*,EH*,HN*",
+        "level": "response",
+        "channel_priorities": [
+            "HH[321ENZ]",
+            "EH[321ENZ]",
+            "HN[321ENZ]",
+            "BH[321ENZ]"
+        ]
+    },
+    "phasenet":{
+    },
+    "adloc": {
+    },
     "gamma": {
-        "zmin_km": 0,
-        "zmax_km": 60
     },
     "cctorch":{
         "sampling_rate": 100,
@@ -10,12 +23,6 @@
         "min_pair_dist_km": 10,
         "components": "ENZ123",
         "component_mapping": {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2}
-    },
-    "obspy": {
-        "sampling_rate": 100,
-        "degree2km": 111.1949,
-        "channel": "HH*,BH*,EH*,HN*",
-        "level": "response"
     },
     "region": {
         "demo": {
@@ -26,18 +33,16 @@
             "maxlatitude": 36.205,
             "minlongitude": -118.004,
             "maxlongitude": -117.004,
+            "mindepth": 0,
+            "maxdepth": 30,
             "starttime": "2019-07-04T17:00:00",
             "endtime": "2019-07-05T00:00:00",
+            "network": "CI",
             "provider": [
                 "SCEDC"
-            ],
-            "network": "CI"
+            ]
         },
         "Ridgecrest": {
-            "center": [
-                -117.504,
-                35.705
-            ],
             "longitude0": -117.504,
             "latitude0": 35.705,
             "maxradius_degree": 1.0,
@@ -45,20 +50,11 @@
             "maxlatitude": 36.205,
             "minlongitude": -118.004,
             "maxlongitude": -117.004,
-            "mindepth": 0,
-            "maxdepth": 30,
             "starttime": "2019-07-04T00:00:00",
             "endtime": "2019-07-17T00:00:00",
-            "channel_priorities": [
-                "HH[321ENZ]",
-                "EH[321ENZ]",
-                "HN[321ENZ]",
-                "BH[321ENZ]"
-            ],
             "provider": [
                 "SCEDC"
-            ],
-            "num_nodes": 1
+            ]
         },
         "Hawaii": {
             "minlatitude": 18.39,
@@ -72,40 +68,31 @@
             ]
         },
         "Hawaii_Loa": {
-            "center": [
-                -155.602737,
-                19.451827
-            ],
             "longitude0": -155.602737,
             "latitude0": 19.451827,
+            "maxradius_degree": 0.3,
             "minlatitude": 19.151827,
             "maxlatitude": 19.751827,
             "minlongitude": -155.352737,
             "maxlongitude": -155.852737,
-            "xlim_degree": [
-                -155.852737,
-                -155.352737
-            ],
-            "ylim_degree": [
-                19.151827,
-                19.751827
-            ],
-            "maxradius_degree": 0.3,
-            "horizontal_degree": 0.3,
-            "vertical_degree": 0.3,
             "starttime": "2022-11-30T22:00:00",
             "endtime": "2022-11-30T23:00:00",
-            "channel_priorities": [
-                "HH[321ENZ]",
-                "BH[321ENZ]",
-                "EH[321ENZ]",
-                "HN[321ENZ]"
-            ],
             "provider": [
                 "IRIS"
             ]
         },
-        "South_Pole2": {
+        "Hawaii_Kilauea": {
+            "minlatitude": 19.31,
+            "maxlatitude": 19.51,
+            "minlongitude": -155.38,
+            "maxlongitude": -155.18,
+            "starttime": "2018-04-29T00:00:00",
+            "endtime": "2018-08-12T00:00:00",
+            "provider": [
+                "IRIS"
+            ]
+        },
+        "SouthPole": {
             "starttime": "2003-01-01T00:00:00",
             "endtime": "2023-05-01T00:00:00",
             "network": "IU",
@@ -125,43 +112,6 @@
             "maxlatitude": 38.1657,
             "minlongitude": -122.0325,
             "maxlongitude": -121.7275
-        },
-        "Kilauea": {
-            "starttime": "2018-04-29T00:00:00",
-            "endtime": "2018-08-12T00:00:00",
-            "minlatitude": 19.31,
-            "maxlatitude": 19.51,
-            "minlongitude": -155.38,
-            "maxlongitude": -155.18,
-            "provider": [
-                "IRIS"
-            ],
-            "gamma": {
-                "zmin_km": -1,
-                "zmax_km": 10
-            }
-        },
-        "Kilauea_debug": {
-            "starttime": "2018-04-29T00:00:00",
-            "endtime": "2018-04-29T01:00:00",
-            "minlatitude": 19.31,
-            "maxlatitude": 19.51,
-            "minlongitude": -155.38,
-            "maxlongitude": -155.18,
-            "provider": [
-                "IRIS"
-            ]
-        },
-        "Kilauea_debug_v2": {
-            "starttime": "2018-04-29T00:00:00",
-            "endtime": "2018-04-29T01:00:00",
-            "minlatitude": 19.31,
-            "maxlatitude": 19.51,
-            "minlongitude": -155.38,
-            "maxlongitude": -155.18,
-            "provider": [
-                "IRIS"
-            ]
         },
         "BayArea": {
             "starttime": "2009-01-01T00:00:00",
@@ -183,10 +133,10 @@
             "maxlatitude": 41.5,
             "minlongitude": -126.5,
             "maxlongitude": -123.0,
+            "network": "_CASCADIA_OBS",
             "provider": [
                 "IRIS"
-            ],
-            "network": "_CASCADIA_OBS"
+            ]
         },
         "Mendocino_8mon": {
             "starttime": "2014-10-01T00:00:00",
@@ -195,12 +145,12 @@
             "maxlatitude": 41.7,
             "minlongitude": -129,
             "maxlongitude": -123,
+            "network": "7D,Z5,5E,BK,NC,CE,NP,PB",
             "provider": [
                 "IRIS",
                 "NCEDC", 
                 "SCEDC"
-            ],
-            "network": "7D,Z5,5E,BK,NC,CE,NP,PB"
+            ]
         },
         "Geysers": {
             "starttime": "2023-03-20T00:00:00",
@@ -209,11 +159,11 @@
             "maxlatitude": 38.92,
             "minlongitude": -122.95,
             "maxlongitude": -122.6,
+            "network": "BG",
+            "channel": "HH*,BH*,EH*,HN*,DP*",
             "provider": [
                 "NCEDC"
-            ],
-            "network": "BG",
-            "channel": "HH*,BH*,EH*,HN*,DP*"
+            ]
         }
     }
 }
