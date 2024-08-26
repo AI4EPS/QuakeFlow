@@ -306,6 +306,7 @@ def cut_templates(root_path, region, config):
     min_cc_score = 0.5
     min_obs = 8
     max_obs = 100
+    component_mapping = {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2}
 
     config.update(
         {
@@ -322,14 +323,13 @@ def cut_templates(root_path, region, config):
             "min_obs": min_obs,
             "max_obs": max_obs,
             "sampling_rate": sampling_rate,
+            "component_mapping": component_mapping,
         }
     )
 
     # %%
     stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations_sst.csv")
-    stations = stations[stations["network"] == "CI"]
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
-    # stations = stations[stations["station_id"].isin(picks["station_id"].unique())]
     print(f"{len(stations) = }")
     print(stations.iloc[:5])
 
