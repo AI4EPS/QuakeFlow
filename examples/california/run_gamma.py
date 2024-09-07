@@ -32,7 +32,7 @@ def run_gamma(
         jday = int(jday.split(".")[1])
 
         # %%
-        result_path = f"{region}/gamma/{year:04d}"
+        result_path = f"{region}/gamma_bo/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
 
@@ -138,7 +138,14 @@ def run_gamma(
 
         ## DBSCAN
         # config["dbscan_eps"] = estimate_eps(stations, config["vel"]["p"])  # s
-        config["dbscan_eps"] = 10  # s
+        eps_year = {
+            2023: 10,
+            2022: 10.5,
+            2021: 10.5,
+            2020: 10.5,
+            2019: 10.5,
+        }
+        config["dbscan_eps"] = eps_year[year]
         config["dbscan_min_samples"] = 6
 
         ## Eikonal for 1D velocity model

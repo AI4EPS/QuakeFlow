@@ -37,11 +37,11 @@ if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
     ls -al /data
     ls -al ./
 fi
-python run_adloc.py --num_node $NUM_NODES --node_rank $NODE_RANK
+python run_adloc.py --num_node $NUM_NODES --node_rank $NODE_RANK --year $YEAR
 """,
     workdir=".",
     num_nodes=1,
-    envs={"NUM_NODES": NUM_NODES, "NODE_RANK": 0},
+    envs={"NUM_NODES": NUM_NODES, "NODE_RANK": 0, "YEAR": YEAR},
 )
 
 task.set_file_mounts(
@@ -86,7 +86,7 @@ with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
     for NODE_RANK in range(NUM_NODES):
 
         task.update_envs({"NODE_RANK": NODE_RANK})
-        cluster_name = f"adloc-{NODE_RANK:02d}"
+        cluster_name = f"adloc-{YEAR}-{NODE_RANK:02d}"
 
         status = sky.status(cluster_names=[f"{cluster_name}"], refresh=True)
         if len(status) > 0:

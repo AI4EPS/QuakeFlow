@@ -40,7 +40,7 @@ def run_adloc(
         jday = int(jday.split(".")[1])
 
         # %%
-        data_path = f"{region}/gamma/{year:04d}"
+        data_path = f"{region}/gamma_bo/{year:04d}"
         result_path = f"{region}/adloc/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
@@ -168,8 +168,8 @@ def run_adloc(
         config["max_residual_time"] = 1.0
         config["max_residual_amplitude"] = 1.0
         config["min_score"] = 0.5
-        config["min_p_picks"] = 1.5  # for filtering
-        config["min_s_picks"] = 1.5  # for filtering
+        config["min_p_picks"] = 0  # for filtering
+        config["min_s_picks"] = 0  # for filtering
 
         config["bfgs_bounds"] = (
             (config["xlim_km"][0] - 1, config["xlim_km"][1] + 1),  # x
@@ -215,7 +215,7 @@ def run_adloc(
 
         # %%
         NCPU = mp.cpu_count()
-        MAX_SST_ITER = 1
+        MAX_SST_ITER = 2
         # MIN_SST_S = 0.01
         events_init = events.copy()
 
@@ -241,8 +241,29 @@ def run_adloc(
         )
 
         for iter in range(MAX_SST_ITER):
+            if iter == 0:
+                config["min_picks"] = 6  # for sampling not for filtering
+                config["min_picks_ratio"] = 0.5  # for sampling
+                config["max_residual_time"] = 3.0
+                config["max_residual_amplitude"] = 3.0
+                config["min_score"] = -0.5
+                config["min_p_picks"] = 0  # for filtering
+                config["min_s_picks"] = 0  # for filtering
+            else:
+                config["min_picks"] = 6  # for sampling not for filtering
+                config["min_picks_ratio"] = 0.5  # for sampling
+                config["max_residual_time"] = 1.0
+                config["max_residual_amplitude"] = 1.0
+                config["min_score"] = 0.5
+                config["min_p_picks"] = 0  # for filtering
+                config["min_s_picks"] = 0  # for filtering
+            stations["station_term_time"] = 0.0 # no station term
             # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
-            picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+            if iter == 0:
+                picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+            else:
+                # picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+                picks, events = invert_location(picks[picks['mask']==1], stations, config, estimator, events_init=events_init, iter=iter)
             # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
             station_term_time = (
                 picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
