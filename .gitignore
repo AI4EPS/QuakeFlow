@@ -170,3 +170,4 @@ slurm/*/waveforms/
 slurm/*/waveforms/
 slurm/*/results/
 slurm/*/*.xml
+.history/
