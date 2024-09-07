@@ -40,7 +40,7 @@ def run_adloc(
         jday = int(jday.split(".")[1])
 
         # %%
-        data_path = f"{region}/gamma_bo/{year:04d}"
+        data_path = f"{region}/gamma_bo_debug/{year:04d}"
         result_path = f"{region}/adloc/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
