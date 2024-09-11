@@ -212,7 +212,8 @@ def extract_template_numpy(
                 s_begin_time = (
                     picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"] - trace_starttime - config[f"time_before_s"]
                 )
-                end_time = min(end_time, s_begin_time)
+                if config["no_overlapping"]:
+                    end_time = min(end_time, s_begin_time)
 
             begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
             end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
@@ -294,10 +295,20 @@ def cut_templates(root_path, region, config):
 
     ## TODO: move to config
     sampling_rate = 100.0
+
+    # CC parameters
     time_before_p = 0.3
     time_after_p = 2.5 - time_before_p
     time_before_s = 0.3
     time_after_s = 4.0 - time_before_s
+    no_overlapping = True
+    # TM parameters
+    # time_before_p = 0.3
+    # time_after_p = 4.0 - time_before_p
+    # time_before_s = 0.3
+    # time_after_s = 4.0 - time_before_s
+    # no_overlapping = False
+
     time_window = max((time_before_p + time_after_p), (time_before_s + time_after_s))
     nt = int(round(time_window * sampling_rate))
     max_epicenter_dist = 200.0
@@ -315,6 +326,7 @@ def cut_templates(root_path, region, config):
             "time_before_s": time_before_s,
             "time_after_s": time_after_s,
             "time_window": time_window,
+            "no_overlapping": no_overlapping,
             "nt": nt,
             "max_epicenter_dist_km": max_epicenter_dist,
             "max_pair_dist_km": max_pair_dist,
