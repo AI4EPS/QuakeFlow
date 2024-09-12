@@ -383,10 +383,10 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         s=min(2, size_factor / len(adloc_dt_catalog)),
         alpha=1.0,
         linewidth=0,
-        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
 
 if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
@@ -395,10 +395,10 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         s=min(2, size_factor / len(adloc_dtcc_catalog)),
         alpha=1.0,
         linewidth=0,
-        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
 
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
@@ -527,10 +527,10 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
     ax[1, 0].set_xlim(xlim)
     ax[1, 0].set_ylim(ylim)
 
@@ -545,10 +545,10 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
     ax[1, 1].set_xlim(xlim)
     ax[1, 1].set_ylim(ylim)
 
@@ -698,10 +698,10 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
     ax[1, 0].set_xlim(xlim)
     ax[1, 0].set_ylim(ylim)
 
@@ -716,10 +716,10 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
     ax[1, 1].set_xlim(xlim)
     ax[1, 1].set_ylim(ylim)
 
