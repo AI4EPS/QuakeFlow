@@ -83,7 +83,7 @@ adloc_dtcc_file = f"{root_path}/{region}/adloc_dd/adloc_dtcc_events.csv"
 adloc_dtcc_exist = False
 if os.path.exists(adloc_dtcc_file):
     adloc_dtcc_exist = True
-    adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["event_time"])
+    adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["time"])
 
 # %%
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
@@ -790,13 +790,33 @@ plt.savefig(f"{root_path}/{figure_path}/catalogs_latitude_depth.png", dpi=300)
 plt.show()
 
 # %%
-fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10))
+fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10), sharex=True)
+xlim = [datetime.fromisoformat(config["starttime"]), datetime.fromisoformat(config["endtime"])]
+for i in range(2):
+    ax[i, 0].set_xlim(xlim)
+    ax[i, 0].grid()
+if routine_exist:
+    ax[0, 0].plot(routine_catalog["time"], routine_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="Routine")
+    ax[1, 0].plot(routine_catalog["time"], routine_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="Routine")
 if gamma_exist:
     ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
     ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
 if adloc_exist:
     ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
     ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+if adloc_dt_exist:
+    ax[0, 0].plot(
+        adloc_dt_catalog["time"], adloc_dt_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
+    )
+if adloc_dtcc_exist:
+    ax[1, 0].plot(
+        adloc_dtcc_catalog["time"],
+        adloc_dtcc_catalog["magnitude"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="AdLoc (CC)",
+    )
 if hypodd_ct_exist:
     ax[0, 0].plot(
         catalog_ct_hypodd["time"], catalog_ct_hypodd["MAG"], "o", markersize=2, alpha=0.5, label="HypoDD (CT)"
@@ -822,6 +842,9 @@ plt.show()
 fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(10, 10))
 xlim = [int(np.floor(gamma_catalog["magnitude"].min())), int(np.ceil(gamma_catalog["magnitude"].max()))]
 bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
+if routine_exist:
+    ax[0, 0].hist(routine_catalog["magnitude"], bins=bins, alpha=0.5, label="Routine")
+    ax[1, 0].hist(routine_catalog["magnitude"], bins=bins, alpha=0.5, label="Routine")
 if gamma_exist:
     ax[0, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
     ax[1, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
@@ -829,9 +852,9 @@ if adloc_exist:
     ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
     ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
 if adloc_dt_exist:
-    ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc_DT")
+    ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc (CT)")
 if adloc_dtcc_exist:
-    ax[1, 0].hist(adloc_dtcc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc_DTCC")
+    ax[1, 0].hist(adloc_dtcc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc (CC)")
 if hypodd_ct_exist:
     ax[0, 0].hist(catalog_ct_hypodd["MAG"], bins=bins, alpha=0.5, label="HypoDD (CT)")
 if hypodd_cc_exist:

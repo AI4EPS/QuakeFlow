@@ -61,7 +61,8 @@ if __name__ == "__main__":
 
     # %% reading from the generated files
     events = pd.read_csv(os.path.join(data_path, "cctorch_events.csv"))
-    events["time"] = pd.to_datetime(events["event_time"])
+    events["event_time"] = pd.to_datetime(events["event_time"])
+    events.rename(columns={"event_time": "time"}, inplace=True)
     stations = pd.read_csv(os.path.join(data_path, "cctorch_stations.csv"))
     picks = pd.read_csv(os.path.join(data_path, "cctorch_picks.csv"), parse_dates=["phase_time"])
     pairs = pd.read_csv(os.path.join(data_path, "dtcc.csv"))
