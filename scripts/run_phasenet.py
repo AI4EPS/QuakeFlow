@@ -63,9 +63,9 @@ def run_phasenet(
         fp.write("\n".join(mseed_list))
 
     # %%
-    os.system(
-        f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv --response_xml={root_path}/{region}/results/network/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{node_rank:03d}_{num_nodes:03d} --batch_size=1"
-    )
+    cmd = f"python {model_path}/phasenet/predict.py --model={model_path}/model/190703-214543 --data_dir=./ --data_list={root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv --response_xml={root_path}/{region}/results/network/inventory.xml --format=mseed --amplitude --highpass_filter=1.0 --result_dir={root_path}/{result_path} --result_fname=phasenet_picks_{node_rank:03d}_{num_nodes:03d} --batch_size=1"
+    # cmd += " --sampling_rate 100"
+    os.system(cmd)
 
     if protocol != "file":
         fs.put(

@@ -65,8 +65,8 @@ def run_adloc(
     stations["station_id"] = stations.index
     stations.reset_index(drop=True, inplace=True)
 
-    config["mindepth"] = 0.0
-    config["maxdepth"] = 30.0
+    config["mindepth"] = config["mindepth"] if "mindepth" in config else 0.0
+    config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 30.0
     config["use_amplitude"] = True
 
     # ## Eikonal for 1D velocity model
@@ -207,20 +207,34 @@ def run_adloc(
         )
         ## Separate P and S station term
         # station_term = (
-        #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual_s": "mean"}).reset_index()
+        #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual": "mean"}).reset_index()
         # )
         # stations["station_term_p"] = (
         #     stations["idx_sta"]
-        #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual_s"])
+        #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual"])
         #     .fillna(0)
         # )
         # stations["station_term_s"] = (
         #     stations["idx_sta"]
-        #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual_s"])
+        #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual"])
         #     .fillna(0)
         # )
 
         plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac_sst_{iter}")
+
+        if "event_index" not in events.columns:
+            events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
+        events[["longitude", "latitude"]] = events.apply(
+            lambda x: pd.Series(proj(x["x_km"], x["y_km"], inverse=True)), axis=1
+        )
+        events["depth_km"] = events["z_km"]
+
+        picks["adloc_mask"] = picks["mask"]
+        picks["adloc_residual_time"] = picks["residual_time"]
+        picks["adloc_residual_amplitude"] = picks["residual_amplitude"]
+        picks.to_csv(os.path.join(result_path, f"ransac_picks_sst_{iter}.csv"), index=False)
+        events.to_csv(os.path.join(result_path, f"ransac_events_sst_{iter}.csv"), index=False)
+        stations.to_csv(os.path.join(result_path, f"ransac_stations_sst_{iter}.csv"), index=False)
 
         if iter == 0:
             MIN_SST_S = (
@@ -232,9 +246,9 @@ def run_adloc(
             # break
         iter += 1
 
-    plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac_sst")
-
     # %%
+    plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac")
+
     if "event_index" not in events.columns:
         events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
     events[["longitude", "latitude"]] = events.apply(
@@ -244,17 +258,19 @@ def run_adloc(
     events.drop(["idx_eve", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
     events.sort_values(["time"], inplace=True)
 
-    picks.rename({"mask": "adloc_mask", "residual_s": "adloc_residual_s"}, axis=1, inplace=True)
+    # picks.rename({"mask": "adloc_mask", "residual": "adloc_residual"}, axis=1, inplace=True)
     picks["phase_type"] = picks["phase_type"].map({0: "P", 1: "S"})
-    picks.drop(["idx_eve", "idx_sta"], axis=1, inplace=True, errors="ignore")
+    picks.drop(
+        ["idx_eve", "idx_sta", "mask", "residual_time", "residual_amplitude"], axis=1, inplace=True, errors="ignore"
+    )
     picks.sort_values(["phase_time"], inplace=True)
 
     stations.drop(["idx_sta", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
     # stations.rename({"station_term": "adloc_station_term_s"}, axis=1, inplace=True)
 
-    picks.to_csv(os.path.join(result_path, "ransac_picks_sst.csv"), index=False)
-    events.to_csv(os.path.join(result_path, "ransac_events_sst.csv"), index=False)
-    stations.to_csv(os.path.join(result_path, "ransac_stations_sst.csv"), index=False)
+    picks.to_csv(os.path.join(result_path, "ransac_picks.csv"), index=False)
+    events.to_csv(os.path.join(result_path, "ransac_events.csv"), index=False)
+    stations.to_csv(os.path.join(result_path, "ransac_stations.csv"), index=False)
 
 
 # %%

@@ -81,7 +81,7 @@ with open(f"{root_path}/{region}/qtm/pairs.txt", "w") as fp:
     fp.write("\n".join([f"{x[0]},{x[1]}" for x in pairs]))
 
 ## based on GPU memory
-batch = 256
+batch = 16
 block_size1 = 1
 block_size2 = 100_000  # ~7GB
 

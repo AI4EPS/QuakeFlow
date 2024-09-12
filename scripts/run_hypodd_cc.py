@@ -47,8 +47,7 @@ mean_longitude = events["longitude"].mean()
 for i, row in events.iterrows():
     event_index = row["event_index"]
     origin = row["time"]
-    # magnitude = row["magnitude"]
-    magnitude = 1.0
+    magnitude = row["magnitude"]
     x_err = 0.0
     z_err = 0.0
     time_err = 0.0

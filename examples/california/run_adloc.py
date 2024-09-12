@@ -257,13 +257,15 @@ def run_adloc(
                 config["min_score"] = 0.5
                 config["min_p_picks"] = 0  # for filtering
                 config["min_s_picks"] = 0  # for filtering
-            stations["station_term_time"] = 0.0 # no station term
+            stations["station_term_time"] = 0.0  # no station term
             # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
             if iter == 0:
                 picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
             else:
                 # picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
-                picks, events = invert_location(picks[picks['mask']==1], stations, config, estimator, events_init=events_init, iter=iter)
+                picks, events = invert_location(
+                    picks[picks["mask"] == 1], stations, config, estimator, events_init=events_init, iter=iter
+                )
             # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
             station_term_time = (
                 picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
@@ -279,16 +281,16 @@ def run_adloc(
             )
             ## Separate P and S station term
             # station_term = (
-            #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual_s": "mean"}).reset_index()
+            #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual": "mean"}).reset_index()
             # )
             # stations["station_term_p"] = (
             #     stations["idx_sta"]
-            #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual_s"])
+            #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual"])
             #     .fillna(0)
             # )
             # stations["station_term_s"] = (
             #     stations["idx_sta"]
-            #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual_s"])
+            #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual"])
             #     .fillna(0)
             # )
 
@@ -326,7 +328,9 @@ def run_adloc(
         events.drop(["idx_eve", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
         events.sort_values(["time"], inplace=True)
 
-        picks.rename({"mask": "adloc_mask", "residual_s": "adloc_residual_s"}, axis=1, inplace=True)
+        picks.rename({"mask": "adloc_mask", "residual_time": "adloc_residual_time"}, axis=1, inplace=True)
+        if "residual_amplitude" in picks.columns:
+            picks.rename({"residual_amplitude": "adloc_residual_amplitude"}, axis=1, inplace=True)
         picks["phase_type"] = picks["phase_type"].map({0: "P", 1: "S"})
         picks.drop(["idx_eve", "idx_sta"], axis=1, inplace=True, errors="ignore")
         picks.sort_values(["phase_time"], inplace=True)
@@ -334,9 +338,9 @@ def run_adloc(
         # stations.drop(["idx_sta", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
         # stations.rename({"station_term": "adloc_station_term_s"}, axis=1, inplace=True)
 
-        # picks.to_csv(os.path.join(result_path, "ransac_picks_sst.csv"), index=False)
-        # events.to_csv(os.path.join(result_path, "ransac_events_sst.csv"), index=False)
-        # stations.to_csv(os.path.join(result_path, "ransac_stations_sst.csv"), index=False)
+        # picks.to_csv(os.path.join(result_path, "ransac_picks.csv"), index=False)
+        # events.to_csv(os.path.join(result_path, "ransac_events.csv"), index=False)
+        # stations.to_csv(os.path.join(result_path, "ransac_stations.csv"), index=False)
         picks.to_csv(f"{root_path}/{adloc_picks_csv}", index=False)
         events.to_csv(f"{root_path}/{adloc_events_csv}", index=False)
         # stations.to_json(f"{root_path}/{result_path}/adloc_stations_{jday:03d}.json", orient="index")

@@ -84,7 +84,9 @@ def run_gamma(
     config["dims"] = ["x(km)", "y(km)", "z(km)"]
     xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
     xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
-    zmin, zmax = config["mindepth"], config["maxdepth"]
+    # zmin, zmax = config["mindepth"], config["maxdepth"]
+    zmin = config["mindepth"] if "mindepth" in config else 0
+    zmax = config["maxdepth"] if "maxdepth" in config else 30
     config["x(km)"] = (xmin, xmax)
     config["y(km)"] = (ymin, ymax)
     config["z(km)"] = (zmin, zmax)

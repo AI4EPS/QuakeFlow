@@ -24,6 +24,8 @@ args = parse_args()
 # %%
 root_path = args.root_path
 region = args.region
+# root_path = "local"
+# region = "demo"
 
 result_path = f"{region}/results"
 figure_path = f"{region}/figures"
@@ -52,7 +54,7 @@ if os.path.exists(routine_catalog):
 
 
 # %%
-gamma_file = f"{root_path}/{region}/results/phase_association/events.csv"
+gamma_file = f"{root_path}/{region}/gamma/gamma_events_000_001.csv"
 gamma_exist = False
 if os.path.exists(gamma_file):
     gamma_exist = True
@@ -61,12 +63,27 @@ if os.path.exists(gamma_file):
 
 
 # %%
-adloc_file = f"{root_path}/{region}/adloc/adloc_events.csv"
+adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
 adloc_exist = False
 if os.path.exists(adloc_file):
     adloc_exist = True
     adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
+    # adloc_catalog["magnitude"] = 0.0
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
+
+# %%
+adloc_dt_file = f"{root_path}/{region}/adloc_dd/adloc_dt_events.csv"
+adloc_dt_exist = False
+if os.path.exists(adloc_dt_file):
+    adloc_dt_exist = True
+    adloc_dt_catalog = pd.read_csv(adloc_dt_file, parse_dates=["time"])
+
+# %%
+adloc_dtcc_file = f"{root_path}/{region}/adloc_dd/adloc_dtcc_events.csv"
+adloc_dtcc_exist = False
+if os.path.exists(adloc_dtcc_file):
+    adloc_dtcc_exist = True
+    adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["event_time"])
 
 # %%
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
@@ -113,6 +130,10 @@ if os.path.exists(hypodd_file):
     catalog_ct_hypodd = catalog_ct_hypodd[catalog_ct_hypodd["DEPTH"] != "*********"]
     catalog_ct_hypodd["DEPTH"] = catalog_ct_hypodd["DEPTH"].astype(float)
 
+    plt.figure()
+    plt.scatter(catalog_ct_hypodd["LON"], catalog_ct_hypodd["LAT"], s=2)
+    plt.show()
+
 # %%
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_cc.reloc"
 hypodd_cc_exist = False
@@ -157,6 +178,10 @@ if os.path.exists(hypodd_file):
     catalog_cc_hypodd["time"] = catalog_cc_hypodd["time"].apply(lambda x: datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%f"))
     catalog_cc_hypodd = catalog_cc_hypodd[catalog_cc_hypodd["DEPTH"] != "*********"]
     catalog_cc_hypodd["DEPTH"] = catalog_cc_hypodd["DEPTH"].astype(float)
+
+    plt.figure()
+    plt.scatter(catalog_cc_hypodd["LON"], catalog_cc_hypodd["LAT"], s=2)
+    plt.show()
 
 # %%
 growclust_file = f"{root_path}/{region}/growclust/growclust_ct_catalog.txt"
@@ -300,8 +325,8 @@ if os.path.exists(growclust_file):
 
 # %%
 size_factor = 2600
-fig, ax = plt.subplots(3, 2, squeeze=False, figsize=(10, 15), sharex=True, sharey=True)
-for i in range(3):
+fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(10, 15), sharex=True, sharey=True)
+for i in range(4):
     for j in range(2):
         ax[i, j].set_xlim(xlim)
         ax[i, j].set_ylim(ylim)
@@ -350,48 +375,73 @@ if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 1].legend()
     # ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
 
-if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
+if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
+        adloc_dt_catalog["longitude"],
+        adloc_dt_catalog["latitude"],
+        s=min(2, size_factor / len(adloc_dt_catalog)),
+        alpha=1.0,
+        linewidth=0,
+        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+    )
+    ax[1, 0].legend()
+    # ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+
+if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
+    ax[1, 1].scatter(
+        adloc_dtcc_catalog["longitude"],
+        adloc_dtcc_catalog["latitude"],
+        s=min(2, size_factor / len(adloc_dtcc_catalog)),
+        alpha=1.0,
+        linewidth=0,
+        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+    )
+    ax[1, 1].legend()
+    # ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+
+
+if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
+    ax[2, 0].scatter(
         catalog_ct_hypodd["LON"],
         catalog_ct_hypodd["LAT"],
         s=min(2, size_factor / len(catalog_ct_hypodd)),
         alpha=1.0,
         linewidth=0,
     )
-    ax[1, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
+    ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
     # ax[1, 0].set_xlim(xlim)
     # ax[1, 0].set_ylim(ylim)
     # ax[1, 0].set_aspect((ylim[1] - ylim[0]) / ((xlim[1] - xlim[0]) * np.cos(np.mean(ylim) * np.pi / 180)))
 
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
-    ax[1, 1].scatter(
+    ax[2, 1].scatter(
         catalog_cc_hypodd["LON"],
         catalog_cc_hypodd["LAT"],
         s=min(2, size_factor / len(catalog_cc_hypodd)),
         alpha=1.0,
         linewidth=0,
     )
-    ax[1, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
+    ax[2, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
 
 if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
-    ax[2, 0].scatter(
+    ax[3, 0].scatter(
         growclust_ct_catalog["lonR"],
         growclust_ct_catalog["latR"],
         s=min(2, size_factor / len(growclust_ct_catalog)),
         alpha=1.0,
         linewidth=0,
     )
-    ax[2, 0].set_title(f"GrowClust: {len(growclust_ct_catalog)}")
+    ax[3, 0].set_title(f"GrowClust: {len(growclust_ct_catalog)}")
 
 if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
-    ax[2, 1].scatter(
+    ax[3, 1].scatter(
         growclust_cc_catalog["lonR"],
         growclust_cc_catalog["latR"],
         s=min(2, size_factor / len(growclust_cc_catalog)),
         alpha=1.0,
         linewidth=0,
     )
-    ax[2, 1].set_title(f"GrowClust: {len(growclust_cc_catalog)}")
+    ax[3, 1].set_title(f"GrowClust: {len(growclust_cc_catalog)}")
 
 fig.tight_layout()
 plt.savefig(f"{root_path}/{figure_path}/catalogs_location.png", dpi=300)
@@ -704,8 +754,7 @@ if plot3d:
     config_plot3d = {
         "xrange": [config["minlongitude"], config["maxlongitude"]],
         "yrange": [config["minlatitude"], config["maxlatitude"]],
-        "zrange": [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]],
-        # "zrange": [0, 6],
+        "zrange": [config["mindepth"], config["maxdepth"]],
     }
 
     if gamma_exist and len(gamma_catalog) > 0:

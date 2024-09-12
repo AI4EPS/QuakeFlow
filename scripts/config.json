@@ -56,6 +56,22 @@
                 "SCEDC"
             ]
         },
+        "Lamont2024": {
+            "longitude0": -119.097,
+            "latitude0": 35.109,
+            "maxradius_degree": 1.0,
+            "minlatitude": 34.809,
+            "maxlatitude": 35.409,
+            "minlongitude": -119.397,
+            "maxlongitude": -118.897,
+            "mindepth": 0,
+            "maxdepth": 30,
+            "starttime": "2024-08-07T00:00:00",
+            "endtime": "2024-08-30T00:00:00",
+            "provider": [
+                "SCEDC"
+            ]
+        },
         "Hawaii": {
             "minlatitude": 18.39,
             "maxlatitude": 20.39,
@@ -163,6 +179,21 @@
             "channel": "HH*,BH*,EH*,HN*,DP*",
             "provider": [
                 "NCEDC"
+            ]
+        },
+        "Forge": {
+            "starttime": "2024-04-01T00:00:00",
+            "endtime": "2024-05-01T00:00:00",
+            "minlatitude": 38.28,
+            "maxlatitude": 38.68,
+            "minlongitude": -113.06,
+            "maxlongitude": -112.66,
+            "mindepth": 0,
+            "maxdepth": 10,
+            "network": "*",
+            "channel": "HH*,BH*,EH*,HN*,DP*",
+            "provider": [
+                "IRIS"
             ]
         }
     }

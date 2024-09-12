@@ -18,7 +18,7 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 # %%
 # stations_json = f"{region}/results/data/stations.json"
 # stations = pd.read_json(f"{root_path}/{stations_json}", orient="index")
-station_csv = f"{region}/adloc/ransac_stations_sst.csv"
+station_csv = f"{region}/adloc/ransac_stations.csv"
 stations = pd.read_csv(f"{root_path}/{station_csv}")
 stations.set_index("station_id", inplace=True)
 
@@ -35,7 +35,7 @@ with open(f"{root_path}/{result_path}/stlist.txt", "w") as fp:
 
 # %%
 # events_csv = f"{region}/results/phase_association/events.csv"
-events_csv = f"{region}/adloc/ransac_events_sst.csv"
+events_csv = f"{region}/adloc/ransac_events.csv"
 # event_file = f"{region}/cctorch/events.csv"
 events = pd.read_csv(f"{root_path}/{events_csv}")
 # event_df = event_df[event_df["gamma_score"] > 10]

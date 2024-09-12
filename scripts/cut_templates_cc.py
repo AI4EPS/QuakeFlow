@@ -340,13 +340,13 @@ def cut_templates(root_path, region, config):
     )
 
     # %%
-    stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations_sst.csv")
+    stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
     print(f"{len(stations) = }")
     print(stations.iloc[:5])
 
     # %%
-    events = pd.read_csv(f"{root_path}/{data_path}/ransac_events_sst.csv", parse_dates=["time"])
+    events = pd.read_csv(f"{root_path}/{data_path}/ransac_events.csv", parse_dates=["time"])
     events.rename(columns={"time": "event_time"}, inplace=True)
     events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
     reference_t0 = events["event_time"].min()
@@ -396,7 +396,7 @@ def cut_templates(root_path, region, config):
     eikonal = init_eikonal2d(eikonal)
 
     # %%
-    picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks_sst.csv")
+    picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks.csv")
     picks = picks[picks["adloc_mask"] == 1]
     picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
     min_phase_score = picks["phase_score"].min()

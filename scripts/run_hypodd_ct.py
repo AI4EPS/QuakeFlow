@@ -20,7 +20,7 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 # station_json = f"{region}/results/data/stations.json"
 # stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
 # station_csv = f"{region}/cctorch/cctorch_stations.csv"
-station_csv = f"{region}/adloc/ransac_stations_sst.csv"
+station_csv = f"{region}/adloc/ransac_stations.csv"
 stations = pd.read_csv(f"{root_path}/{station_csv}")
 stations.set_index("station_id", inplace=True)
 
@@ -53,8 +53,8 @@ with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = f"{region}/adloc/ransac_picks_sst.csv"
-events_csv = f"{region}/adloc/ransac_events_sst.csv"
+picks_csv = f"{region}/adloc/ransac_picks.csv"
+events_csv = f"{region}/adloc/ransac_events.csv"
 
 picks = pd.read_csv(f"{root_path}/{picks_csv}")
 events = pd.read_csv(f"{root_path}/{events_csv}")

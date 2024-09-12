@@ -45,6 +45,7 @@ else:
         f"--events_csv={root_path}/{region}/cctorch/cctorch_events.csv --picks_csv={root_path}/{region}/cctorch/cctorch_picks.csv --stations_csv={root_path}/{region}/cctorch/cctorch_stations.csv "
         f"--config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
     )
+
 num_gpu = torch.cuda.device_count()
 if num_gpu == 0:
     if os.uname().sysname == "Darwin":
