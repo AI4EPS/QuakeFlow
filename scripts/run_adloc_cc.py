@@ -64,7 +64,7 @@ if __name__ == "__main__":
     events["time"] = pd.to_datetime(events["event_time"])
     stations = pd.read_csv(os.path.join(data_path, "cctorch_stations.csv"))
     picks = pd.read_csv(os.path.join(data_path, "cctorch_picks.csv"), parse_dates=["phase_time"])
-    pairs = pd.read_csv(os.path.join(data_path, "ccpairs", "CC_000_002.csv"))
+    pairs = pd.read_csv(os.path.join(data_path, "dtcc.csv"))
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)

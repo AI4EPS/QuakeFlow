@@ -65,3 +65,10 @@ print(f"{source_file} -> {target_file}")
 if os.path.lexists(target_file):
     os.remove(target_file)
 os.symlink(source_file, target_file)
+
+source_file = f"ccpairs/CC_{num_gpu:03d}.csv"
+target_file = f"dtcc.csv"
+print(f"{source_file} -> {target_file}")
+if os.path.lexists(target_file):
+    os.remove(target_file)
+os.symlink(source_file, target_file)
