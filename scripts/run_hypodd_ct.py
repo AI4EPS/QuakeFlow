@@ -60,7 +60,7 @@ picks = pd.read_csv(f"{root_path}/{picks_csv}")
 events = pd.read_csv(f"{root_path}/{events_csv}")
 picks["phase_time"] = pd.to_datetime(picks["phase_time"], format="mixed")
 events["time"] = pd.to_datetime(events["time"])
-events["magnitude"] = 1.0
+# events["magnitude"] = 1.0
 events["sigma_time"] = 1.0
 
 # events.sort_values("time", inplace=True)

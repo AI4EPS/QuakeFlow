@@ -46,7 +46,7 @@ ylim = [config["minlatitude"], config["maxlatitude"]]
 
 # %%
 # %%
-routine_catalog = f"{root_path}/{region}/results/data/catalog.csv"
+routine_catalog = f"{root_path}/{region}/obspy/catalog.csv"
 routine_exist = False
 if os.path.exists(routine_catalog):
     routine_exist = True
@@ -331,6 +331,7 @@ for i in range(4):
         ax[i, j].set_xlim(xlim)
         ax[i, j].set_ylim(ylim)
         ax[i, j].set_aspect((ylim[1] - ylim[0]) / ((xlim[1] - xlim[0]) * np.cos(np.mean(ylim) * np.pi / 180)))
+        ax[i, j].grid()
         # # ax[i, j].set_xlabel("Longitude")
         # # ax[i, j].set_ylabel("Latitude")
         # # ax[i, j].grid()
@@ -372,8 +373,8 @@ if adloc_exist and (len(adloc_catalog) > 0):
         linewidth=0,
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    ax[0, 1].legend()
-    # ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    # ax[0, 1].legend()
+    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -384,8 +385,8 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         linewidth=0,
         label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
     )
-    ax[1, 0].legend()
-    # ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+    # ax[1, 0].legend()
+    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
 
 if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
@@ -396,8 +397,8 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         linewidth=0,
         label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
     )
-    ax[1, 1].legend()
-    # ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    # ax[1, 1].legend()
+    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
 
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
@@ -448,11 +449,36 @@ plt.savefig(f"{root_path}/{figure_path}/catalogs_location.png", dpi=300)
 plt.show()
 
 # %%
-fig, ax = plt.subplots(5, 2, squeeze=False, figsize=(15, 30))
+fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(15, 30), sharex=True, sharey=True)
 cmin = 0
 cmax = 10
-if gamma_exist and (len(gamma_catalog) > 0):
+for i in range(4):
+    for j in range(2):
+        ax[i, j].grid()
+
+if routine_exist and (len(routine_catalog) > 0):
     ax[0, 0].scatter(
+        routine_catalog["longitude"],
+        routine_catalog["depth_km"],
+        c=routine_catalog["depth_km"],
+        s=8000 / len(routine_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"Routine: {len(routine_catalog)}",
+    )
+    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
+    # ax[0, 0].invert_yaxis()
+    xlim = ax[0, 0].get_xlim()
+    ylim = ax[0, 0].get_ylim()
+else:
+    xlim = None
+    ylim = None
+
+if gamma_exist and (len(gamma_catalog) > 0):
+    ax[0, 1].scatter(
         gamma_catalog["longitude"],
         gamma_catalog["depth_km"],
         c=gamma_catalog["depth_km"],
@@ -464,33 +490,70 @@ if gamma_exist and (len(gamma_catalog) > 0):
         cmap="viridis_r",
         label=f"GaMMA: {len(gamma_catalog)}",
     )
-    ax[0, 0].set_title(f"GaMMA: {len(gamma_catalog)}")
-    ax[0, 0].invert_yaxis()
-    xlim = ax[0, 0].get_xlim()
-    ylim = ax[0, 0].get_ylim()
+    ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
+    ax[0, 1].invert_yaxis()
+    xlim = ax[0, 1].get_xlim()
+    ylim = ax[0, 1].get_ylim()
 else:
     xlim = None
     ylim = None
 
 if adloc_exist and (len(adloc_catalog) > 0):
-    ax[0, 0].scatter(
+    ax[0, 1].scatter(
         adloc_catalog["longitude"],
         adloc_catalog["depth_km"],
-        # c=adloc_catalog["depth_km"],
+        c=adloc_catalog["depth_km"],
         s=8000 / len(adloc_catalog),
         alpha=1.0,
         linewidth=0,
-        # vmin=cmin,
-        # vmax=cmax,
-        # cmap="viridis_r",
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    ax[0, 0].legend()
-    # ax[0, 0].set_title(f"AdLoc: {len(adloc_catalog)}")
+    # ax[0, 1].legend()
+    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[0, 1].set_xlim(xlim)
+    ax[0, 1].set_ylim(ylim)
+
+if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
+    ax[1, 0].scatter(
+        adloc_dt_catalog["longitude"],
+        adloc_dt_catalog["depth_km"],
+        c=adloc_dt_catalog["depth_km"],
+        s=8000 / len(adloc_dt_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+    )
+    # ax[1, 0].legend()
+    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
     ax[1, 0].set_xlim(xlim)
     ax[1, 0].set_ylim(ylim)
+
+if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
+    ax[1, 1].scatter(
+        adloc_dtcc_catalog["longitude"],
+        adloc_dtcc_catalog["depth_km"],
+        c=adloc_dtcc_catalog["depth_km"],
+        s=8000 / len(adloc_dtcc_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+    )
+    # ax[1, 1].legend()
+    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_xlim(xlim)
+    ax[1, 1].set_ylim(ylim)
+
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
-    ax[1, 0].scatter(
+    ax[2, 0].scatter(
         catalog_ct_hypodd["LON"],
         catalog_ct_hypodd["DEPTH"],
         c=catalog_ct_hypodd["DEPTH"],
@@ -501,11 +564,11 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[1, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
-    ax[1, 0].set_xlim(xlim)
-    ax[1, 0].set_ylim(ylim)
+    ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
+    ax[2, 0].set_xlim(xlim)
+    ax[2, 0].set_ylim(ylim)
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
-    ax[2, 0].scatter(
+    ax[2, 1].scatter(
         catalog_cc_hypodd["LON"],
         catalog_cc_hypodd["DEPTH"],
         c=catalog_cc_hypodd["DEPTH"],
@@ -516,9 +579,10 @@ if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[2, 0].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
-    ax[2, 0].set_xlim(xlim)
-    ax[2, 0].set_ylim(ylim)
+    ax[2, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
+    ax[2, 1].set_xlim(xlim)
+    ax[2, 1].set_ylim(ylim)
+
 if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
     ax[3, 0].scatter(
         growclust_ct_catalog["lonR"],
@@ -535,7 +599,7 @@ if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
     ax[3, 0].set_xlim(xlim)
     ax[3, 0].set_ylim(ylim)
 if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
-    ax[4, 0].scatter(
+    ax[3, 1].scatter(
         growclust_cc_catalog["lonR"],
         growclust_cc_catalog["depR"],
         c=growclust_cc_catalog["depR"],
@@ -546,9 +610,43 @@ if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[4, 0].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
-    ax[4, 0].set_xlim(xlim)
-    ax[4, 0].set_ylim(ylim)
+    ax[3, 1].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
+    ax[3, 1].set_xlim(xlim)
+    ax[3, 1].set_ylim(ylim)
+
+
+plt.savefig(f"{root_path}/{figure_path}/catalogs_longitude_depth.png", dpi=300)
+plt.show()
+
+
+# %%
+fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(15, 30), sharex=True, sharey=True)
+cmin = 0
+cmax = 10
+for i in range(4):
+    for j in range(2):
+        ax[i, j].grid()
+
+if routine_exist and (len(routine_catalog) > 0):
+    ax[0, 0].scatter(
+        routine_catalog["latitude"],
+        routine_catalog["depth_km"],
+        c=routine_catalog["depth_km"],
+        s=8000 / len(routine_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"Routine: {len(routine_catalog)}",
+    )
+    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
+    # ax[0, 0].invert_yaxis()
+    xlim = ax[0, 0].get_xlim()
+    ylim = ax[0, 0].get_ylim()
+else:
+    xlim = None
+    ylim = None
 
 if gamma_exist and (len(gamma_catalog) > 0):
     ax[0, 1].scatter(
@@ -570,25 +668,63 @@ if gamma_exist and (len(gamma_catalog) > 0):
 else:
     xlim = None
     ylim = None
+
 if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 1].scatter(
         adloc_catalog["latitude"],
         adloc_catalog["depth_km"],
-        # c=adloc_catalog["depth_km"],
+        c=adloc_catalog["depth_km"],
         s=8000 / len(adloc_catalog),
         alpha=1.0,
         linewidth=0,
-        # vmin=cmin,
-        # vmax=cmax,
-        # cmap="viridis_r",
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    ax[0, 1].legend()
-    # ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    # ax[0, 1].legend()
+    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
     ax[0, 1].set_xlim(xlim)
     ax[0, 1].set_ylim(ylim)
-if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
+
+if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
+    ax[1, 0].scatter(
+        adloc_dt_catalog["latitude"],
+        adloc_dt_catalog["depth_km"],
+        c=adloc_dt_catalog["depth_km"],
+        s=8000 / len(adloc_dt_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"AdLoc_DT: {len(adloc_dt_catalog)}",
+    )
+    # ax[1, 0].legend()
+    ax[1, 0].set_title(f"AdLoc_DT: {len(adloc_dt_catalog)}")
+    ax[1, 0].set_xlim(xlim)
+    ax[1, 0].set_ylim(ylim)
+
+if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
+        adloc_dtcc_catalog["latitude"],
+        adloc_dtcc_catalog["depth_km"],
+        c=adloc_dtcc_catalog["depth_km"],
+        s=8000 / len(adloc_dtcc_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}",
+    )
+    # ax[1, 1].legend()
+    ax[1, 1].set_title(f"AdLoc_DTCC: {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_xlim(xlim)
+    ax[1, 1].set_ylim(ylim)
+
+if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
+    ax[2, 0].scatter(
         catalog_ct_hypodd["LAT"],
         catalog_ct_hypodd["DEPTH"],
         c=catalog_ct_hypodd["DEPTH"],
@@ -599,9 +735,9 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[1, 1].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
-    ax[1, 1].set_xlim(xlim)
-    ax[1, 1].set_ylim(ylim)
+    ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
+    ax[2, 0].set_xlim(xlim)
+    ax[2, 0].set_ylim(ylim)
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[2, 1].scatter(
         catalog_cc_hypodd["LAT"],
@@ -617,8 +753,9 @@ if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[2, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
     ax[2, 1].set_xlim(xlim)
     ax[2, 1].set_ylim(ylim)
+
 if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
-    ax[3, 1].scatter(
+    ax[3, 0].scatter(
         growclust_ct_catalog["latR"],
         growclust_ct_catalog["depR"],
         c=growclust_ct_catalog["depR"],
@@ -629,11 +766,11 @@ if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[3, 1].set_title(f"GrowClust (CT): {len(growclust_ct_catalog)}")
-    ax[3, 1].set_xlim(xlim)
-    ax[3, 1].set_ylim(ylim)
+    ax[3, 0].set_title(f"GrowClust (CT): {len(growclust_ct_catalog)}")
+    ax[3, 0].set_xlim(xlim)
+    ax[3, 0].set_ylim(ylim)
 if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
-    ax[4, 1].scatter(
+    ax[3, 1].scatter(
         growclust_cc_catalog["latR"],
         growclust_cc_catalog["depR"],
         c=growclust_cc_catalog["depR"],
@@ -644,10 +781,12 @@ if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
         vmax=cmax,
         cmap="viridis_r",
     )
-    ax[4, 1].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
-    ax[4, 1].set_xlim(xlim)
-    ax[4, 1].set_ylim(ylim)
-plt.savefig(f"{root_path}/{figure_path}/catalogs_location_depth.png", dpi=300)
+    ax[3, 1].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
+    ax[3, 1].set_xlim(xlim)
+    ax[3, 1].set_ylim(ylim)
+
+
+plt.savefig(f"{root_path}/{figure_path}/catalogs_latitude_depth.png", dpi=300)
 plt.show()
 
 # %%
@@ -689,6 +828,10 @@ if gamma_exist:
 if adloc_exist:
     ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
     ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
+if adloc_dt_exist:
+    ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc_DT")
+if adloc_dtcc_exist:
+    ax[1, 0].hist(adloc_dtcc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc_DTCC")
 if hypodd_ct_exist:
     ax[0, 0].hist(catalog_ct_hypodd["MAG"], bins=bins, alpha=0.5, label="HypoDD (CT)")
 if hypodd_cc_exist:
