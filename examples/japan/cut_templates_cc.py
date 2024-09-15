@@ -3,6 +3,7 @@ import json
 import multiprocessing as mp
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from glob import glob
 
 import matplotlib.pyplot as plt
@@ -10,7 +11,6 @@ import numpy as np
 import obspy
 import pandas as pd
 from adloc.eikonal2d import calc_traveltime, init_eikonal2d
-from args import parse_args
 from pyproj import Proj
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
@@ -151,7 +151,9 @@ def extract_template_numpy(
     for i, station in stations.iterrows():
         station_id = station["station_id"]
         for c in station["component"]:
-            mseed_name = f"{mseed_path}/{station_id}{c}.mseed"
+            mseed_name = f"{mseed_path}/{station_id.lstrip('.').rstrip('.')}.{c}.sac"
+            if "WJMF" in station_id:
+                mseed_name = f"{mseed_path}/{station_id.lstrip('.').rstrip('.')}.{c}B.sac"  ## FIXME
             if os.path.exists(mseed_name):
                 try:
                     stream = obspy.read(mseed_name)
@@ -305,13 +307,13 @@ def cut_templates(root_path, region, config):
     min_cc_score = 0.5
     min_obs = 8
     max_obs = 100
-    # component_mapping = {
-    #     "123": {"3": 0, "2": 1, "1": 2},
-    #     "12Z": {"1": 0, "2": 1, "Z": 2},
-    #     "ENU": {"E": 0, "N": 1, "Z": 2},
-    #     "ENZ": {"E": 0, "N": 1, "Z": 2},
-    # } ## TODO: improve component_mapping
-    component_mapping = {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2}
+    component_mapping = {
+        "123": {"3": 0, "2": 1, "1": 2},
+        "12Z": {"1": 0, "2": 1, "Z": 2},
+        "ENU": {"E": 0, "N": 1, "Z": 2},
+        "ENZ": {"E": 0, "N": 1, "Z": 2},
+    }
+    component_mapping = {"3": 0, "2": 1, "1": 2, "E": 0, "N": 1, "Z": 2, "U": 2}
 
     config.update(
         {
@@ -336,6 +338,12 @@ def cut_templates(root_path, region, config):
     # %%
     stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
+    stations["network"] = stations["station_id"].apply(lambda x: x.split(".")[1])  ## Hard-coded
+    stations["station"] = stations["station_id"].apply(lambda x: x.split(".")[2])  ## Hard-coded
+    stations["location"] = ""  ## Hard-coded
+    stations["instrument"] = ""  ## Hard-coded
+    stations["component"] = "ENU"  ## Hard-coded
+    stations.fillna("", inplace=True)
     print(f"{len(stations) = }")
     print(stations.iloc[:5])
 
@@ -391,9 +399,14 @@ def cut_templates(root_path, region, config):
 
     # %%
     picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks.csv")
+
+    # events = events[events["event_time"] >= pd.to_datetime("2024-08-01", utc=True)]
+    # picks = picks[picks["event_index"].isin(events["event_index"])]
+
     picks = picks[picks["adloc_mask"] == 1]
     picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
     min_phase_score = picks["phase_score"].min()
+    picks["phase_type"] = picks["phase_type"].apply(lambda x: "P" if x == 0 else "S")  ## FIXME
 
     picks = picks.merge(events[["event_index", "event_timestamp"]], on="event_index")
     picks = picks.merge(stations[["station_id", "station_term_time"]], on="station_id")
@@ -481,8 +494,14 @@ def cut_templates(root_path, region, config):
 
     picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
 
-    dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
-    ncpu = min(16, mp.cpu_count())
+    # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"))
+    dirs = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??"), reverse=True)
+    # # # # 08/01 to jday
+    # dirs = sorted(glob(f"{root_path}/{region}/waveforms/2024-???/??"))
+    # jday = pd.to_datetime("2024-08-01", utc=True).strftime("%j")
+    # dirs = [d for d in dirs if d.split("/")[-2].split("-")[-1] >= jday]  ## FIXME
+
+    ncpu = min(32, mp.cpu_count())
     print(f"Using {ncpu} cores")
 
     pbar = tqdm(total=len(dirs), desc="Cutting templates")
@@ -506,13 +525,22 @@ def cut_templates(root_path, region, config):
             for d in dirs:
 
                 tmp = d.split("/")
-                year, jday, hour = tmp[-3:]
+                year_jday, hour = tmp[-2], tmp[-1]
+                year, jday = year_jday.split("-")
+                # begin_time = np.datetime64(datetime.strptime(f"{year}-{jday}T{hour}", "%Y-%jT%H"))
+                # end_time = begin_time + np.timedelta64(1, "h")
 
+                # picks_ = picks[(phase_time >= begin_time) & (phase_time < end_time)]
+                # picks_ = (
+                #     picks_group.get_group(f"{year}-{jday}T{hour}")
+                #     if f"{year}-{jday}T{hour}" in picks_group.groups
+                #     else pd.DataFrame()
+                # )
                 if f"{year}-{jday}T{hour}" not in picks_group.groups:
                     pbar_update(d)
                     continue
                 picks_ = picks_group.get_group(f"{year}-{jday}T{hour}")
-                events_ = events.loc[picks_["idx_eve"].unique()]
+                events_ = events.loc[picks_["idx_eve"].unique()]  # index is idx_eve
                 picks_ = picks_.set_index(["idx_eve", "idx_sta", "phase_type"])
 
                 job = pool.apply_async(
@@ -554,14 +582,15 @@ def cut_templates(root_path, region, config):
 if __name__ == "__main__":
 
     # %%
-    args = parse_args()
-    root_path = args.root_path
-    region = args.region
+    root_path = "local"
+    region = "hinet"
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    config.update(config["cctorch"])
+    # config.update(config["cctorch"])
+    config["mindepth"] = 0.0
+    config["maxdepth"] = 30.0
 
     # %%
     print(json.dumps(config, indent=4, sort_keys=True))

@@ -48,7 +48,6 @@ if __name__ == "__main__":
                 stations.append(station)
         return stations
 
-
     # %%
     # stations = []
     for cnt in win32_list:
@@ -114,6 +113,3 @@ if __name__ == "__main__":
     # stations.to_csv(f"{station_path}/stations.csv", index=False)
     # stations.set_index("station_id", inplace=True)
     # stations.to_json(f"{station_path}/stations.json", orient="index", indent=2)
-
-
-
