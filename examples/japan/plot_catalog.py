@@ -28,6 +28,10 @@ use_pygmt = True
 with open(f"{root_path}/{region}/config.json", "r") as f:
     config = json.load(f)
 print(json.dumps(config, indent=4, sort_keys=True))
+if "mindepth" not in config:
+    config["mindepth"] = 0
+if "maxdepth" not in config:
+    config["maxdepth"] = 30
 xlim = [config["minlongitude"], config["maxlongitude"]]
 ylim = [config["minlatitude"], config["maxlatitude"]]
 
@@ -935,6 +939,25 @@ if plot3d:
             config_plot3d,
             f"{root_path}/{figure_path}/earthquake_location_adloc.html",
         )
+
+    if adloc_dt_exist and len(adloc_dt_catalog) > 0:
+        plot3d(
+            adloc_dt_catalog["longitude"],
+            adloc_dt_catalog["latitude"],
+            adloc_dt_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{figure_path}/earthquake_location_adloc_dt.html",
+        )
+
+    if adloc_dtcc_exist and len(adloc_dtcc_catalog) > 0:
+        plot3d(
+            adloc_dtcc_catalog["longitude"],
+            adloc_dtcc_catalog["latitude"],
+            adloc_dtcc_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{figure_path}/earthquake_location_adloc_dtcc.html",
+        )
+
     if hypodd_ct_exist and len(catalog_ct_hypodd) > 0:
         plot3d(
             catalog_ct_hypodd["LON"],
