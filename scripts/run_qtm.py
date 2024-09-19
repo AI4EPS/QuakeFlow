@@ -9,6 +9,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 import torch
+from tqdm import tqdm
 
 
 # %%

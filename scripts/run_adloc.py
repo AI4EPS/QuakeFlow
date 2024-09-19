@@ -195,9 +195,15 @@ def run_adloc(
         # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
         picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
         # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
-        station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
+        # station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
+        station_term_time = (
+            picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "median"}).reset_index()
+        )
+        # station_term_amp = (
+        #     picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "mean"}).reset_index()
+        # )
         station_term_amp = (
-            picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "mean"}).reset_index()
+            picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "median"}).reset_index()
         )
         stations["station_term_time"] += (
             stations["idx_sta"].map(station_term_time.set_index("idx_sta")["residual_time"]).fillna(0)
