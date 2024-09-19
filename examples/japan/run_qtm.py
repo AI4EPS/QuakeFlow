@@ -8,21 +8,13 @@ from itertools import product
 
 import numpy as np
 import pandas as pd
+import scipy
 import torch
-
+from tqdm import tqdm
 
 # %%
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
-    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
-    return parser.parse_args()
-
-
-args = parse_args()
-# %%
-root_path = args.root_path
-region = args.region
+root_path = "local"
+region = "hinet"
 
 result_path = f"{region}/qtm"
 if not os.path.exists(f"{root_path}/{result_path}"):
@@ -33,14 +25,21 @@ with open(f"{root_path}/{region}/config.json", "r") as fp:
     config = json.load(fp)
 
 # %% Get mseed list
-mseed_list = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??/*.mseed"))
-subdir = 4  # year/jday/hour/station_id.mseed
+# mseed_list = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??/*.mseed"))
+# mseed_list = sorted(glob(f"{root_path}/{region}/waveforms/????-???/??/*.sac"), reverse=True)
+mseed_list = sorted(glob(f"{root_path}/{region}/waveforms/2024-???/??/*.sac"), reverse=True)
+subdir = 3  # year-jday/hour/station_id.mseed
 mseeds = pd.DataFrame(mseed_list, columns=["fname"])
-mseeds["mseed_id"] = mseeds["fname"].apply(lambda x: "/".join(x.replace(".mseed", "").split("/")[-subdir:])[:-1])
-mseeds["station_id"] = mseeds["fname"].apply(lambda x: x.replace(".mseed", "").split("/")[-1][:-1])
+mseeds["mseed_id"] = mseeds["fname"].apply(lambda x: "/".join(x.replace(".sac", "").split("/")[-subdir:]))
+mseeds["station_id"] = mseeds["fname"].apply(lambda x: x.replace(".sac", "").split("/")[-1])
+# remove .E/.N/.Z or .EB/.NB/.ZB
+mseeds["mseed_id"] = mseeds["mseed_id"].apply(lambda x: ".".join(x.split(".")[:-1]))
+mseeds["station_id"] = mseeds["station_id"].apply(lambda x: "." + ".".join(x.split(".")[:-1]) + "..")
 mseeds["begin_time"] = mseeds["fname"].apply(
     lambda x: datetime.strptime(
-        f"{x.split('/')[-subdir]}-{x.split('/')[-subdir+1]}T{x.split('/')[-subdir+2]}", "%Y-%jT%H"
+        # f"{x.split('/')[-subdir]}-{x.split('/')[-subdir+1]}T{x.split('/')[-subdir+2]}", "%Y-%jT%H"
+        f"{x.split('/')[-subdir]}T{x.split('/')[-subdir+1]}",
+        "%Y-%jT%H",
     ).strftime("%Y-%m-%dT%H:%M:%S.%f")
 )
 mseeds = (
@@ -59,13 +58,34 @@ mseeds.to_csv(f"{root_path}/{region}/qtm/mseed_list.csv", index=False)
 with open(f"{root_path}/{region}/qtm/mseed_list.txt", "w") as fp:
     fp.write("\n".join(mseeds["fname"]))
 
+print(f"Number of mseed files: {len(mseeds)}")
+
 # %%
 # with open(f"{root_path}/{region}/qtm/event_phase_station_id.txt", "r") as fp:
 #     event_phase_station_id = fp.read().splitlines()
-picks = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_picks.csv")
+# picks = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_picks.csv")
+picks = pd.read_csv(f"{root_path}/{region}/qtm/qtm_picks.csv")
+picks["phase_time"] = pd.to_datetime(picks["phase_time"], format="mixed")
+picks["phase_time"] = picks["phase_time"].dt.tz_localize(None)
+picks = picks[
+    (picks["phase_time"] >= pd.to_datetime("2024-01-01T00:00:00"))
+    # & (picks["phase_time"] < pd.to_datetime("2024-01-02T00:00:00"))
+]
 stations = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_stations.csv")
 picks = picks.merge(stations[["idx_sta", "station_id"]], on="idx_sta")
 print(picks.iloc[:10])
+print(f"Number of picks: {len(picks)}")
+
+# %%
+# events = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_events.csv")
+events = pd.read_csv(f"{root_path}/{region}/qtm/qtm_events.csv")
+events["event_time"] = pd.to_datetime(events["event_time"], format="mixed")
+events["event_time"] = events["event_time"].dt.tz_localize(None)
+events = events[
+    (events["event_time"] >= pd.to_datetime("2024-01-01T00:00:00"))
+    # & (events["event_time"] < pd.to_datetime("2024-01-02T00:00:00"))
+]
+print(f"Number of events: {len(events)}")
 
 # %% Generate event mseed pairs
 pairs = []
@@ -78,6 +98,8 @@ with open(f"{root_path}/{region}/qtm/pairs.txt", "w") as fp:
     picks = picks.groupby("station_id")
     for idx_mseed, row in tqdm(mseeds.iterrows(), total=len(mseeds), desc="Writing pairs"):
         station_id = row["station_id"]
+        if station_id not in unique_station_ids:
+            continue
         for idx_pick in picks.get_group(station_id)["idx_pick"].values:
             fp.write(f"{idx_mseed},{idx_pick}\n")
 
@@ -88,7 +110,7 @@ block_size2 = 100_000  # ~7GB
 
 # %%
 base_cmd = (
-    f"../CCTorch/run.py --mode=TM --pair_list={root_path}/{region}/qtm/pairs.txt "
+    f"../../CCTorch/run.py --mode=TM --pair_list={root_path}/{region}/qtm/pairs.txt "
     f"--data_list1={root_path}/{region}/qtm/mseed_list.txt --data_format1=mseed "
     f"--data_list2={root_path}/{region}/cctorch/cctorch_picks.csv --data_path2={root_path}/{region}/cctorch/template.dat --data_format2=memmap "
     f"--config={root_path}/{region}/cctorch/config.json --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c --result_path={root_path}/{region}/qtm/ccpairs"

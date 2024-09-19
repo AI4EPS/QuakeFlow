@@ -77,9 +77,9 @@ TT/tt.sg
 ***** GrowClust Algorithm Parameters *****
 ******************************************
 * rmin  delmax rmsmax 
-   0.6    120    1.0
+   0.1    120    1.0
 * rpsavgmin, rmincut  ngoodmin   iponly 
-    0          0.6         8        0
+    0          0.1         8        0
 *
 ******************************************
 ************ Output files ****************
