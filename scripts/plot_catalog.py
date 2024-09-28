@@ -130,6 +130,8 @@ if os.path.exists(hypodd_file):
     catalog_ct_hypodd = catalog_ct_hypodd[catalog_ct_hypodd["DEPTH"] != "*********"]
     catalog_ct_hypodd["DEPTH"] = catalog_ct_hypodd["DEPTH"].astype(float)
 
+    catalog_ct_hypodd.to_csv(f"{root_path}/{region}/hypodd/hypodd_ct.csv", index=False)
+
     plt.figure()
     plt.scatter(catalog_ct_hypodd["LON"], catalog_ct_hypodd["LAT"], s=2)
     plt.show()
@@ -179,6 +181,8 @@ if os.path.exists(hypodd_file):
     catalog_cc_hypodd = catalog_cc_hypodd[catalog_cc_hypodd["DEPTH"] != "*********"]
     catalog_cc_hypodd["DEPTH"] = catalog_cc_hypodd["DEPTH"].astype(float)
 
+    catalog_cc_hypodd.to_csv(f"{root_path}/{region}/hypodd/hypodd_cc.csv", index=False)
+
     plt.figure()
     plt.scatter(catalog_cc_hypodd["LON"], catalog_cc_hypodd["LAT"], s=2)
     plt.show()
@@ -225,6 +229,8 @@ if os.path.exists(growclust_file):
     )
     growclust_ct_catalog = growclust_ct_catalog[growclust_ct_catalog["nbranch"] > 1]
 
+    growclust_ct_catalog.to_csv(f"{root_path}/{region}/growclust/growclust_ct.csv", index=False)
+
 # %%
 growclust_file = f"{root_path}/{region}/growclust/growclust_cc_catalog.txt"
 growclust_cc_exist = False
@@ -266,6 +272,8 @@ if os.path.exists(growclust_file):
         lambda x: datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%f")
     )
     growclust_cc_catalog = growclust_cc_catalog[growclust_cc_catalog["nbranch"] > 1]
+
+    growclust_cc_catalog.to_csv(f"{root_path}/{region}/growclust/growclust_cc.csv", index=False)
 
 
 # %% Debug
