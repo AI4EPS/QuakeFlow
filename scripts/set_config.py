@@ -62,8 +62,11 @@ if __name__ == "__main__":
     args = parse_args()
     root_path = args.root_path
     region = args.region
+    protocol = args.protocol
+    bucket = args.bucket
+    token = args.token
 
     with open("config.json", "r") as fp:
         config = json.load(fp)
 
-    set_config(root_path=root_path, region=region, config=config, protocol="file", bucket="", token=None)
+    set_config(root_path=root_path, region=region, config=config, protocol=protocol, bucket=bucket, token=token)

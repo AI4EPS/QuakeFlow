@@ -36,13 +36,16 @@ def map_remote_path(provider, bucket, starttime, network, station, location, ins
 # %%
 def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H", skip_list=[], lock=None, cloud=None):
     if cloud is not None:
-        protocol = cloud["protocol"]
-        token = cloud["token"]
-        bucket = cloud["bucket"]
+        data_protocol = cloud["data_protocol"]
+        data_token = cloud["data_token"]
+        data_bucket = cloud["data_bucket"]
+        result_protocol = cloud["result_protocol"]
+        result_token = cloud["result_token"]
+        result_bucket = cloud["result_bucket"]
     else:
-        protocol = "file"
-        token = None
-    fs = fsspec.filesystem(protocol=protocol, token=token)
+        result_protocol = "file"
+        result_token = None
+    fs = fsspec.filesystem(protocol=result_protocol, token=result_token)
 
     starttime = obspy.UTCDateTime(starttime)
     if deltatime == "1H":
@@ -71,22 +74,22 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
                 f"{station['network']}.{station['station']}.{station['location']}.{station['instrument']}{comp}.mseed"
             )
             if os.path.exists(f"{root_path}/{mseed_dir}/{mseed_name}"):
-                if protocol != "file":
-                    if not fs.exists(f"{bucket}/{mseed_dir}/{mseed_name}"):
-                        fs.put(f"{root_path}/{mseed_dir}/{mseed_name}", f"{bucket}/{mseed_dir}/{mseed_name}")
+                if result_protocol != "file":
+                    if not fs.exists(f"{result_bucket}/{mseed_dir}/{mseed_name}"):
+                        fs.put(f"{root_path}/{mseed_dir}/{mseed_name}", f"{result_bucket}/{mseed_dir}/{mseed_name}")
                 print(f"{root_path}/{mseed_dir}/{mseed_name} already exists. Skip.")
                 continue
 
-            if protocol != "file":
-                if fs.exists(f"{bucket}/{mseed_dir}/{mseed_name}"):
-                    fs.get(f"{bucket}/{mseed_dir}/{mseed_name}", f"{root_path}/{mseed_dir}/{mseed_name}")
-                    print(f"{bucket}/{mseed_dir}/{mseed_name} already exists. Skip.")
+            if result_protocol != "file":
+                if fs.exists(f"{result_bucket}/{mseed_dir}/{mseed_name}"):
+                    # fs.get(f"{result_bucket}/{mseed_dir}/{mseed_name}", f"{root_path}/{mseed_dir}/{mseed_name}")
+                    print(f"{result_bucket}/{mseed_dir}/{mseed_name} already exists. Skip.")
                     continue
 
             if cloud is not None:
                 mseed_path = map_remote_path(
                     cloud["provider"],
-                    cloud["bucket"],
+                    cloud["data_bucket"],
                     starttime,
                     station["network"],
                     station["station"],
@@ -115,8 +118,10 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
                                 continue
                             os.makedirs(f"{root_path}/{tmp_dir}", exist_ok=True)
                             tr.write(f"{root_path}/{tmp_dir}/{tr.id}.mseed", format="MSEED")
-                            if protocol != "file":
-                                fs.put(f"{root_path}/{tmp_dir}/{tr.id}.mseed", f"{bucket}/{tmp_dir}/{tr.id}.mseed")
+                            if result_protocol != "file":
+                                fs.put(
+                                    f"{root_path}/{tmp_dir}/{tr.id}.mseed", f"{result_bucket}/{tmp_dir}/{tr.id}.mseed"
+                                )
                     print(f"Downloaded from {cloud['provider']}:{mseed_path}")
                 except Exception as e:
                     with lock:
@@ -152,8 +157,8 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
             for tr in stream:
                 tr.data = tr.data.astype(np.float32)
                 tr.write(f"{root_path}/{mseed_dir}/{tr.id}.mseed", format="MSEED")
-            if protocol != "file":
-                fs.put(f"{root_path}/{mseed_dir}/{tr.id}.mseed", f"{bucket}/{mseed_dir}/{tr.id}.mseed")
+            if data_protocol != "file":
+                fs.put(f"{root_path}/{mseed_dir}/{tr.id}.mseed", f"{result_bucket}/{mseed_dir}/{tr.id}.mseed")
             break
 
         except Exception as err:
@@ -181,23 +186,31 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
 def download_waveform(
     root_path: str,
     region: str,
-    config: Dict,
-    rank: int = 0,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
+    num_nodes: int = 1,
+    node_rank: int = 0,
 ) -> str:
 
     # %%
     fs = fsspec.filesystem(protocol=protocol, token=token)
     # %%
     network_dir = f"{region}/results/network"
-    num_nodes = config["num_nodes"] if "num_nodes" in config else 1
-    print(f"{num_nodes = }, {rank = }")
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
 
+    # %%
+    if protocol == "file":
+        config_file = f"{root_path}/{region}/config.json"
+    else:
+        config_file = f"{bucket}/{region}/config.json"
+
+    with fs.open(config_file) as fp:
+        config = json.load(fp)
+
+    # %%
     for provider in config["provider"]:
         # inventory = obspy.read_inventory(f"{root_path}/{data_dir}/inventory_{provider.lower()}.xml")
         if protocol == "file":
@@ -216,15 +229,18 @@ def download_waveform(
         elif DELTATIME == "1D":
             start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
         starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left").to_list()
-        starttimes = np.array_split(starttimes, num_nodes)[rank]
-        print(f"rank {rank}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
+        starttimes = np.array_split(starttimes, num_nodes)[node_rank]
+        print(f"rank {node_rank}/{num_nodes}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
 
         if provider.lower() in ["scedc", "ncedc"]:
             cloud_config = {
                 "provider": provider.lower(),
-                "bucket": f"{provider.lower()}-pds/continuous_waveforms",
-                "protocol": protocol,
-                "token": token,
+                "data_bucket": f"{provider.lower()}-pds/continuous_waveforms",
+                "data_protocol": "s3",
+                "data_token": None,
+                "result_bucket": bucket,
+                "result_protocol": protocol,
+                "result_token": token,
             }
             starttimes = [
                 starttimes[j] for i in range(24) for j in range(i, len(starttimes), 24)
@@ -258,10 +274,11 @@ def download_waveform(
         #     for job in jobs:
         #         print(job.result())
 
-        with mp.Manager() as manager:
+        ctx = mp.get_context("spawn")
+        with ctx.Manager() as manager:
             lock = manager.Lock()
             skip_list = manager.list()
-            with mp.Pool(MAX_THREADS) as pool:
+            with ctx.Pool(MAX_THREADS) as pool:
                 jobs = []
                 for starttime in starttimes:
                     job = pool.apply_async(
@@ -297,33 +314,37 @@ def download_waveform(
         if starttimes[0].strftime("%Y-%jT%H") <= f"{year}-{jday}T{hour}" <= starttimes[-1].strftime("%Y-%jT%H"):
             mseed_list.append(mseed)
 
-    print(f"rank {rank}: {len(mseed_list) = }, {mseed_list[0]}, {mseed_list[-1]}")
+    print(f"rank {node_rank}/{num_nodes}: {len(mseed_list) = }, {mseed_list[0]}, {mseed_list[-1]}")
 
     # %% copy to results/network
     if not os.path.exists(f"{root_path}/{region}/results/network"):
         os.makedirs(f"{root_path}/{region}/results/network")
-    with open(f"{root_path}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv", "w") as fp:
+    with open(f"{root_path}/{region}/results/network/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv", "w") as fp:
         fp.write("\n".join(mseed_list))
     if protocol != "file":
         fs.put(
-            f"{root_path}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv",
-            f"{bucket}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv",
+            f"{root_path}/{region}/results/network/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv",
+            f"{bucket}/{region}/results/network/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv",
         )
 
-    return f"{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv"
+    return f"{region}/results/network/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv"
 
 
 if __name__ == "__main__":
 
     args = parse_args()
-    root_path = args.root_path
-    region = args.region
-    protocol = args.protocol
-    bucket = args.bucket
-    token = args.token
 
-    with open(f"{root_path}/{region}/config.json", "r") as fp:
-        config = json.load(fp)
+    if args.token is not None:
+        with open(args.token, "r") as f:
+            args.token = json.load(f)
 
-    download_waveform(root_path=root_path, region=region, config=config)
+    download_waveform(
+        root_path=args.root_path,
+        region=args.region,
+        protocol=args.protocol,
+        bucket=args.bucket,
+        token=args.token,
+        node_rank=args.node_rank,
+        num_nodes=args.num_nodes,
+    )
 # %%
