@@ -223,11 +223,14 @@ if __name__ == "__main__":
 
         pairs_df = pd.DataFrame(
             {
-                "event_index1": pairs["event_index1"],
-                "event_index2": pairs["event_index2"],
-                "station_index": pairs["station_index"],
+                "event_index1": pairs["idx_eve1"],
+                "event_index2": pairs["idx_eve2"],
+                "station_index": pairs["idx_sta"],
             }
         )
+
+        pairs_df["time_error"] = pred_time - pairs["phase_dtime"]
+
         pairs_df = pairs_df[valid_index]
         config["MIN_OBS"] = 8
         pairs_df = pairs_df.groupby(["event_index1", "event_index2"], as_index=False, group_keys=False).filter(
@@ -238,11 +241,22 @@ if __name__ == "__main__":
 
         phase_dataset.valid_index = valid_index
 
+        ## correct origin time
+        time_shift = np.zeros(len(travel_time.event_time.weight))
+        time_count = np.zeros(len(travel_time.event_time.weight))
+        np.add.at(time_shift, pairs_df["event_index1"].values, pairs_df["time_error"].values)
+        np.add.at(time_shift, pairs_df["event_index2"].values, -pairs_df["time_error"].values)
+        np.add.at(time_count, pairs_df["event_index1"].values, 1)
+        np.add.at(time_count, pairs_df["event_index2"].values, 1)
+        time_shift[time_count > 0] /= time_count[time_count > 0]
+        print(f"{np.mean(time_shift):.3f} {np.std(time_shift):.3f}")
+        travel_time.event_time.weight.data -= torch.tensor(time_shift[:, None], dtype=torch.float32)
+
         invert_event_loc = raw_travel_time.event_loc.weight.clone().detach().numpy()
         invert_event_time = raw_travel_time.event_time.weight.clone().detach().numpy()
-        valid_event_index = np.unique(pairs["event_index1"][valid_index])
+        # valid_event_index = np.unique(pairs["event_index1"][valid_index])
         valid_event_index = np.concatenate(
-            [np.unique(pairs["event_index1"][valid_index]), np.unique(pairs["event_index2"][valid_index])]
+            [np.unique(pairs["idx_eve1"][valid_index]), np.unique(pairs["idx_eve2"][valid_index])]
         )
         valid_event_index = np.sort(np.unique(valid_event_index))
 

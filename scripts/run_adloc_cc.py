@@ -229,6 +229,9 @@ if __name__ == "__main__":
                 "station_index": pairs["idx_sta"],
             }
         )
+
+        pairs_df["time_error"] = pred_time - pairs["dt"]
+
         pairs_df = pairs_df[valid_index]
         config["MIN_OBS"] = 8
         pairs_df = pairs_df.groupby(["event_index1", "event_index2"], as_index=False, group_keys=False).filter(
@@ -238,6 +241,16 @@ if __name__ == "__main__":
         valid_index[pairs_df.index] = True
 
         phase_dataset.valid_index = valid_index
+
+        ## correct origin time
+        time_shift = np.zeros(len(travel_time.event_time.weight))
+        time_count = np.zeros(len(travel_time.event_time.weight))
+        np.add.at(time_shift, pairs_df["event_index1"].values, pairs_df["time_error"].values)
+        np.add.at(time_shift, pairs_df["event_index2"].values, -pairs_df["time_error"].values)
+        np.add.at(time_count, pairs_df["event_index1"].values, 1)
+        np.add.at(time_count, pairs_df["event_index2"].values, 1)
+        time_shift[time_count > 0] /= time_count[time_count > 0]
+        travel_time.event_time.weight.data -= torch.tensor(time_shift[:, None], dtype=torch.float32)
 
         invert_event_loc = raw_travel_time.event_loc.weight.clone().detach().numpy()
         invert_event_time = raw_travel_time.event_time.weight.clone().detach().numpy()

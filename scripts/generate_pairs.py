@@ -194,9 +194,9 @@ if __name__ == "__main__":
 
     dtypes = np.dtype(
         [
-            ("event_index1", np.int32),
-            ("event_index2", np.int32),
-            ("station_index", np.int32),
+            ("idx_eve1", np.int32),
+            ("idx_eve2", np.int32),
+            ("idx_sta", np.int32),
             ("phase_type", np.int32),
             ("phase_score", np.float32),
             ("phase_dtime", np.float32),
@@ -208,9 +208,9 @@ if __name__ == "__main__":
         shape=(len(event_pairs),),
         dtype=dtypes,
     )
-    pairs_array["event_index1"] = event_pairs["idx_eve1"].values
-    pairs_array["event_index2"] = event_pairs["idx_eve2"].values
-    pairs_array["station_index"] = event_pairs["idx_sta"].values
+    pairs_array["idx_eve1"] = event_pairs["idx_eve1"].values
+    pairs_array["idx_eve2"] = event_pairs["idx_eve2"].values
+    pairs_array["idx_sta"] = event_pairs["idx_sta"].values
     pairs_array["phase_type"] = event_pairs["phase_type"].values
     pairs_array["phase_score"] = event_pairs["phase_score"].values
     pairs_array["phase_dtime"] = event_pairs["phase_dtime"].values

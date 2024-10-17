@@ -58,17 +58,33 @@ print(cmd)
 os.system(cmd)
 
 # %%
-os.chdir(f"{root_path}/{region}/cctorch")
-source_file = f"ccpairs/CC_{num_gpu:03d}_dt.cc"
-target_file = f"dt.cc"
-print(f"{source_file} -> {target_file}")
-if os.path.lexists(target_file):
-    os.remove(target_file)
-os.symlink(source_file, target_file)
+for rank in range(num_gpu):
+    if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
+        continue
+    if rank == 0:
+        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{region}/cctorch/dtcc.csv"
+    else:
+        cmd = f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{region}/cctorch/dtcc.csv"
+    print(cmd)
+    os.system(cmd)
 
-source_file = f"ccpairs/CC_{num_gpu:03d}.csv"
-target_file = f"dtcc.csv"
-print(f"{source_file} -> {target_file}")
-if os.path.lexists(target_file):
-    os.remove(target_file)
-os.symlink(source_file, target_file)
+
+cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{region}/cctorch/dt.cc"
+print(cmd)
+os.system(cmd)
+
+# # %%
+# os.chdir(f"{root_path}/{region}/cctorch")
+# source_file = f"ccpairs/CC_{num_gpu:03d}_dt.cc"
+# target_file = f"dt.cc"
+# print(f"{source_file} -> {target_file}")
+# if os.path.lexists(target_file):
+#     os.remove(target_file)
+# os.symlink(source_file, target_file)
+
+# source_file = f"ccpairs/CC_{num_gpu:03d}.csv"
+# target_file = f"dtcc.csv"
+# print(f"{source_file} -> {target_file}")
+# if os.path.lexists(target_file):
+#     os.remove(target_file)
+# os.symlink(source_file, target_file)

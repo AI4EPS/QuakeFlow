@@ -42,8 +42,6 @@ events["time"] = pd.to_datetime(events["event_time"], format="mixed")
 
 event_lines = []
 
-mean_latitude = events["latitude"].mean()
-mean_longitude = events["longitude"].mean()
 for i, row in events.iterrows():
     event_index = row["event_index"]
     origin = row["time"]
@@ -52,10 +50,10 @@ for i, row in events.iterrows():
     z_err = 0.0
     time_err = 0.0
     dx, dy, dz = 0.0, 0.0, 0.0
-    dx = np.random.uniform(-0.01, 0.01)
-    dy = np.random.uniform(-0.01, 0.01)
+    # dx = np.random.uniform(-0.01, 0.01)
+    # dy = np.random.uniform(-0.01, 0.01)
     # dz = np.random.uniform(0, 10)
-    dz = 0
+    # dz = 0
     event_lines.append(
         f"{origin.year:4d}{origin.month:02d}{origin.day:02d}  "
         f"{origin.hour:2d}{origin.minute:02d}{origin.second:02d}{round(origin.microsecond / 1e4):02d}  "
