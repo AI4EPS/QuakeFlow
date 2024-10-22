@@ -178,7 +178,10 @@ if __name__ == "__main__":
     ## invert loss
     ######################################################################################################
     # optimizer = optim.Adam(params=travel_time.parameters(), lr=0.1)
-    optimizer = optim.Adam(params=travel_time.parameters(), lr=0.01)
+    # optimizer = optim.Adam(params=travel_time.parameters(), lr=0.001)
+    optimizer = optim.RMSprop(params=travel_time.parameters(), lr=0.001)
+    # optimizer = optim.SGD(params=travel_time.parameters(), lr=0.0003)
+
     valid_index = np.ones(len(pairs), dtype=bool)
     EPOCHS = 100
     prev_loss = 1e10
@@ -298,40 +301,48 @@ if __name__ == "__main__":
             plotting_dd(events, stations, config, figure_path, events_init, suffix=f"_ddcc_{epoch//10}")
 
     # ######################################################################################################
-    # if len(pairs_df) < 1_000_000:
-    #     optimizer = optim.LBFGS(params=raw_travel_time.parameters(), max_iter=100, line_search_fn="strong_wolfe")
+    if len(pairs_df) < 1_000_000:
+        optimizer = optim.LBFGS(params=raw_travel_time.parameters(), max_iter=200, line_search_fn="strong_wolfe")
 
-    #     def closure():
-    #         optimizer.zero_grad()
-    #         loss = 0
-    #         # for meta in tqdm(phase_dataset, desc=f"BFGS"):
-    #         if ddp_local_rank == 0:
-    #             print(f"BFGS: ", end="")
-    #         for meta in phase_dataset:
-    #             if ddp_local_rank == 0:
-    #                 print(".", end="")
+        prev_loss = 1e10
 
-    #             loss_ = travel_time(
-    #                 meta["idx_sta"],
-    #                 meta["idx_eve"],
-    #                 meta["phase_type"],
-    #                 meta["phase_time"],
-    #                 meta["phase_weight"],
-    #             )["loss"]
-    #             loss_.backward()
+        def closure():
+            optimizer.zero_grad()
+            loss = 0
+            # for meta in tqdm(phase_dataset, desc=f"BFGS"):
+            if ddp_local_rank == 0:
+                print(f"BFGS: ", end="")
+            for meta in phase_dataset:
+                if ddp_local_rank == 0:
+                    print(".", end="")
 
-    #             if ddp:
-    #                 dist.all_reduce(loss_, op=dist.ReduceOp.SUM)
-    #                 # loss_ /= ddp_world_size
+                loss_ = travel_time(
+                    meta["idx_sta"],
+                    meta["idx_eve"],
+                    meta["phase_type"],
+                    meta["phase_time"],
+                    meta["phase_weight"],
+                )["loss"]
+                loss_.backward()
 
-    #             loss += loss_
+                if ddp:
+                    dist.all_reduce(loss_, op=dist.ReduceOp.SUM)
+                    # loss_ /= ddp_world_size
 
-    #         if ddp_local_rank == 0:
-    #             print(f"Loss: {loss}")
-    #         raw_travel_time.event_loc.weight.data[:, 2].clamp_(min=config["zlim_km"][0], max=config["zlim_km"][1])
-    #         return loss
+                loss += loss_
 
-    #     optimizer.step(closure)
+            if ddp:
+                dist.barrier()
+                if prev_loss < loss:
+                    print(f"{prev_loss = } {loss = }")
+                    return loss
+            prev_loss = loss.item()
+            if ddp_local_rank == 0:
+                print(f"Loss: {loss}")
+            raw_travel_time.event_loc.weight.data[:, 2].clamp_(min=config["zlim_km"][0], max=config["zlim_km"][1])
+            return loss
+
+        optimizer.step(closure)
     # ######################################################################################################
 
     # %%
