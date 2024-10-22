@@ -279,7 +279,7 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     events = events.sort_values("time", ascending=True)
     s = max(0.1, min(10, 5000 / len(events)))
     alpha = 0.8
-    fig, ax = plt.subplots(2, 3, figsize=(18, 8), gridspec_kw={"height_ratios": [2, 1]})
+    fig, ax = plt.subplots(2, 4, figsize=(25, 8), gridspec_kw={"height_ratios": [2, 1]})
     # fig, ax = plt.subplots(2, 3, figsize=(15, 8), gridspec_kw={"height_ratios": [2, 1]})
     im = ax[0, 0].scatter(
         events["x_km"],
@@ -306,7 +306,7 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     im = ax[0, 1].scatter(
         stations["x_km"],
         stations["y_km"],
-        c=stations["station_term_time"],
+        c=stations["station_term_time_p"],
         cmap="viridis_r",
         s=100,
         marker="^",
@@ -319,12 +319,12 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     ax[0, 1].set_ylabel("Y (km)")
     cbar = fig.colorbar(im, ax=ax[0, 1])
     cbar.set_label("Residual (s)")
-    ax[0, 1].set_title(f"Station term: {np.mean(np.abs(stations['station_term_time'].values)):.4f} s")
+    ax[0, 1].set_title(f"Station term (P): {np.mean(np.abs(stations['station_term_time_p'].values)):.4f} s")
 
     im = ax[0, 2].scatter(
         stations["x_km"],
         stations["y_km"],
-        c=stations["station_term_amplitude"],
+        c=stations["station_term_time_s"],
         cmap="viridis_r",
         s=100,
         marker="^",
@@ -336,8 +336,26 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     ax[0, 2].set_xlabel("X (km)")
     ax[0, 2].set_ylabel("Y (km)")
     cbar = fig.colorbar(im, ax=ax[0, 2])
+    cbar.set_label("Residual (s)")
+    ax[0, 2].set_title(f"Station term (S): {np.mean(np.abs(stations['station_term_time_s'].values)):.4f} s")
+
+    im = ax[0, 3].scatter(
+        stations["x_km"],
+        stations["y_km"],
+        c=stations["station_term_amplitude"],
+        cmap="viridis_r",
+        s=100,
+        marker="^",
+        alpha=alpha,
+    )
+    ax[0, 3].set_aspect("equal", "box")
+    ax[0, 3].set_xlim([xmin, xmax])
+    ax[0, 3].set_ylim([ymin, ymax])
+    ax[0, 3].set_xlabel("X (km)")
+    ax[0, 3].set_ylabel("Y (km)")
+    cbar = fig.colorbar(im, ax=ax[0, 3])
     cbar.set_label("Residual (log10 cm/s)")
-    ax[0, 2].set_title(f"Station term: {np.mean(np.abs(stations['station_term_amplitude'].values)):.4f} s")
+    ax[0, 3].set_title(f"Station term: {np.mean(np.abs(stations['station_term_amplitude'].values)):.4f} (log10 cm/s)")
 
     ## Separate P and S station term
     # im = ax[0, 1].scatter(

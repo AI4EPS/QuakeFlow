@@ -86,8 +86,10 @@ def run_adloc(
 
     # %%
     stations["depth_km"] = -stations["elevation_m"] / 1000
-    if "station_term_time" not in stations.columns:
-        stations["station_term_time"] = 0.0
+    if "station_term_time_p" not in stations.columns:
+        stations["station_term_time_p"] = 0.0
+    if "station_term_time_s" not in stations.columns:
+        stations["station_term_time_s"] = 0.0
     if "station_term_amplitude" not in stations.columns:
         stations["station_term_amplitude"] = 0.0
     stations[["x_km", "y_km"]] = stations.apply(
@@ -116,6 +118,13 @@ def run_adloc(
 
     # %%
     config["eikonal"] = None
+
+    if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
+        velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
+        zz = velocity["z_km"].values
+        vp = velocity["vp"].values
+        vs = velocity["vs"].values
+        h = 0.1
 
     vel = {"Z": zz, "P": vp, "S": vs}
     config["eikonal"] = {
@@ -194,37 +203,36 @@ def run_adloc(
     for iter in range(MAX_SST_ITER):
         # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
         picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
-        # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
-        # station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
-        station_term_time = (
-            picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "median"}).reset_index()
-        )
-        # station_term_amp = (
-        #     picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "mean"}).reset_index()
-        # )
         station_term_amp = (
             picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "median"}).reset_index()
-        )
-        stations["station_term_time"] += (
-            stations["idx_sta"].map(station_term_time.set_index("idx_sta")["residual_time"]).fillna(0)
         )
         stations["station_term_amplitude"] += (
             stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
         )
+
+        ## Same P and S station term
+        # station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
+        # stations["station_term_time_p"] += (
+        #     stations["idx_sta"].map(station_term_time.set_index("idx_sta")["residual_time"]).fillna(0)
+        # )
+        # stations["station_term_time_s"] += (
+        #     stations["idx_sta"].map(station_term_time.set_index("idx_sta")["residual_time"]).fillna(0)
+        # )
+
         ## Separate P and S station term
-        # station_term = (
-        #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual": "mean"}).reset_index()
-        # )
-        # stations["station_term_p"] = (
-        #     stations["idx_sta"]
-        #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual"])
-        #     .fillna(0)
-        # )
-        # stations["station_term_s"] = (
-        #     stations["idx_sta"]
-        #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual"])
-        #     .fillna(0)
-        # )
+        station_term_time = (
+            picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual_time": "mean"}).reset_index()
+        )
+        stations["station_term_time_p"] += (
+            stations["idx_sta"]
+            .map(station_term_time[station_term_time["phase_type"] == 0].set_index("idx_sta")["residual_time"])
+            .fillna(0)
+        )
+        stations["station_term_time_s"] += (
+            stations["idx_sta"]
+            .map(station_term_time[station_term_time["phase_type"] == 1].set_index("idx_sta")["residual_time"])
+            .fillna(0)
+        )
 
         plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac_sst_{iter}")
 

@@ -9,16 +9,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-
+from args import parse_args
 
 # %%
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
-    parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
-    return parser.parse_args()
-
-
 args = parse_args()
 
 # %%
@@ -49,6 +42,7 @@ ylim = [config["minlatitude"], config["maxlatitude"]]
 routine_catalog = f"{root_path}/{region}/obspy/catalog.csv"
 routine_exist = False
 if os.path.exists(routine_catalog):
+    print(f"Reading {routine_catalog}")
     routine_exist = True
     routine_catalog = pd.read_csv(routine_catalog, parse_dates=["time"])
 
@@ -57,6 +51,7 @@ if os.path.exists(routine_catalog):
 gamma_file = f"{root_path}/{region}/gamma/gamma_events_000_001.csv"
 gamma_exist = False
 if os.path.exists(gamma_file):
+    print(f"Reading {gamma_file}")
     gamma_exist = True
     gamma_catalog = pd.read_csv(gamma_file, parse_dates=["time"])
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
@@ -66,6 +61,7 @@ if os.path.exists(gamma_file):
 adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
 adloc_exist = False
 if os.path.exists(adloc_file):
+    print(f"Reading {adloc_file}")
     adloc_exist = True
     adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
     # adloc_catalog["magnitude"] = 0.0
@@ -75,6 +71,7 @@ if os.path.exists(adloc_file):
 adloc_dt_file = f"{root_path}/{region}/adloc_dd/adloc_dt_events.csv"
 adloc_dt_exist = False
 if os.path.exists(adloc_dt_file):
+    print(f"Reading {adloc_dt_file}")
     adloc_dt_exist = True
     adloc_dt_catalog = pd.read_csv(adloc_dt_file, parse_dates=["time"])
 
@@ -82,6 +79,7 @@ if os.path.exists(adloc_dt_file):
 adloc_dtcc_file = f"{root_path}/{region}/adloc_dd/adloc_dtcc_events.csv"
 adloc_dtcc_exist = False
 if os.path.exists(adloc_dtcc_file):
+    print(f"Reading {adloc_dtcc_file}")
     adloc_dtcc_exist = True
     adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["time"])
 
@@ -89,6 +87,7 @@ if os.path.exists(adloc_dtcc_file):
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
 hypodd_ct_exist = False
 if os.path.exists(hypodd_file):
+    print(f"Reading {hypodd_file}")
     hypodd_ct_exist = True
     columns = [
         "ID",
@@ -140,6 +139,7 @@ if os.path.exists(hypodd_file):
 hypodd_file = f"{root_path}/{region}/hypodd/hypodd_cc.reloc"
 hypodd_cc_exist = False
 if os.path.exists(hypodd_file):
+    print(f"Reading {hypodd_file}")
     hypodd_cc_exist = True
     columns = [
         "ID",
@@ -191,6 +191,7 @@ if os.path.exists(hypodd_file):
 growclust_file = f"{root_path}/{region}/growclust/growclust_ct_catalog.txt"
 growclust_ct_exist = False
 if os.path.exists(growclust_file):
+    print(f"Reading {growclust_file}")
     growclust_ct_exist = True
     columns = [
         "yr",
@@ -235,6 +236,7 @@ if os.path.exists(growclust_file):
 growclust_file = f"{root_path}/{region}/growclust/growclust_cc_catalog.txt"
 growclust_cc_exist = False
 if os.path.exists(growclust_file):
+    print(f"Reading {growclust_file}")
     growclust_cc_exist = True
     columns = [
         "yr",
@@ -746,6 +748,7 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
     ax[2, 0].set_xlim(xlim)
     ax[2, 0].set_ylim(ylim)
+
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[2, 1].scatter(
         catalog_cc_hypodd["LAT"],
@@ -950,6 +953,25 @@ if plot3d:
             config_plot3d,
             f"{root_path}/{figure_path}/earthquake_location_adloc.html",
         )
+
+    if adloc_dt_exist and len(adloc_dt_catalog) > 0:
+        plot3d(
+            adloc_dt_catalog["longitude"],
+            adloc_dt_catalog["latitude"],
+            adloc_dt_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{figure_path}/earthquake_location_adloc_dt.html",
+        )
+
+    if adloc_dtcc_exist and len(adloc_dtcc_catalog) > 0:
+        plot3d(
+            adloc_dtcc_catalog["longitude"],
+            adloc_dtcc_catalog["latitude"],
+            adloc_dtcc_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{figure_path}/earthquake_location_adloc_dtcc.html",
+        )
+
     if hypodd_ct_exist and len(catalog_ct_hypodd) > 0:
         plot3d(
             catalog_ct_hypodd["LON"],

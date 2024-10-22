@@ -48,7 +48,12 @@ def fillin_missing_picks(picks, events, stations, config):
     picks_ps.drop(columns=["P_source", "S_source"], inplace=True)
 
     picks_ps = picks_ps.merge(events[["event_index", "event_timestamp"]], on="event_index")
-    picks_ps = picks_ps.merge(stations[["station_id", "station_term_time"]], on="station_id")
+    # picks_ps = picks_ps.merge(stations[["station_id", "station_term_time"]], on="station_id")
+    picks_ps = picks_ps.merge(stations[["station_id", "station_term_time_p", "station_term_time_s"]], on="station_id")
+    picks_ps["station_term_time"] = picks_ps.apply(
+        lambda row: row[f"station_term_time_{row['phase_type'].lower()}"], axis=1
+    )  ## Separate P and S station term
+    picks_ps.drop(columns=["station_term_time_p", "station_term_time_s"], inplace=True)
     picks_ps["phase_timestamp"] = picks_ps["event_timestamp"] + picks_ps["traveltime"] + picks_ps["station_term_time"]
     picks_ps["phase_time"] = reference_t0 + pd.to_timedelta(picks_ps["phase_timestamp"], unit="s")
     picks_ps["phase_score"] = min_phase_score
@@ -85,9 +90,16 @@ def predict_full_picks(picks, events, stations, config):
     s_picks = picks_full.assign(phase_type="S")
     picks_full = pd.concat([p_picks, s_picks])
     phase_type = picks_full["phase_type"].values
+    # picks_full = picks_full.merge(
+    #     stations[["station_id", "station_term_time", "x_km", "y_km", "z_km"]], on="station_id"
+    # )
     picks_full = picks_full.merge(
-        stations[["station_id", "station_term_time", "x_km", "y_km", "z_km"]], on="station_id"
+        stations[["station_id", "station_term_time_p", "station_term_time_s", "x_km", "y_km", "z_km"]], on="station_id"
     )
+    picks_full["station_term_time"] = picks_full.apply(
+        lambda row: row[f"station_term_time_{row['phase_type'].lower()}"], axis=1
+    )
+    picks_full.drop(columns=["station_term_time_p", "station_term_time_s"], inplace=True)
     station_dt = picks_full["station_term_time"].values
     station_locs = picks_full[["x_km", "y_km", "z_km"]].values
     picks_full.rename(columns={"x_km": "station_x_km", "y_km": "station_y_km", "z_km": "station_z_km"}, inplace=True)
@@ -379,6 +391,14 @@ def cut_templates(root_path, region, config):
     vp_vs_ratio = 1.73
     vs = [v / vp_vs_ratio for v in vp]
     h = 0.3
+
+    if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
+        velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
+        zz = velocity["z_km"].values
+        vp = velocity["vp"].values
+        vs = velocity["vs"].values
+        h = 0.1
+
     vel = {"Z": zz, "P": vp, "S": vs}
     eikonal = {
         "vel": vel,
@@ -396,9 +416,16 @@ def cut_templates(root_path, region, config):
     min_phase_score = picks["phase_score"].min()
 
     picks = picks.merge(events[["event_index", "event_timestamp"]], on="event_index")
-    picks = picks.merge(stations[["station_id", "station_term_time"]], on="station_id")
+    # picks = picks.merge(stations[["station_id", "station_term_time"]], on="station_id")
+    picks = picks.merge(stations[["station_id", "station_term_time_p", "station_term_time_s"]], on="station_id")
+    picks["station_term_time"] = picks.apply(
+        lambda x: x[f"station_term_time_{x['phase_type'].lower()}"], axis=1
+    )  ## Separate P and S station term
+    picks.drop(columns=["station_term_time_p", "station_term_time_s"], inplace=True)
     picks["phase_timestamp"] = picks["phase_time"].apply(lambda x: (x - reference_t0).total_seconds())
-    picks["traveltime"] = picks["phase_timestamp"] - picks["event_timestamp"] - picks["station_term_time"]
+    picks["traveltime"] = (
+        picks["phase_timestamp"] - picks["event_timestamp"] - picks["station_term_time"]
+    )  ## Separate P and S station term
 
     picks = fillin_missing_picks(
         picks,
