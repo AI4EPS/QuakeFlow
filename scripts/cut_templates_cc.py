@@ -378,7 +378,9 @@ def cut_templates(root_path, region, config):
 
     xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
     xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
-    zmin, zmax = config["mindepth"], config["maxdepth"]
+    # zmin, zmax = config["mindepth"], config["maxdepth"]
+    zmin = config["mindepth"] if "mindepth" in config else 0.0
+    zmax = config["maxdepth"] if "maxdepth" in config else 60.0
     config["xlim_km"] = (xmin, xmax)
     config["ylim_km"] = (ymin, ymax)
     config["zlim_km"] = (zmin, zmax)

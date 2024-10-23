@@ -19,6 +19,9 @@ def parse_args():
     parser.add_argument("--num_nodes", type=int, default=1, help="number of nodes")
     parser.add_argument("--node_rank", type=int, default=0, help="node rank")
 
+    ## ADLOC
+    parser.add_argument("--iter", type=int, default=0, help="iteration")
+
     ## CCTorch
     parser.add_argument("--dtct_pair", action="store_true", help="run convert_dtcc.py")
 

@@ -176,6 +176,7 @@ def download_station(
                         sensor_description = channel.sensor.description
                     channel_list.append(
                         {
+                            "station_id": f"{network.code}.{station.code}.{channel.location_code}.{channel.code[:-1]}",
                             "network": network.code,
                             "station": station.code,
                             "location": channel.location_code,
@@ -247,7 +248,9 @@ def download_station(
         tmp["provider"] = provider
         stations.append(tmp)
     stations = pd.concat(stations)
-    stations = stations.groupby(["network", "station", "location", "channel"], dropna=False).first().reset_index()
+    # stations = stations.groupby(["network", "station", "location", "channel"], dropna=False).first().reset_index()
+    stations = stations.sort_values(by=["station_id", "channel"])
+    stations = stations.groupby(["station_id"], dropna=False).first().reset_index()
     print(f"Merged {len(stations)} channels")
     stations.to_csv(f"{root_path}/{result_dir}/stations.csv", index=False)
     if protocol != "file":

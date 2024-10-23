@@ -48,7 +48,7 @@ if os.path.exists(routine_catalog):
 
 
 # %%
-gamma_file = f"{root_path}/{region}/gamma/gamma_events_000_001.csv"
+gamma_file = f"{root_path}/{region}/gamma/gamma_events.csv"
 gamma_exist = False
 if os.path.exists(gamma_file):
     print(f"Reading {gamma_file}")

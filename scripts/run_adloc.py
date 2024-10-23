@@ -45,8 +45,8 @@ def run_adloc(
 
     # %%
     data_path = f"{root_path}/{region}/gamma"
-    picks_file = os.path.join(data_path, f"gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv")
-    events_file = os.path.join(data_path, f"gamma_events_{node_rank:03d}_{num_nodes:03d}.csv")
+    picks_file = os.path.join(data_path, f"gamma_picks.csv")
+    events_file = os.path.join(data_path, f"gamma_events.csv")
     # stations_file = os.path.join(data_path, "stations.csv")
     stations_file = f"{root_path}/{region}/obspy/stations.json"
 
@@ -66,7 +66,7 @@ def run_adloc(
     stations.reset_index(drop=True, inplace=True)
 
     config["mindepth"] = config["mindepth"] if "mindepth" in config else 0.0
-    config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 30.0
+    config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 60.0
     config["use_amplitude"] = True
 
     # ## Eikonal for 1D velocity model
@@ -203,6 +203,7 @@ def run_adloc(
     for iter in range(MAX_SST_ITER):
         # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
         picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+
         station_term_amp = (
             picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "median"}).reset_index()
         )
