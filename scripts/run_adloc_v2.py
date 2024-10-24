@@ -27,7 +27,8 @@ def run_adloc(
     config: Dict,
     jdays: list,
     iter: int = 0,
-    picks_csv: str = None,
+    node_rank: int = 0,
+    num_nodes: int = 1,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -59,7 +60,8 @@ def run_adloc(
             events_csv = f"{data_path}/{year:04d}.{jday:03d}.events.csv"
         else:
             # station_json = f"{result_path}/stations_sst_{iter-1}.csv"
-            stations_csv = f"{result_path}/{year:04d}.{jday:03d}.stations_sst_{iter-1}.csv"
+            # stations_csv = f"{result_path}/{year:04d}.{jday:03d}.stations_sst_{iter-1}.csv"
+            stations_csv = f"{region}/adloc/adloc_stations_sst_{iter-1}.csv"
             picks_csv = f"{result_path}/{year:04d}.{jday:03d}.picks_sst_{iter-1}.csv"
             events_csv = f"{result_path}/{year:04d}.{jday:03d}.events_sst_{iter-1}.csv"
 
@@ -130,6 +132,7 @@ def run_adloc(
             stations["station_term_time_s"] = 0.0
         if "station_term_amplitude" not in stations.columns:
             stations["station_term_amplitude"] = 0.0
+        stations["num_picks"] = 0  ## used to calcuate average station terms across jdays
         stations[["x_km", "y_km"]] = stations.apply(
             lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
         )
@@ -158,14 +161,14 @@ def run_adloc(
         config["eikonal"] = None
 
         # ## Eikonal for 1D velocity model
-        # zz = [0.0, 5.5, 16.0, 32.0]
-        # vp = [5.5, 5.5, 6.7, 7.8]
-        # vp_vs_ratio = 1.73
-        # vs = [v / vp_vs_ratio for v in vp]
+        zz = [0.0, 5.5, 16.0, 32.0]
+        vp = [5.5, 5.5, 6.7, 7.8]
+        vp_vs_ratio = 1.73
+        vs = [v / vp_vs_ratio for v in vp]
         # Northern California (Gil7)
-        zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
-        vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
-        vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
+        # zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
+        # vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
+        # vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
         h = 0.3
 
         if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
@@ -201,20 +204,6 @@ def run_adloc(
             (0, config["zlim_km"][1] + 1),
             (None, None),  # t
         )
-
-        # %%
-        plt.figure()
-        print(stations[["station_term_time_p", "station_term_time_s", "station_term_amplitude"]].describe())
-        plt.scatter(
-            stations["x_km"], stations["y_km"], c=stations["station_term_time_p"], cmap="viridis_r", s=100, marker="^"
-        )
-        plt.colorbar()
-        plt.xlabel("X (km)")
-        plt.ylabel("Y (km)")
-        plt.xlim(config["xlim_km"])
-        plt.ylim(config["ylim_km"])
-        plt.title("Stations")
-        plt.savefig(f"{figure_path}/stations_sst_{iter}.png", bbox_inches="tight", dpi=300)
 
         # %%
         mapping_phase_type_int = {"P": 0, "S": 1}
@@ -264,25 +253,26 @@ def run_adloc(
             )
 
             # %%
-            station_num_picks = picks[picks["mask"] == 1.0].groupby("idx_sta").size().reset_index(name="num_picks")
-            prev_num_picks = stations["num_picks"].values
-            current_num_picks = stations["idx_sta"].map(station_num_picks.set_index("idx_sta")["num_picks"]).fillna(0)
-            stations["num_picks"] = prev_num_picks + current_num_picks
+            station_num_picks = (
+                picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).size().reset_index(name="num_picks")
+            )
+            station_num_picks.set_index("idx_sta", inplace=True)
+            stations["num_pick_p"] = (
+                stations["idx_sta"].map(station_num_picks[station_num_picks["phase_type"] == 0]["num_picks"]).fillna(0)
+            )
+            stations["num_pick_s"] = (
+                stations["idx_sta"].map(station_num_picks[station_num_picks["phase_type"] == 1]["num_picks"]).fillna(0)
+            )
+            stations["num_pick"] = stations["num_pick_p"] + stations["num_pick_s"]
 
             # %%
             station_term_amp = (
                 picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "median"}).reset_index()
             )
-            # stations["station_term_amplitude"] += (
-            #     stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
-            # )
-            prev_station_term_amp = stations["station_term_amplitude"].values
-            current_station_term_amp = (
-                stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
-            )
+            station_term_amp.set_index("idx_sta", inplace=True)
             stations["station_term_amplitude"] = (
-                prev_station_term_amp * prev_num_picks + current_station_term_amp * current_num_picks
-            ) / (prev_num_picks + current_num_picks)
+                stations["idx_sta"].map(station_term_amp["residual_amplitude"]).fillna(0)
+            )
 
             ## Same P and S station term
             # station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
@@ -300,35 +290,20 @@ def run_adloc(
                 .agg({"residual_time": "mean"})
                 .reset_index()
             )
-            # stations["station_term_time_p"] += (
-            #     stations["idx_sta"]
-            #     .map(station_term_time[station_term_time["phase_type"] == 0].set_index("idx_sta")["residual_time"])
-            #     .fillna(0)
-            # )
-            # stations["station_term_time_s"] += (
-            #     stations["idx_sta"]
-            #     .map(station_term_time[station_term_time["phase_type"] == 1].set_index("idx_sta")["residual_time"])
-            #     .fillna(0)
-            # )
-            prev_station_term_time_p = stations["station_term_time_p"].values
-            current_station_term_time_p = (
-                stations["idx_sta"]
-                .map(station_term_time[station_term_time["phase_type"] == 0].set_index("idx_sta")["residual_time"])
-                .fillna(0)
-            )
+            station_term_time.set_index("idx_sta", inplace=True)
             stations["station_term_time_p"] = (
-                prev_station_term_time_p * prev_num_picks + current_station_term_time_p * current_num_picks
-            ) / (prev_num_picks + current_num_picks)
-
-            prev_station_term_time_s = stations["station_term_time_s"].values
-            current_station_term_time_s = (
                 stations["idx_sta"]
-                .map(station_term_time[station_term_time["phase_type"] == 1].set_index("idx_sta")["residual_time"])
+                .map(station_term_time[station_term_time["phase_type"] == 0]["residual_time"])
                 .fillna(0)
             )
             stations["station_term_time_s"] = (
-                prev_station_term_time_s * prev_num_picks + current_station_term_time_s * current_num_picks
-            ) / (prev_num_picks + current_num_picks)
+                stations["idx_sta"]
+                .map(station_term_time[station_term_time["phase_type"] == 1]["residual_time"])
+                .fillna(0)
+            )
+
+        # %%
+        plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_debug_sst_{iter}")
 
         # %%
         if "event_index" not in events.columns:
@@ -399,13 +374,29 @@ if __name__ == "__main__":
 
     # %%
     print(f"{jdays[node_rank] = }")
-    run_adloc(
-        root_path=root_path,
-        region=region,
-        config=config,
-        jdays=jdays[node_rank],
-        iter=iter,
-        protocol=protocol,
-        token=token,
-        bucket=bucket,
-    )
+    if num_nodes == 1:
+        for i in range(10):
+            run_adloc(
+                root_path=root_path,
+                region=region,
+                config=config,
+                jdays=jdays[node_rank],
+                iter=i,
+                protocol=protocol,
+                token=token,
+                bucket=bucket,
+            )
+            os.system(
+                f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {i}"
+            )
+    else:
+        run_adloc(
+            root_path=root_path,
+            region=region,
+            config=config,
+            jdays=jdays[node_rank],
+            iter=iter,
+            protocol=protocol,
+            token=token,
+            bucket=bucket,
+        )

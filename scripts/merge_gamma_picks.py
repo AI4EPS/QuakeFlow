@@ -18,28 +18,6 @@ from args import parse_args
 from glob import glob
 
 
-def load_data(year, jday, data_path, root_path, bucket, protocol, token):
-
-    fs = fsspec.filesystem(protocol, token=token)
-    adloc_events_csv = f"{data_path}/{year:04d}/adloc_events_{jday:03d}.csv"
-    adloc_picks_csv = f"{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv"
-    if protocol == "file":
-        events = pd.read_csv(f"{root_path}/{adloc_events_csv}", parse_dates=["time"])
-        picks = pd.read_csv(f"{root_path}/{adloc_picks_csv}", parse_dates=["phase_time"])
-    else:
-        with fs.open(f"{bucket}/{adloc_events_csv}", "r") as fp:
-            events = pd.read_csv(fp, parse_dates=["time"])
-        with fs.open(f"{bucket}/{adloc_picks_csv}", "r") as fp:
-            picks = pd.read_csv(fp, parse_dates=["phase_time"])
-
-    events["year"] = year
-    events["jday"] = jday
-    picks["year"] = year
-    picks["jday"] = jday
-
-    return events, picks
-
-
 # %%
 if __name__ == "__main__":
 
@@ -83,7 +61,7 @@ if __name__ == "__main__":
 
     events["event_index"] = np.arange(len(events))
     picks = picks.drop("event_index", axis=1)
-    picks = picks.merge(events[["dummy_id", "event_index"]], on="dummy_id")
+    picks = picks.merge(events[["dummy_id", "event_index"]], on="dummy_id", how="left")
 
     events.drop(["year", "jday", "dummy_id"], axis=1, inplace=True)
     picks.drop(["year", "jday", "dummy_id"], axis=1, inplace=True)

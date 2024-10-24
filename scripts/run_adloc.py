@@ -26,7 +26,6 @@ def run_adloc(
     config: Dict,
     node_rank: int = 0,
     num_nodes: int = 1,
-    picks_csv: str = None,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -68,13 +67,6 @@ def run_adloc(
     config["mindepth"] = config["mindepth"] if "mindepth" in config else 0.0
     config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 60.0
     config["use_amplitude"] = True
-
-    # ## Eikonal for 1D velocity model
-    zz = [0.0, 5.5, 16.0, 32.0]
-    vp = [5.5, 5.5, 6.7, 7.8]
-    vp_vs_ratio = 1.73
-    vs = [v / vp_vs_ratio for v in vp]
-    h = 0.3
 
     # %%
     ## Automatic region; you can also specify a region
@@ -119,6 +111,17 @@ def run_adloc(
     # %%
     config["eikonal"] = None
 
+    # ## Eikonal for 1D velocity model
+    zz = [0.0, 5.5, 16.0, 32.0]
+    vp = [5.5, 5.5, 6.7, 7.8]
+    vp_vs_ratio = 1.73
+    vs = [v / vp_vs_ratio for v in vp]
+    # Northern California (Gil7)
+    # zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
+    # vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
+    # vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
+    h = 0.3
+
     if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
         velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
         zz = velocity["z_km"].values
@@ -152,17 +155,6 @@ def run_adloc(
         (0, config["zlim_km"][1] + 1),
         (None, None),  # t
     )
-
-    # %%
-    plt.figure()
-    plt.scatter(stations["x_km"], stations["y_km"], c=stations["depth_km"], cmap="viridis_r", s=100, marker="^")
-    plt.colorbar(label="Depth (km)")
-    plt.xlabel("X (km)")
-    plt.ylabel("Y (km)")
-    plt.xlim(config["xlim_km"])
-    plt.ylim(config["ylim_km"])
-    plt.title("Stations")
-    plt.savefig(os.path.join(figure_path, "stations.png"), bbox_inches="tight", dpi=300)
 
     # %%
     mapping_phase_type_int = {"P": 0, "S": 1}
@@ -207,9 +199,8 @@ def run_adloc(
         station_term_amp = (
             picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "median"}).reset_index()
         )
-        stations["station_term_amplitude"] += (
-            stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
-        )
+        station_term_amp.set_index("idx_sta", inplace=True)
+        stations["station_term_amplitude"] += stations["idx_sta"].map(station_term_amp["residual_amplitude"]).fillna(0)
 
         ## Same P and S station term
         # station_term_time = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
@@ -224,15 +215,12 @@ def run_adloc(
         station_term_time = (
             picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual_time": "mean"}).reset_index()
         )
+        station_term_time.set_index("idx_sta", inplace=True)
         stations["station_term_time_p"] += (
-            stations["idx_sta"]
-            .map(station_term_time[station_term_time["phase_type"] == 0].set_index("idx_sta")["residual_time"])
-            .fillna(0)
+            stations["idx_sta"].map(station_term_time[station_term_time["phase_type"] == 0]["residual_time"]).fillna(0)
         )
         stations["station_term_time_s"] += (
-            stations["idx_sta"]
-            .map(station_term_time[station_term_time["phase_type"] == 1].set_index("idx_sta")["residual_time"])
-            .fillna(0)
+            stations["idx_sta"].map(station_term_time[station_term_time["phase_type"] == 1]["residual_time"]).fillna(0)
         )
 
         plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac_sst_{iter}")

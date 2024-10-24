@@ -131,7 +131,10 @@ def run_gamma(
         if "gamma" not in config:
             config["z(km)"] = (0, 60)
         else:
-            config["z(km)"] = [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]]
+            # config["z(km)"] = [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]]
+            zmin_km = config["gamma"]["zmin_km"] if "zmin_km" in config["gamma"] else 0
+            zmax_km = config["gamma"]["zmax_km"] if "zmax_km" in config["gamma"] else 60
+            config["z(km)"] = (zmin_km, zmax_km)
         config["bfgs_bounds"] = (
             (config["x(km)"][0] - 1, config["x(km)"][1] + 1),  # x
             (config["y(km)"][0] - 1, config["y(km)"][1] + 1),  # y
@@ -149,19 +152,21 @@ def run_gamma(
         #     2019: 10.5,
         #     2018: 10.5,
         # }
-        config["dbscan_eps"] = 12
-        config["dbscan_min_samples"] = 6
+        config["dbscan_eps"] = 13
+        config["dbscan_min_samples"] = 3
 
         ## Eikonal for 1D velocity model
         # Southern California
-        # zz = [0.0, 5.5, 16.0, 32.0]
-        # vp = [5.5, 5.5,  6.7,  7.8]
+        zz = [0.0, 5.5, 16.0, 32.0]
+        vp = [5.5, 5.5, 6.7, 7.8]
+        vp_vs_ratio = 1.73
+        vs = [v / vp_vs_ratio for v in vp]
+        # Northern California (Gil7)
+        # zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
+        # vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
+        # # vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
         # vp_vs_ratio = 1.73
         # vs = [v / vp_vs_ratio for v in vp]
-        # Northern California (Gil7)
-        zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
-        vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
-        vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
         h = 0.3
         vel = {"z": zz, "p": vp, "s": vs}
         config["eikonal"] = {
@@ -317,7 +322,7 @@ if __name__ == "__main__":
     # calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
     # jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
     # jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
-    jdays = glob(f"{root_path}/{region}/phasenet/????/????.???.csv")
+    jdays = sorted(glob(f"{root_path}/{region}/phasenet/????/????.???.csv"))
     jdays = [jday.split("/")[-1].replace(".csv", "") for jday in jdays]
     print(f"Number of pick files: {len(jdays)}")
 
@@ -342,3 +347,6 @@ if __name__ == "__main__":
         token=token,
         bucket=args.bucket,
     )
+
+    if args.num_nodes == 1:
+        os.system(f"python merge_gamma_picks.py --region {region} --root_path {root_path} --bucket {args.bucket}")
