@@ -40,7 +40,7 @@ def run_adloc(
         jday = int(jday.split(".")[1])
 
         # %%
-        data_path = f"{region}/gamma_bo_debug/{year:04d}"
+        data_path = f"{region}/gamma_bo/{year:04d}"
         result_path = f"{region}/adloc/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
@@ -110,8 +110,10 @@ def run_adloc(
 
         # %%
         stations["depth_km"] = -stations["elevation_m"] / 1000
-        if "station_term_time" not in stations.columns:
-            stations["station_term_time"] = 0.0
+        if "station_term_time_p" not in stations.columns:
+            stations["station_term_time_p"] = 0.0
+        if "station_term_time_s" not in stations.columns:
+            stations["station_term_time_s"] = 0.0
         if "station_term_amplitude" not in stations.columns:
             stations["station_term_amplitude"] = 0.0
         stations[["x_km", "y_km"]] = stations.apply(
@@ -229,16 +231,15 @@ def run_adloc(
         #     suffix=f"_ransac_sst_{iter}",
         # )
 
-        stations["station_term"] = 0.0
-        plotting(
-            stations,
-            f"{root_path}/{figure_path}",
-            config,
-            picks,
-            events_init,
-            events_init,
-            suffix=f"_ransac_sst_init",
-        )
+        # plotting(
+        #     stations,
+        #     f"{root_path}/{figure_path}",
+        #     config,
+        #     picks,
+        #     events_init,
+        #     events_init,
+        #     suffix=f"_ransac_sst_init",
+        # )
 
         for iter in range(MAX_SST_ITER):
             if iter == 0:
@@ -257,7 +258,8 @@ def run_adloc(
                 config["min_score"] = 0.5
                 config["min_p_picks"] = 0  # for filtering
                 config["min_s_picks"] = 0  # for filtering
-            stations["station_term_time"] = 0.0  # no station term
+            stations["station_term_time_p"] = 0.0  # no station term
+            stations["station_term_time_s"] = 0.0  # no station term
             # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
             if iter == 0:
                 picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
@@ -268,31 +270,28 @@ def run_adloc(
                 )
             # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
             station_term_time = (
-                picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
+                picks[picks["mask"] == 1.0]
+                .groupby(["idx_sta", "phase_type"])
+                .agg({"residual_time": "mean"})
+                .reset_index()
             )
+            station_term_time.set_index("idx_sta", inplace=True)
             station_term_amp = (
                 picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_amplitude": "mean"}).reset_index()
             )
-            stations["station_term_time"] += (
-                stations["idx_sta"].map(station_term_time.set_index("idx_sta")["residual_time"]).fillna(0)
+            stations["station_term_time_p"] += (
+                stations["idx_sta"]
+                .map(station_term_time[station_term_time["phase_type"] == 0]["residual_time"])
+                .fillna(0)
+            )
+            stations["station_term_time_s"] += (
+                stations["idx_sta"]
+                .map(station_term_time[station_term_time["phase_type"] == 1]["residual_time"])
+                .fillna(0)
             )
             stations["station_term_amplitude"] += (
                 stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
             )
-            ## Separate P and S station term
-            # station_term = (
-            #     picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).agg({"residual": "mean"}).reset_index()
-            # )
-            # stations["station_term_p"] = (
-            #     stations["idx_sta"]
-            #     .map(station_term[station_term["phase_type"] == 0].set_index("idx_sta")["residual"])
-            #     .fillna(0)
-            # )
-            # stations["station_term_s"] = (
-            #     stations["idx_sta"]
-            #     .map(station_term[station_term["phase_type"] == 1].set_index("idx_sta")["residual"])
-            #     .fillna(0)
-            # )
 
             # plotting_ransac(
             #     stations,

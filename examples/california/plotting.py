@@ -33,7 +33,7 @@ def plotting(stations, figure_path, config, picks, events_old, locations, statio
     im = ax[0, 1].scatter(
         stations["x_km"],
         stations["y_km"],
-        c=stations["station_term"],
+        c=stations["station_term_time_p"],
         cmap="viridis_r",
         s=100,
         marker="^",
@@ -43,7 +43,7 @@ def plotting(stations, figure_path, config, picks, events_old, locations, statio
     ax[0, 1].set_ylim([ymin, ymax])
     cbar = fig.colorbar(im, ax=ax[0, 1])
     cbar.set_label("Residual (s)")
-    ax[0, 1].set_title(f"Station term: {np.mean(np.abs(stations['station_term'].values)):.4f} s")
+    ax[0, 1].set_title(f"Station term (P): {np.mean(np.abs(stations['station_term_time_p'].values)):.4f} s")
 
     im = ax[1, 0].scatter(
         locations["x_km"],
@@ -265,14 +265,21 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     plt.savefig(os.path.join(figure_path, f"error{suffix}.png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    xmin, xmax = config["xlim_km"]
-    ymin, ymax = config["ylim_km"]
-    zmin, zmax = config["zlim_km"]
-    vmin, vmax = config["zlim_km"]
+    # xmin, xmax = config["xlim_km"]
+    # ymin, ymax = config["ylim_km"]
+    # zmin, zmax = config["zlim_km"]
+    # vmin, vmax = config["zlim_km"]
+    xmin = events["x_km"].min()
+    xmax = events["x_km"].max()
+    ymin = events["y_km"].min()
+    ymax = events["y_km"].max()
+    zmin = events["z_km"].min()
+    zmax = events["z_km"].max()
+    vmin, vmax = zmin, zmax
     events = events.sort_values("time", ascending=True)
     s = max(0.1, min(10, 5000 / len(events)))
     alpha = 0.8
-    fig, ax = plt.subplots(2, 3, figsize=(18, 8), gridspec_kw={"height_ratios": [2, 1]})
+    fig, ax = plt.subplots(2, 4, figsize=(25, 8), gridspec_kw={"height_ratios": [2, 1]})
     # fig, ax = plt.subplots(2, 3, figsize=(15, 8), gridspec_kw={"height_ratios": [2, 1]})
     im = ax[0, 0].scatter(
         events["x_km"],
@@ -299,7 +306,7 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     im = ax[0, 1].scatter(
         stations["x_km"],
         stations["y_km"],
-        c=stations["station_term_time"],
+        c=stations["station_term_time_p"],
         cmap="viridis_r",
         s=100,
         marker="^",
@@ -312,12 +319,12 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     ax[0, 1].set_ylabel("Y (km)")
     cbar = fig.colorbar(im, ax=ax[0, 1])
     cbar.set_label("Residual (s)")
-    ax[0, 1].set_title(f"Station term: {np.mean(np.abs(stations['station_term_time'].values)):.4f} s")
+    ax[0, 1].set_title(f"Station term (P): {np.mean(np.abs(stations['station_term_time_p'].values)):.4f} s")
 
     im = ax[0, 2].scatter(
         stations["x_km"],
         stations["y_km"],
-        c=stations["station_term_amplitude"],
+        c=stations["station_term_time_s"],
         cmap="viridis_r",
         s=100,
         marker="^",
@@ -329,8 +336,26 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     ax[0, 2].set_xlabel("X (km)")
     ax[0, 2].set_ylabel("Y (km)")
     cbar = fig.colorbar(im, ax=ax[0, 2])
+    cbar.set_label("Residual (s)")
+    ax[0, 2].set_title(f"Station term (S): {np.mean(np.abs(stations['station_term_time_s'].values)):.4f} s")
+
+    im = ax[0, 3].scatter(
+        stations["x_km"],
+        stations["y_km"],
+        c=stations["station_term_amplitude"],
+        cmap="viridis_r",
+        s=100,
+        marker="^",
+        alpha=alpha,
+    )
+    ax[0, 3].set_aspect("equal", "box")
+    ax[0, 3].set_xlim([xmin, xmax])
+    ax[0, 3].set_ylim([ymin, ymax])
+    ax[0, 3].set_xlabel("X (km)")
+    ax[0, 3].set_ylabel("Y (km)")
+    cbar = fig.colorbar(im, ax=ax[0, 3])
     cbar.set_label("Residual (log10 cm/s)")
-    ax[0, 2].set_title(f"Station term: {np.mean(np.abs(stations['station_term_amplitude'].values)):.4f} s")
+    ax[0, 3].set_title(f"Station term: {np.mean(np.abs(stations['station_term_amplitude'].values)):.4f} (log10 cm/s)")
 
     ## Separate P and S station term
     # im = ax[0, 1].scatter(
@@ -402,5 +427,146 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     # ax[1, 1].set_ylabel("Depth (km)")
     cbar = fig.colorbar(im, ax=ax[1, 1])
     cbar.set_label("Depth (km)")
+
+    if "magnitude" in events.columns:
+        im = ax[1, 2].hist(events["magnitude"], bins=30, edgecolor="white")
+        ax[1, 2].set_yscale("log")
+        ax[1, 2].set_xlabel("Magnitude")
+        ax[1, 2].set_ylabel("Count")
+
     plt.savefig(os.path.join(figure_path, f"location{suffix}.png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
+
+
+# %%
+def plotting_dd(events, stations, config, figure_path, events_old, suffix=""):
+
+    xmin, xmax = config["xlim_km"]
+    ymin, ymax = config["ylim_km"]
+    zmin, zmax = config["zlim_km"]
+    vmin, vmax = zmin, zmax
+
+    s = max(0.1, min(10, 5000 / len(events)))
+    alpha = 0.8
+
+    fig, ax = plt.subplots(3, 2, figsize=(10, 10), gridspec_kw={"height_ratios": [2, 1, 1]})
+    im = ax[0, 0].scatter(
+        events_old["x_km"],
+        events_old["y_km"],
+        c=events_old["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[0, 0].set_xlim([xmin, xmax])
+    ax[0, 0].set_ylim([ymin, ymax])
+    cbar = fig.colorbar(im, ax=ax[0, 0])
+    cbar.set_label("Depth (km)")
+    ax[0, 0].set_title(f"ADLoc: {len(events_old)} events")
+
+    im = ax[0, 1].scatter(
+        events["x_km"],
+        events["y_km"],
+        c=events["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[0, 1].set_xlim([xmin, xmax])
+    ax[0, 1].set_ylim([ymin, ymax])
+    cbar = fig.colorbar(im, ax=ax[0, 1])
+    cbar.set_label("Depth (km)")
+    ax[0, 1].set_title(f"ADLoc DD: {len(events)} events")
+
+    # im = ax[1, 0].scatter(
+    #     events_new["x_km"],
+    #     events_new["z_km"],
+    #     c=events_new["z_km"],
+    #     cmap="viridis_r",
+    #     s=1,
+    #     marker="o",
+    #     vmin=vmin,
+    #     vmax=vmax,
+    # )
+    # ax[1, 0].set_xlim([xmin, xmax])
+    # ax[1, 0].set_ylim([zmax, zmin])
+    # cbar = fig.colorbar(im, ax=ax[1, 0])
+    # cbar.set_label("Depth (km)")
+
+    im = ax[1, 0].scatter(
+        events_old["x_km"],
+        events_old["z_km"],
+        c=events_old["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[1, 0].set_xlim([xmin, xmax])
+    ax[1, 0].set_ylim([zmax, zmin])
+    cbar = fig.colorbar(im, ax=ax[1, 0])
+    cbar.set_label("Depth (km)")
+
+    im = ax[1, 1].scatter(
+        events["x_km"],
+        events["z_km"],
+        c=events["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[1, 1].set_xlim([xmin, xmax])
+    ax[1, 1].set_ylim([zmax, zmin])
+    cbar = fig.colorbar(im, ax=ax[1, 1])
+    cbar.set_label("Depth (km)")
+
+    im = ax[2, 0].scatter(
+        events_old["y_km"],
+        events_old["z_km"],
+        c=events_old["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[2, 0].set_xlim([ymin, ymax])
+    ax[2, 0].set_ylim([zmax, zmin])
+    cbar = fig.colorbar(im, ax=ax[2, 0])
+    cbar.set_label("Depth (km)")
+
+    im = ax[2, 1].scatter(
+        events["y_km"],
+        events["z_km"],
+        c=events["z_km"],
+        cmap="viridis_r",
+        s=s,
+        marker="o",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidth=0.0,
+    )
+    ax[2, 1].set_xlim([ymin, ymax])
+    ax[2, 1].set_ylim([zmax, zmin])
+    cbar = fig.colorbar(im, ax=ax[2, 1])
+    cbar.set_label("Depth (km)")
+
+    plt.savefig(os.path.join(figure_path, f"location{suffix}.png"), bbox_inches="tight", dpi=300)
