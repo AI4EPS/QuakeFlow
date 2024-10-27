@@ -32,7 +32,7 @@ def run_gamma(
         jday = int(jday.split(".")[1])
 
         # %%
-        result_path = f"{region}/gamma_bo/{year:04d}"
+        result_path = f"{region}/gamma_bo3/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
 
@@ -144,6 +144,25 @@ def run_gamma(
             2021: 10.5,
             2020: 10.5,
             2019: 10.5,
+            2018: 10.5,
+            2017: 10.5,
+            2016: 11.0,
+            2015: 12.5,
+            2014: 12.5,
+            2013: 13.0,
+            2012: 13.0,
+            2011: 13.0,
+            2010: 14.0,
+            2009: 15.5,
+            2008: 16.0,
+            2007: 14.0,
+            2006: 14.0,
+            2005: 14.0,
+            2004: 14.0,
+            2003: 14.0,
+            2002: 14.0,
+            2001: 14.0,
+            2000: 15.0,
         }
         config["dbscan_eps"] = eps_year[year]
         config["dbscan_min_samples"] = 6
@@ -158,6 +177,8 @@ def run_gamma(
         zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
         vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
         vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
+        vp_vs_ratio = 1.73
+        vs = [v / vp_vs_ratio for v in vp]
         h = 0.3
         vel = {"z": zz, "p": vp, "s": vs}
         config["eikonal"] = {
@@ -310,6 +331,8 @@ if __name__ == "__main__":
     calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
     jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
+    # jdays = [['2018.032', '2018.064', '2018.096', '2018.128', '2018.160', '2018.192', '2018.224', '2018.256', '2018.288', '2018.320', '2018.352']]
+    jdays = [[f'{year}.366']]  # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:

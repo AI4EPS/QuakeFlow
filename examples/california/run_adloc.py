@@ -97,7 +97,7 @@ def run_adloc(
 
         # %%
         config["mindepth"] = 0.0
-        config["maxdepth"] = 30.0
+        config["maxdepth"] = 60.0
         config["use_amplitude"] = True
 
         # %%
@@ -151,8 +151,11 @@ def run_adloc(
         # Northern California (Gil7)
         zz = [0.0, 1.0, 3.0, 4.0, 5.0, 17.0, 25.0, 62.0]
         vp = [3.2, 3.2, 4.5, 4.8, 5.51, 6.21, 6.89, 7.83]
-        vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
+        # vs = [1.5, 1.5, 2.4, 2.78, 3.18, 3.40, 3.98, 4.52]
+        vp_vs_ratio = 1.73
+        vs = [v / vp_vs_ratio for v in vp]
         h = 0.3
+        # h = 0.1
 
         vel = {"Z": zz, "P": vp, "S": vs}
         config["eikonal"] = {
@@ -384,6 +387,8 @@ if __name__ == "__main__":
     calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
     jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
+    # jdays = [[f'2023.{i:03d}' for i in range(41, 51)]]
+    jdays = [[f"{year}.366"]] # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
