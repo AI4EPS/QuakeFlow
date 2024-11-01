@@ -326,7 +326,7 @@ if __name__ == "__main__":
     jdays = [jday.split("/")[-1].replace(".csv", "") for jday in jdays]
     print(f"Number of pick files: {len(jdays)}")
 
-    jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
+    jdays = [jdays[i::num_nodes] for i in range(num_nodes)][node_rank]
 
     # %%
     if protocol == "file":
@@ -342,7 +342,7 @@ if __name__ == "__main__":
         root_path=root_path,
         region=region,
         config=config,
-        jdays=jdays[node_rank],
+        jdays=jdays,
         protocol=protocol,
         token=token,
         bucket=args.bucket,

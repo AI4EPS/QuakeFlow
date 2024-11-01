@@ -9,22 +9,13 @@ import numpy as np
 import pandas as pd
 from obspy.imaging.beachball import beach
 from sklearn.cluster import DBSCAN
-
-# %%
-# def parse_args():
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
-#     parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
-#     return parser.parse_args()
+from args import parse_args
 
 
-# args = parse_args()
-# root_path = args.root_path
-# region = args.region
+args = parse_args()
+root_path = args.root_path
+region = args.region
 
-# %%
-root_path = "local"
-region = "demo"
 
 result_path = f"{region}/skhash"
 if not os.path.exists(f"{root_path}/{result_path}"):
@@ -33,12 +24,15 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 if not os.path.exists(f"{root_path}/{result_path}/IN"):
     os.makedirs(f"{root_path}/{result_path}/IN")
 
+if not os.path.exists(f"{root_path}/{result_path}/OUT"):
+    os.makedirs(f"{root_path}/{result_path}/OUT")
+
 # %%
 if not os.path.exists(f"../SKHASH"):
     os.system(f"git clone git@github.com:AI4EPS/SKHASH.git ../SKHASH")
 
 # %%
-stations = pd.read_json(f"{root_path}/{region}/results/data/stations.json", orient="index")
+stations = pd.read_json(f"{root_path}/{region}/obspy/stations.json", orient="index")
 stations["station_id"] = stations.index
 stations = stations[
     ["station_id", "network", "station", "location", "instrument", "latitude", "longitude", "elevation_m"]
@@ -53,7 +47,7 @@ stations.to_csv(
 )
 
 # %%
-events = pd.read_csv(f"{root_path}/{region}/adloc/adloc_events.csv", parse_dates=["time"])
+events = pd.read_csv(f"{root_path}/{region}/adloc/ransac_events.csv", parse_dates=["time"])
 # events = pd.read_csv(f"{root_path}/{region}/adloc/debug_events.csv", parse_dates=["time"])
 if "magnitude" not in events.columns:
     events["magnitude"] = pd.NA
@@ -66,7 +60,7 @@ events = events[events["depth"] >= 0]
 events.to_csv(f"{root_path}/{result_path}/IN/catalog.csv", index=None)
 
 # %%
-picks = pd.read_csv(f"{root_path}/{region}/adloc/adloc_picks.csv", parse_dates=["phase_time"])
+picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks.csv", parse_dates=["phase_time"])
 if "adloc_mask" in picks.columns:
     picks = picks[picks["adloc_mask"] == 1.0]
 # picks = pd.read_csv(f"{root_path}/{region}/adloc/debug_picks.csv", parse_dates=["phase_time"])
@@ -103,6 +97,9 @@ picks = picks.merge(
     how="left",
 )
 ppicks = picks[picks["phase_type"] == "P"].copy()
+# remove duplicates phase of the same station
+ppicks = ppicks.sort_values(["event_id", "network", "station", "location", "channel", "phase_score"])
+ppicks = ppicks.groupby(["event_id", "network", "station", "location", "channel"]).first().reset_index()
 ppicks.rename(columns={"phase_polarity": "p_polarity"}, inplace=True)
 ppicks = ppicks[["event_id", "network", "station", "location", "channel", "p_polarity"]]
 ppicks.sort_values(["event_id", "network", "station", "location", "channel"], inplace=True)

@@ -46,6 +46,9 @@ def run_adloc(
     data_path = f"{root_path}/{region}/gamma"
     picks_file = os.path.join(data_path, f"gamma_picks.csv")
     events_file = os.path.join(data_path, f"gamma_events.csv")
+    # picks_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv"
+    # events_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv"
+
     # stations_file = os.path.join(data_path, "stations.csv")
     stations_file = f"{root_path}/{region}/obspy/stations.json"
 
@@ -93,7 +96,7 @@ def run_adloc(
         events[["x_km", "y_km"]] = events.apply(
             lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
         )
-        events["z_km"] = events["depth_km"]
+        events["z_km"] = events["depth_km"] if "depth_km" in events.columns else 10.0
 
     ## set up the config; you can also specify the region manually
     if ("xlim_km" not in config) or ("ylim_km" not in config) or ("zlim_km" not in config):
