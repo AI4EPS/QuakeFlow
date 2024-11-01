@@ -71,6 +71,8 @@ def associate(
         .reset_index()
     )
     events.rename(columns={"event_time": "time"}, inplace=True)
+    # drop event index -1
+    events = events[events["event_index"] != -1]
 
     return events, picks
 

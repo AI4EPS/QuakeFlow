@@ -17,6 +17,7 @@ def run_phasenet(
     config: Dict,
     node_rank: int = 0,
     num_nodes: int = 1,
+    overwrite: bool = False,
     model_path: str = "../PhaseNet/",
     protocol: str = "file",
     bucket: str = "",
@@ -34,22 +35,32 @@ def run_phasenet(
     # %%
     waveform_dir = f"{region}/waveforms"
     mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
-
-    # %%
-    processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/??/*.csv"))
-    processed = [f.replace(f"{root_path}/{result_path}/picks/", "").replace(".csv", "")[:-1] for f in processed]
-    print(f"Processed: {len(processed)}")
+    subdir = 4
 
     # %%
     mseed_3c = defaultdict(list)
     for mseed in mseed_list:
-        key = mseed.replace(f"{root_path}/{waveform_dir}/", "").replace(".mseed", "")[:-1]
-        if key in processed:
-            continue
+        key = "/".join(mseed.replace(".mseed", "").split("/")[-subdir:])
+        key = key[:-1]  ## remove the channel suffix
         mseed_3c[key].append(mseed)
-    mseed_3c = [",".join(sorted(v)) for k, v in mseed_3c.items()]
-    print(f"Unprocessed: {len(mseed_3c)}")
-    mseed_3c = list(np.array_split(mseed_3c, num_nodes)[node_rank])
+    print(f"Number of mseed files: {len(mseed_3c)}")
+
+    # %%
+    if not overwrite:
+        processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/??/*.csv"))
+        processed = ["/".join(f.replace(".csv", "").split("/")[-subdir:]) for f in processed]
+        processed = [p[:-1] for p in processed]  ## remove the channel suffix
+        print(f"Number of processed files: {len(processed)}")
+
+    keys = sorted(list(set(mseed_3c.keys()) - set(processed)))
+    print(f"Number of unprocessed files: {len(keys)}")
+    keys = list(np.array_split(keys, num_nodes)[node_rank])
+    print(f"Node {node_rank:03d}/{num_nodes:03d}: processing {len(keys)} files")
+
+    if len(keys) > 0:
+        return 0
+
+    mseed_3c = [",".join(sorted(mseed_3c[k])) for k in keys]
 
     # %%
     mseed_file = f"{root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv"
