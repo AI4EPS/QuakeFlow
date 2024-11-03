@@ -44,8 +44,10 @@ def run_adloc(
 
     # %%
     data_path = f"{root_path}/{region}/gamma"
-    picks_file = os.path.join(data_path, f"gamma_picks.csv")
-    events_file = os.path.join(data_path, f"gamma_events.csv")
+    picks_file = f"{data_path}/gamma_picks.csv"
+    events_file = f"{data_path}/gamma_events.csv"
+    # picks_file = f"{root_path}/{region}/gamma_plus/gamma_picks.csv"
+    # events_file = f"{root_path}/{region}/gamma_plus/gamma_events.csv"
     # picks_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv"
     # events_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv"
 
@@ -185,6 +187,9 @@ def run_adloc(
 
     picks = picks.merge(events[["event_index", "idx_eve"]], on="event_index")
     picks = picks.merge(stations[["station_id", "idx_sta"]], on="station_id")
+
+    print(f"Number of picks: {len(picks)}")
+    print(f"Number of events: {len(events)}")
 
     # %%
     estimator = ADLoc(config, stations=stations[["x_km", "y_km", "z_km"]].values, eikonal=config["eikonal"])

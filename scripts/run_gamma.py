@@ -26,16 +26,18 @@ def run_gamma(
 
     # %%
     data_path = f"{region}/phasenet"
+    # data_path = f"{region}/phasenet_plus"
     result_path = f"{region}/gamma"
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
     # %%
     station_json = f"{region}/obspy/stations.json"
-    if picks_csv is None:
-        picks_csv = f"{data_path}/phasenet_picks_{node_rank:03d}_{num_nodes:03d}.csv"
-    gamma_events_csv = f"{result_path}/gamma_events_{node_rank:03d}_{num_nodes:03d}.csv"
-    gamma_picks_csv = f"{result_path}/gamma_picks_{node_rank:03d}_{num_nodes:03d}.csv"
+    # if picks_csv is None:
+    picks_csv = f"{data_path}/phasenet_picks.csv"
+    # picks_csv = f"{data_path}/phasenet_plus_picks.csv"
+    gamma_events_csv = f"{result_path}/gamma_events.csv"
+    gamma_picks_csv = f"{result_path}/gamma_picks.csv"
 
     # %%
     ## read picks
@@ -43,6 +45,7 @@ def run_gamma(
         picks = pd.read_csv(f"{root_path}/{picks_csv}")
     else:
         picks = pd.read_csv(f"{protocol}://{bucket}/{picks_csv}")
+    picks.drop(columns=["event_index"], inplace=True, errors="ignore")
     picks["id"] = picks["station_id"]
     picks["timestamp"] = picks["phase_time"]
     if "phase_amp" in picks.columns:
@@ -125,6 +128,8 @@ def run_gamma(
 
     for k, v in config.items():
         print(f"{k}: {v}")
+
+    print(f"Number of picks: {len(picks)}")
 
     # %%
     event_idx0 = 0  ## current earthquake index

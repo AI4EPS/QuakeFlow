@@ -125,6 +125,8 @@ if __name__ == "__main__":
         )
         picks = pd.read_csv(f"{root_path}/{region}/phasenet_plus/picks_phasenet_plus.csv", parse_dates=["phase_time"])
         events, picks = associate(picks, events, stations, config)
+        print(f"Number of picks: {len(picks):,}")
+        print(f"Number of associated events: {len(events['event_index'].unique()):,}")
         events.to_csv(f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv", index=False)
         picks.to_csv(f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv", index=False)
 
