@@ -8,6 +8,8 @@ import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import torch
+import torch.nn.functional as F
 from args import parse_args
 from pyproj import Proj
 from scipy.sparse.csgraph import minimum_spanning_tree
@@ -25,9 +27,17 @@ def associate(
 
     VPVS_RATIO = config["VPVS_RATIO"]
     VP = config["VP"]
+    DT = 1.0  # seconds
+    MIN_STATION = 3
 
-    proj = Proj(proj="merc", datum="WGS84", units="km")
-    stations[["x_km", "y_km"]] = stations.apply(lambda x: pd.Series(proj(x.longitude, x.latitude)), axis=1)
+    # %%
+    t0 = min(events["event_time"].min(), picks["phase_time"].min())
+    events["timestamp"] = events["event_time"].apply(lambda x: (x - t0).total_seconds())
+    events["timestamp_center"] = events["center_time"].apply(lambda x: (x - t0).total_seconds())
+    picks["timestamp"] = picks["phase_time"].apply(lambda x: (x - t0).total_seconds())
+
+    # proj = Proj(proj="merc", datum="WGS84", units="km")
+    # stations[["x_km", "y_km"]] = stations.apply(lambda x: pd.Series(proj(x.longitude, x.latitude)), axis=1)
 
     # dist_matrix = squareform(pdist(stations[["x_km", "y_km"]].values))
     # mst = minimum_spanning_tree(dist_matrix)
@@ -37,24 +47,42 @@ def associate(
     # eps_t = 6.0
     # eps_xy = eps_t * VP * 2 / (1.0 + VPVS_RATIO)
     # print(f"eps_t: {eps_t:.3f}, eps_xy: {eps_xy:.3f}")
-    eps_xy = 30.0
-    print(f"eps_xy: {eps_xy:.3f}")
+    # eps_xy = 30.0
+    # print(f"eps_xy: {eps_xy:.3f}")
 
-    # %%
-    t0 = min(events["event_time"].min(), picks["phase_time"].min())
-    events["timestamp"] = events["event_time"].apply(lambda x: (x - t0).total_seconds())
-    events["timestamp_center"] = events["center_time"].apply(lambda x: (x - t0).total_seconds())
-    picks["timestamp"] = picks["phase_time"].apply(lambda x: (x - t0).total_seconds())
+    # %% Using DBSCAN to cluster events
+    # events = events.merge(stations[["station_id", "x_km", "y_km"]], on="station_id", how="left")
 
-    # %%
-    events = events.merge(stations[["station_id", "x_km", "y_km"]], on="station_id", how="left")
+    # scaling = np.array([1.0, 1.0 / eps_xy, 1.0 / eps_xy])
+    # clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp", "x_km", "y_km"]] * scaling)
+    # # clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp"]])
+    # # clustering = DBSCAN(eps=3.0, min_samples=3).fit(events[["timestamp"]])
+    # # clustering = DBSCAN(eps=1.0, min_samples=3).fit(events[["timestamp"]])
+    # events["event_index"] = clustering.labels_
 
-    scaling = np.array([1.0, 1.0 / eps_xy, 1.0 / eps_xy])
-    clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp", "x_km", "y_km"]] * scaling)
-    # clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp"]])
-    # clustering = DBSCAN(eps=3.0, min_samples=3).fit(events[["timestamp"]])
-    # clustering = DBSCAN(eps=1.0, min_samples=3).fit(events[["timestamp"]])
-    events["event_index"] = clustering.labels_
+    ## Using histogram to cluster events
+    events["event_index"] = -1
+    t = np.arange(events["timestamp"].min(), events["timestamp"].max(), DT)
+    hist, _ = np.histogram(events["timestamp"], bins=t)
+    # retrieve picks using max_pool of kernel size 5 seconds
+    hist = torch.from_numpy(hist).float().unsqueeze(0).unsqueeze(0)
+    hist_pool = F.max_pool1d(hist, kernel_size=5, padding=2, stride=1)
+    # find the index of the maximum value in hist_pool
+    mask = hist_pool == hist
+    hist = hist * mask
+    K = int((t[-1] - t[0]) / 10)  # assume max 1 event per 10 seconds on average
+    topk_score, topk_index = torch.topk(hist, k=K)
+    topk_index = topk_index[topk_score > MIN_STATION]  # min 3 stations
+    topk_index = topk_index.squeeze().numpy()
+    num_events = len(topk_index)
+    # assign timestamp to events based on the topk_index within 2 DT
+    t0 = (topk_index - 2) * DT
+    t1 = (topk_index + 2) * DT
+    timestamp = events["timestamp"].values
+    for i in tqdm(range(num_events), desc="Assigning event index"):
+        mask = (timestamp >= t0[i]) & (timestamp <= t1[i])
+        events.loc[mask, "event_index"] = i
+
     print(f"Number of associated events: {len(events['event_index'].unique())}")
 
     # %% link picks to events
@@ -62,18 +90,19 @@ def associate(
     picks.set_index("station_id", inplace=True)
 
     for group_id, event in tqdm(events.groupby("station_id"), desc="Linking picks to events"):
-        # travel time tt = (tp + ts) / 2 = (ps_ratio + 1)/2 * tp,
-        # (ts - tp) = (ps_ratio - 1) tp = tt * (ps_ratio + 1) * 2 * (ps_ratio - 1)
-        ps_delta = event["travel_time_s"] / (VPVS_RATIO + 1) * 2 * (VPVS_RATIO - 1)
-        t1 = event["timestamp_center"] - ps_delta * 1.2
-        t2 = event["timestamp_center"] + ps_delta * 1.2
-        index = event["event_index"]
+        # travel time tt = (tp + ts) / 2 = (1 + ps_ratio)/2 * tp => tp = tt * 2 / (1 + ps_ratio)
+        # (ts - tp) = (ps_ratio - 1) tp = tt * 2 * (ps_ratio - 1) / (ps_ratio + 1)
+        ps_delta = event["travel_time_s"].values * 2 * (VPVS_RATIO - 1) / (VPVS_RATIO + 1)
+        t1 = event["timestamp_center"].values - ps_delta * 1.2
+        t2 = event["timestamp_center"].values + ps_delta * 1.2
 
-        mask = (picks.loc[group_id, "timestamp"].values[None, :] >= t1.values[:, None]) & (
-            picks.loc[group_id, "timestamp"].values[None, :] <= t2.values[:, None]
-        )
+        picks_ = picks.loc[group_id, "timestamp"].values  # (Npk, )
+        mask = (picks_[None, :] >= t1[:, None]) & (picks_[None, :] <= t2[:, None])  # (Nev, Npk)
+        # picks.loc[group_id, "event_index"] = np.where(
+        #     mask.any(axis=0), index.values[mask.argmax(axis=0)], picks.loc[group_id, "event_index"]
+        # )
         picks.loc[group_id, "event_index"] = np.where(
-            mask.any(axis=0), index.values[mask.argmax(axis=0)], picks.loc[group_id, "event_index"]
+            mask.any(axis=0), event["event_index"].values[mask.argmax(axis=0)], -1
         )
 
     picks.reset_index(inplace=True)
