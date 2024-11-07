@@ -68,7 +68,7 @@ def run_phasenet(
 
     # %% skip processed files
     if not overwrite:
-        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
+        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/??/*.csv"))
         # processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
         processed = ["/".join(f.replace(".csv", "").split("/")[-subdir - 1 :]) for f in processed]
         processed = [p[:-1] for p in processed]  ## remove the channel suffix
