@@ -54,7 +54,8 @@
             "endtime": "2019-07-17T00:00:00",
             "provider": [
                 "SCEDC"
-            ]
+            ],
+            "network": "CI"
         },
         "Lamont2024": {
             "longitude0": -119.097,
@@ -143,19 +144,7 @@
             "minmagnitude": 2.0
         },
         "Mendocino": {
-            "starttime": "2014-12-01T00:00:00",
-            "endtime": "2014-12-31T00:00:00",
-            "minlatitude": 39.5,
-            "maxlatitude": 41.5,
-            "minlongitude": -126.5,
-            "maxlongitude": -123.0,
-            "network": "_CASCADIA_OBS",
-            "provider": [
-                "IRIS"
-            ]
-        },
-        "Mendocino_8mon": {
-            "starttime": "2014-10-01T00:00:00",
+            "starttime": "2015-05-01T00:00:00",
             "endtime": "2015-06-01T00:00:00",
             "minlatitude": 39.3,
             "maxlatitude": 41.7,
