@@ -35,7 +35,7 @@ def run_phasenet(
     # %%
     waveform_dir = f"{region}/waveforms"
     mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
-    subdir = 4
+    subdir = 3
     # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
     # subdir = 2
 
