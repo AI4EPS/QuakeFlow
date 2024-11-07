@@ -2,13 +2,13 @@
 import json
 import multiprocessing as mp
 import os
+from glob import glob
 
 import fsspec
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from args import parse_args
-from glob import glob
+from tqdm import tqdm
 
 
 def scan_csv(year, root_path, region, model, data="picks", fs=None, bucket=None, protocol="file"):
@@ -24,6 +24,7 @@ def scan_csv(year, root_path, region, model, data="picks", fs=None, bucket=None,
             csvs = fs.glob(f"{jday}/??/*.csv")
         else:
             csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/??/*.csv")
+            # csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/*.csv")
 
         csv_list.extend([[year, jday, csv] for csv in csvs])
 
@@ -129,6 +130,10 @@ if __name__ == "__main__":
         for csv in tqdm(csvs, desc=f"Merge {data} csv files"):
             picks.append(pd.read_csv(csv, dtype=str))
         picks = pd.concat(picks, ignore_index=True)
+        print(f"Number of {data}: {len(picks):,}")
+        if data == "picks":
+            print(f"Number of P picks: {len(picks[picks['phase_type'] == 'P']):,}")
+            print(f"Number of S picks: {len(picks[picks['phase_type'] == 'S']):,}")
         picks.to_csv(f"{root_path}/{region}/{model}/{model}_{data}.csv", index=False)
 
     # %%
