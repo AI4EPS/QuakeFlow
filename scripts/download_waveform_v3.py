@@ -228,6 +228,8 @@ def download_waveform(
             start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
         elif DELTATIME == "1D":
             start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%d")
+        else:
+            raise ValueError("Invalid interval")
         starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left").to_list()
         starttimes = np.array_split(starttimes, num_nodes)[node_rank]
         print(f"rank {node_rank}/{num_nodes}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")

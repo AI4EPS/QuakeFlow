@@ -1,17 +1,16 @@
 # %%
-from typing import Dict, List
 import json
 import os
 import sys
-from args import parse_args
-import os
+from collections import defaultdict
 from glob import glob
+from typing import Dict, List
 
 import fsspec
-import torch
-from collections import defaultdict
 import numpy as np
 import pandas as pd
+import torch
+from args import parse_args
 from run_event_association import associate
 
 
@@ -31,6 +30,7 @@ def run_phasenet(
     # %%
     if data_type == "continuous":
         subdir = 3
+        # subdir = 2
     elif data_type == "event":
         subdir = 1
 
@@ -50,6 +50,7 @@ def run_phasenet(
 
     if data_type == "continuous":
         mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
+        # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
     elif data_type == "event":
         mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/*.mseed"))
     else:
@@ -59,7 +60,7 @@ def run_phasenet(
     mseed_3c = defaultdict(list)
     for mseed in mseed_list:
         # key = mseed.replace(f"{root_path}/{waveform_dir}/", "").replace(".mseed", "")
-        key = "/".join(mseed.replace(".mseed", "").split("/")[-subdir:])
+        key = "/".join(mseed.replace(".mseed", "").split("/")[-subdir - 1 :])
         if data_type == "continuous":
             key = key[:-1]
         mseed_3c[key].append(mseed)
@@ -67,8 +68,9 @@ def run_phasenet(
 
     # %% skip processed files
     if not overwrite:
-        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/??/*.csv"))
-        processed = ["/".join(f.replace(".csv", "").split("/")[-subdir:]) for f in processed]
+        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
+        # processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
+        processed = ["/".join(f.replace(".csv", "").split("/")[-subdir - 1 :]) for f in processed]
         processed = [p[:-1] for p in processed]  ## remove the channel suffix
         print(f"Number of processed files: {len(processed)}")
 
@@ -93,6 +95,7 @@ def run_phasenet(
     num_gpu = torch.cuda.device_count()
     print(f"num_gpu = {num_gpu}")
     base_cmd = f"../EQNet/predict.py --model phasenet_plus --add_polarity --add_event --format mseed --data_list={root_path}/{result_path}/mseed_list_{node_rank:03d}_{num_nodes:03d}.csv --response_path={root_path}/{response_path} --result_path={root_path}/{result_path} --batch_size 1 --workers 1 --subdir_level {subdir}"
+    # base_cmd += " --resume ../../QuakeFlow/EQNet/model_phasenet_plus_0630/model_99.pth"
     if num_gpu == 0:
         cmd = f"python {base_cmd} --device=cpu"
     elif num_gpu == 1:
@@ -117,6 +120,9 @@ if __name__ == "__main__":
     run_phasenet(root_path=root_path, region=region, config=config)
 
     if num_nodes == 1:
+        os.system(f"python merge_phasenet_plus_picks.py --region {region}")
+
+    if num_nodes == 1:
         config.update({"VPVS_RATIO": 1.73, "VP": 6.0})
         stations = pd.read_json(f"{root_path}/{region}/obspy/stations.json", orient="index")
         stations["station_id"] = stations.index
@@ -125,8 +131,6 @@ if __name__ == "__main__":
         )
         picks = pd.read_csv(f"{root_path}/{region}/phasenet_plus/picks_phasenet_plus.csv", parse_dates=["phase_time"])
         events, picks = associate(picks, events, stations, config)
-        print(f"Number of picks: {len(picks):,}")
-        print(f"Number of associated events: {len(events['event_index'].unique()):,}")
         events.to_csv(f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv", index=False)
         picks.to_csv(f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv", index=False)
 

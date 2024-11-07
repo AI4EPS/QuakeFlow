@@ -18,6 +18,79 @@ from sklearn.cluster import DBSCAN
 from tqdm import tqdm
 
 
+def plotting_debug(xt, hist, topk_index, topk_score, picks, events, stations, config):
+
+    # timestamp0 = config["timestamp0"]
+    # events_compare = pd.read_csv("local/Ridgecrest_debug5/adloc_gamma/ransac_events.csv")
+    # picks_compare = pd.read_csv("local/Ridgecrest_debug5/adloc_gamma/ransac_picks.csv")
+    # # events_compare = pd.read_csv("local/Ridgecrest_debug5/adloc_plus2/ransac_events_sst_0.csv")
+    # # picks_compare = pd.read_csv("local/Ridgecrest_debug5/adloc_plus2/ransac_picks_sst_0.csv")
+    # events_compare["time"] = pd.to_datetime(events_compare["time"])
+    # events_compare["timestamp"] = events_compare["time"].apply(lambda x: (x - timestamp0).total_seconds())
+    # picks_compare["phase_time"] = pd.to_datetime(picks_compare["phase_time"])
+    # picks_compare["timestamp"] = picks_compare["phase_time"].apply(lambda x: (x - timestamp0).total_seconds())
+
+    DT = config["DT"]
+    MIN_STATION = config["MIN_STATION"]
+
+    # map station_id to int
+    stations["xy"] = stations["longitude"] - stations["latitude"]
+    stations.sort_values(by="xy", inplace=True)
+    mapping_id = {v: i for i, v in enumerate(stations["station_id"])}
+    mapping_color = {v: f"C{i}" if v != -1 else "k" for i, v in enumerate(events["event_index"].unique())}
+
+    NX = 100
+    for i in tqdm(range(0, len(hist), NX)):
+        bins = np.arange(i, i + NX, DT)
+
+        fig, ax = plt.subplots(2, 1, figsize=(15, 10), sharex=True)
+
+        # plot hist
+        idx = (xt > i) & (xt < i + NX)
+        ax[0].bar(xt[idx], hist[idx], width=DT)
+
+        ylim = ax[0].get_ylim()
+        idx = (xt[topk_index] > i) & (xt[topk_index] < i + NX)
+        ax[0].vlines(xt[topk_index][idx], ylim[0], ylim[1], color="k", linewidth=1)
+
+        # idx = (events_compare["timestamp"] > i) & (events_compare["timestamp"] < i + NX)
+        # ax[0].vlines(events_compare["timestamp"][idx], ylim[0], ylim[1], color="r", linewidth=1, linestyle="--")
+
+        # plot picks-events match
+        idx = (events["timestamp"] > i) & (events["timestamp"] < i + NX)
+        ax[1].scatter(
+            events["timestamp"][idx],
+            events["station_id"][idx].map(mapping_id),
+            c=events["event_index"][idx].map(mapping_color),
+            marker=".",
+            s=30,
+        )
+
+        idx = (picks["timestamp"] > i) & (picks["timestamp"] < i + NX)
+        ax[1].scatter(
+            picks["timestamp"][idx],
+            picks["station_id"][idx].map(mapping_id),
+            c=picks["event_index"][idx].map(mapping_color),
+            marker="x",
+            linewidth=0.5,
+            s=10,
+        )
+
+        # idx = (picks_compare["timestamp"] > i) & (picks_compare["timestamp"] < i + NX)
+        # ax[1].scatter(
+        #     picks_compare["timestamp"][idx],
+        #     picks_compare["station_id"][idx].map(mapping_id),
+        #     facecolors="none",
+        #     edgecolors="r",
+        #     linewidths=0.1,
+        #     s=30,
+        # )
+
+        if not os.path.exists(f"figures"):
+            os.makedirs(f"figures")
+        plt.savefig(f"figures/debug_{i:04d}.png", dpi=300, bbox_inches="tight")
+
+
 def associate(
     picks: pd.DataFrame,
     events: pd.DataFrame,
@@ -27,63 +100,68 @@ def associate(
 
     VPVS_RATIO = config["VPVS_RATIO"]
     VP = config["VP"]
-    DT = 1.0  # seconds
+    DT = 2.0  # seconds
     MIN_STATION = 3
 
     # %%
-    t0 = min(events["event_time"].min(), picks["phase_time"].min())
-    events["timestamp"] = events["event_time"].apply(lambda x: (x - t0).total_seconds())
-    events["timestamp_center"] = events["center_time"].apply(lambda x: (x - t0).total_seconds())
-    picks["timestamp"] = picks["phase_time"].apply(lambda x: (x - t0).total_seconds())
+    timestamp0 = min(events["event_time"].min(), picks["phase_time"].min())
 
-    # proj = Proj(proj="merc", datum="WGS84", units="km")
-    # stations[["x_km", "y_km"]] = stations.apply(lambda x: pd.Series(proj(x.longitude, x.latitude)), axis=1)
+    events["timestamp"] = events["event_time"].apply(lambda x: (x - timestamp0).total_seconds())
+    events["timestamp_center"] = events["center_time"].apply(lambda x: (x - timestamp0).total_seconds())
+    picks["timestamp"] = picks["phase_time"].apply(lambda x: (x - timestamp0).total_seconds())
 
-    # dist_matrix = squareform(pdist(stations[["x_km", "y_km"]].values))
-    # mst = minimum_spanning_tree(dist_matrix)
-    # dx = np.median(mst.data[mst.data > 0])
-    # print(f"dx: {dx:.3f}")
-    # eps_t = dx / VP * 2.0
-    # eps_t = 6.0
-    # eps_xy = eps_t * VP * 2 / (1.0 + VPVS_RATIO)
-    # print(f"eps_t: {eps_t:.3f}, eps_xy: {eps_xy:.3f}")
-    # eps_xy = 30.0
-    # print(f"eps_xy: {eps_xy:.3f}")
+    t0 = min(events["timestamp"].min(), picks["timestamp"].min())
+    t1 = max(events["timestamp"].max(), picks["timestamp"].max())
 
     # %% Using DBSCAN to cluster events
+    # proj = Proj(proj="merc", datum="WGS84", units="km")
+    # stations[["x_km", "y_km"]] = stations.apply(lambda x: pd.Series(proj(x.longitude, x.latitude)), axis=1)
     # events = events.merge(stations[["station_id", "x_km", "y_km"]], on="station_id", how="left")
-
     # scaling = np.array([1.0, 1.0 / eps_xy, 1.0 / eps_xy])
     # clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp", "x_km", "y_km"]] * scaling)
     # # clustering = DBSCAN(eps=2.0, min_samples=4).fit(events[["timestamp"]])
-    # # clustering = DBSCAN(eps=3.0, min_samples=3).fit(events[["timestamp"]])
-    # # clustering = DBSCAN(eps=1.0, min_samples=3).fit(events[["timestamp"]])
     # events["event_index"] = clustering.labels_
 
     ## Using histogram to cluster events
     events["event_index"] = -1
-    t = np.arange(events["timestamp"].min(), events["timestamp"].max(), DT)
-    hist, _ = np.histogram(events["timestamp"], bins=t)
-    # retrieve picks using max_pool of kernel size 5 seconds
+    t = np.arange(t0, t1, DT)
+    hist, edge = np.histogram(events["timestamp"], bins=t, weights=events["event_score"])
+    xt = (edge[:-1] + edge[1:]) / 2  # center of the bin
+    # hist_numpy = hist.copy()
+
     hist = torch.from_numpy(hist).float().unsqueeze(0).unsqueeze(0)
-    hist_pool = F.max_pool1d(hist, kernel_size=5, padding=2, stride=1)
-    # find the index of the maximum value in hist_pool
+    hist_pool = F.max_pool1d(hist, kernel_size=3, padding=1, stride=1)
     mask = hist_pool == hist
     hist = hist * mask
-    K = int((t[-1] - t[0]) / 10)  # assume max 1 event per 10 seconds on average
+    hist = hist.squeeze(0).squeeze(0)
+    K = int((t[-1] - t[0]) / 5)  # assume max 1 event per 10 seconds on average
     topk_score, topk_index = torch.topk(hist, k=K)
-    topk_index = topk_index[topk_score > MIN_STATION]  # min 3 stations
-    topk_index = topk_index.squeeze().numpy()
+    topk_index = topk_index[topk_score >= MIN_STATION]  # min 3 stations
+    topk_score = topk_score[topk_score >= MIN_STATION]
+    topk_index = topk_index.numpy()
+    topk_score = topk_score.numpy()
     num_events = len(topk_index)
-    # assign timestamp to events based on the topk_index within 2 DT
-    t0 = (topk_index - 2) * DT
-    t1 = (topk_index + 2) * DT
+    t00 = xt[topk_index - 1]
+    t11 = xt[topk_index + 1]
     timestamp = events["timestamp"].values
     for i in tqdm(range(num_events), desc="Assigning event index"):
-        mask = (timestamp >= t0[i]) & (timestamp <= t1[i])
+        mask = (timestamp >= t00[i]) & (timestamp <= t11[i])
         events.loc[mask, "event_index"] = i
+    events["num_picks"] = events.groupby("event_index").size()
 
-    print(f"Number of associated events: {len(events['event_index'].unique())}")
+    # # refine event index using DBSCAN
+    # events["group_index"] = -1
+    # for group_id, event in tqdm(events.groupby("event_index"), desc="DBSCAN clustering"):
+    #     if len(event) < MIN_STATION:
+    #         events.loc[event.index, "event_index"] = -1
+    #     clustering = DBSCAN(eps=20, min_samples=MIN_STATION).fit(event[["x_km", "y_km"]])
+    #     events.loc[event.index, "group_index"] = clustering.labels_
+    # events["dummy_index"] = events["event_index"].astype(str) + "." + events["group_index"].astype(str)
+    # mapping = {v: i for i, v in enumerate(events["dummy_index"].unique())}
+    # events["dummy_index"] = events["dummy_index"].map(mapping)
+    # events.loc[(events["event_index"] == -1) | (events["group_index"] == -1), "dummy_index"] = -1
+    # events["event_index"] = events["dummy_index"]
+    # events.drop(columns=["dummy_index"], inplace=True)
 
     # %% link picks to events
     picks["event_index"] = -1
@@ -92,6 +170,8 @@ def associate(
     for group_id, event in tqdm(events.groupby("station_id"), desc="Linking picks to events"):
         # travel time tt = (tp + ts) / 2 = (1 + ps_ratio)/2 * tp => tp = tt * 2 / (1 + ps_ratio)
         # (ts - tp) = (ps_ratio - 1) tp = tt * 2 * (ps_ratio - 1) / (ps_ratio + 1)
+
+        event = event.sort_values(by="num_picks", ascending=True)
         ps_delta = event["travel_time_s"].values * 2 * (VPVS_RATIO - 1) / (VPVS_RATIO + 1)
         t1 = event["timestamp_center"].values - ps_delta * 1.2
         t2 = event["timestamp_center"].values + ps_delta * 1.2
@@ -106,6 +186,17 @@ def associate(
         )
 
     picks.reset_index(inplace=True)
+
+    # plotting_debug(
+    #     xt,
+    #     hist_numpy,
+    #     topk_index,
+    #     topk_score,
+    #     picks,
+    #     events,
+    #     stations,
+    #     {"DT": DT, "MIN_STATION": MIN_STATION, "timestamp0": timestamp0},
+    # )
 
     picks.drop(columns=["timestamp"], inplace=True)
     events.drop(columns=["timestamp", "timestamp_center"], inplace=True)
@@ -126,6 +217,9 @@ def associate(
     events.rename(columns={"event_time": "time"}, inplace=True)
     # drop event index -1
     events = events[events["event_index"] != -1]
+
+    print(f"Number of associated events: {len(events['event_index'].unique()):,}")
+    print(f"Number of associated picks: {len(picks[picks['event_index'] != -1]):,} / {len(picks):,}")
 
     return events, picks
 

@@ -4,18 +4,18 @@ import multiprocessing as mp
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from glob import glob
 from threading import Lock, Thread
 
 import fsspec
 import numpy as np
 import pandas as pd
 import pyproj
+from args import parse_args
 from obspy import read_inventory
 from obspy.clients.fdsn import Client
 from sklearn.cluster import DBSCAN
 from tqdm import tqdm
-from args import parse_args
-from glob import glob
 
 
 def scan_csv(year, root_path, region, model, fs=None, bucket=None, protocol="file"):
@@ -31,6 +31,7 @@ def scan_csv(year, root_path, region, model, fs=None, bucket=None, protocol="fil
             csvs = fs.glob(f"{jday}/??/*.csv")
         else:
             csvs = glob(f"{root_path}/{region}/{model}/picks/{year}/{jday}/??/*.csv")
+            # csvs = glob(f"{root_path}/{region}/{model}/picks/{year}/{jday}/*.csv")
 
         csv_list.extend([[year, jday, csv] for csv in csvs])
 
@@ -89,7 +90,7 @@ if __name__ == "__main__":
 
     # %%
     # years = os.listdir(f"{root_path}/{region}/{model}/picks_{model}")
-    years = glob(f"{root_path}/{region}/{model}/picks_{model}/????/")
+    years = glob(f"{root_path}/{region}/{model}/picks/????/")
     years = [year.rstrip("/").split("/")[-1] for year in years]
     print(f"Years: {years}")
 
@@ -132,6 +133,9 @@ if __name__ == "__main__":
     for csv in tqdm(csvs, desc="Merge csv files"):
         picks.append(pd.read_csv(csv, dtype=str))
     picks = pd.concat(picks, ignore_index=True)
+    print(f"Number of picks: {len(picks):,}")
+    print(f"Number of P picks: {len(picks[picks['phase_type'] == 'P']):,}")
+    print(f"Number of S picks: {len(picks[picks['phase_type'] == 'S']):,}")
     picks.to_csv(f"{root_path}/{region}/{model}/{model}_picks.csv", index=False)
 
 # %%
