@@ -253,7 +253,7 @@ def collect_mseeds(
     fs_data = fsspec.filesystem(protocol=protocol, anon=True)
 
     # %%
-    valid_instruments = ["BH", "HH", "EH", "HN", "DP"]
+    valid_instruments = ["BH", "HH", "EH", "HN", "DP", "SH", "EP"]
     valid_components = ["3", "2", "1", "E", "N", "Z"]
 
     # %%
@@ -368,7 +368,7 @@ def split_mseed_list(
         raise ValueError(f"Invalid region: {region}")
 
     print(f"Processed mseed: {len(processed)}")
-    processed = filter_empty_files(processed, fs)
+    # processed = filter_empty_files(processed, fs)
     processed = set(processed)
 
     mseed_csv_set = set()

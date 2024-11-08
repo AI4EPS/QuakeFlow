@@ -25,7 +25,7 @@ fs = fsspec.filesystem("gs", token=token)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_nodes", type=int, default=128)
+    parser.add_argument("--num_nodes", type=int, default=32)
     parser.add_argument("--year", type=int, default=2022)
     parser.add_argument("--region", type=str, default="NC")
     parser.add_argument("--branch", type=str, default="ncedc")
@@ -50,7 +50,7 @@ pip install obspy pyproj
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 ### PhaseNet
-pip install tensorflow==2.14.0
+pip install tensorflow==2.14.0 numpy==1.26.4
 [ ! -d "PhaseNet" ] && git clone https://github.com/AI4EPS/PhaseNet.git
 cd PhaseNet && git checkout $BRANCH && git pull origin $BRANCH && cd ..
 ### GaMMA
