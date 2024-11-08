@@ -39,9 +39,12 @@ def scan_csv(regions, year, root_path, fs, bucket, folder="phasenet"):
                         csv_list.extend([[region, year, jday, csv] for csv in csvs])
 
     csv_list = pd.DataFrame(csv_list, columns=["region", "year", "jday", "csv"])
+
+    ## save both NC and SC to Cal
     csv_list.to_csv(f"{root_path}/Cal/{folder}/csv_list/{year}.csv", index=False)
     fs.put(f"{root_path}/Cal/{folder}/csv_list/{year}.csv", f"{bucket}/Cal/{folder}/csv_list/{year}.csv")
 
+    ## save NC and SC to their own folders
     for region in regions:
         csv_list[csv_list["region"] == region].to_csv(f"{root_path}/{region}/{folder}/csv_list/{year}.csv", index=False)
         fs.put(f"{root_path}/{region}/{folder}/csv_list/{year}.csv", f"{bucket}/{region}/{folder}/csv_list/{year}.csv")
@@ -98,7 +101,8 @@ if __name__ == "__main__":
     # years = range(2011, 2017)
     # years = range(2008, 2011)
     # years = range(2005, 2008)
-    years = range(1999, 2005)
+    # years = range(1999, 2005)
+    years = ["2010"]
     bucket = "quakeflow_catalog"
     folder = "phasenet"
 
