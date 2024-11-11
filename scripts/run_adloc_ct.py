@@ -37,6 +37,19 @@ if __name__ == "__main__":
     data_path = f"{root_path}/{region}/adloc_dd"
     result_path = f"{root_path}/{region}/adloc_dd"
     figure_path = f"{root_path}/{region}/adloc_dd/figures"
+
+    data_path = f"{root_path}/{region}/adloc_gamma_dd"
+    result_path = f"{root_path}/{region}/adloc_gamma_dd"
+    figure_path = f"{root_path}/{region}/adloc_gamma_dd/figures"
+
+    # data_path = f"{root_path}/{region}/adloc_gamma_plus_dd"
+    # result_path = f"{root_path}/{region}/adloc_gamma_plus_dd"
+    # figure_path = f"{root_path}/{region}/adloc_gamma_plus_dd/figures"
+
+    # data_path = f"{root_path}/{region}/adloc_plus_dd"
+    # result_path = f"{root_path}/{region}/adloc_plus_dd"
+    # figure_path = f"{root_path}/{region}/adloc_plus_dd/figures"
+
     if not os.path.exists(data_path):
         os.makedirs(data_path)
     if not os.path.exists(result_path):
@@ -104,7 +117,9 @@ if __name__ == "__main__":
     if ("xlim_km" not in config) or ("ylim_km" not in config) or ("zlim_km" not in config):
         xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
         xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
-        zmin, zmax = config["mindepth"], config["maxdepth"]
+        # zmin, zmax = config["mindepth"], config["maxdepth"]
+        zmin = config["mindepth"] if "mindepth" in config else 0.0
+        zmax = config["maxdepth"] if "maxdepth" in config else 30.0
         config["xlim_km"] = (xmin, xmax)
         config["ylim_km"] = (ymin, ymax)
         config["zlim_km"] = (zmin, zmax)

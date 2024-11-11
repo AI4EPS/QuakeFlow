@@ -26,18 +26,19 @@ def run_gamma(
 
     # %%
     data_path = f"{region}/phasenet"
-    # data_path = f"{region}/phasenet_plus"
     result_path = f"{region}/gamma"
-    if not os.path.exists(f"{root_path}/{result_path}"):
-        os.makedirs(f"{root_path}/{result_path}")
-
-    # %%
-    station_json = f"{region}/obspy/stations.json"
-    # if picks_csv is None:
     picks_csv = f"{data_path}/phasenet_picks.csv"
+
+    # data_path = f"{region}/phasenet_plus"
+    # result_path = f"{region}/gamma_plus"
     # picks_csv = f"{data_path}/phasenet_plus_picks.csv"
+
     gamma_events_csv = f"{result_path}/gamma_events.csv"
     gamma_picks_csv = f"{result_path}/gamma_picks.csv"
+
+    station_json = f"{region}/obspy/stations.json"
+    if not os.path.exists(f"{root_path}/{result_path}"):
+        os.makedirs(f"{root_path}/{result_path}")
 
     # %%
     ## read picks
@@ -106,11 +107,10 @@ def run_gamma(
 
     ## Eikonal for 1D velocity model
     # zz = [0.0, 5.5, 16.0, 32.0]
-    # vp = [5.5, 5.5,  6.7,  7.8]
+    # vp = [5.5, 5.5, 6.7, 7.8]
     # vp_vs_ratio = 1.73
     # vs = [v / vp_vs_ratio for v in vp]
     # h = 0.3
-    # # h = 3
     # vel = {"z": zz, "p": vp, "s": vs}
     # config["eikonal"] = {"vel": vel, "h": h, "xlim": config["x(km)"], "ylim": config["y(km)"], "zlim": config["z(km)"]}
 

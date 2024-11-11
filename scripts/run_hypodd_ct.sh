@@ -9,14 +9,17 @@ else
   region="demo"
 fi
 
-if [ ! -d "$root_path/$region/hypodd" ]; then
-  mkdir -p $root_path/$region/hypodd
+data_path=$root_path/$region/hypodd
+
+if [ ! -d "$data_path" ]; then
+  mkdir -p $data_path
 fi
 
-cd $root_path/$region/hypodd
+cd $data_path
 
 if [ ! -d "HypoDD" ]; then
   git clone git@github.com:zhuwq0/HypoDD.git
+  # git clone git@github.com:AI4EPS/HypoDD_old.git HypoDD
   export PATH=$PATH:$PWD/HypoDD
   make -C HypoDD/src/
 fi
@@ -125,4 +128,5 @@ EOF
 
 ./HypoDD/src/ph2dt/ph2dt ph2dt.inp
 ./HypoDD/src/hypoDD/hypoDD ct.inp
+
 cd $WORKING_DIR

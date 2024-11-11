@@ -11,7 +11,18 @@ args = parse_args()
 root_path = args.root_path
 region = args.region
 
+data_path = f"{region}/adloc"
 result_path = f"{region}/hypodd"
+
+# data_path = f"{region}/adloc_gamma"
+# result_path = f"{region}/hypodd_gamma"
+
+# data_path = f"{region}/adloc_gamma_plus"
+# result_path = f"{region}/hypodd_gamma_plus"
+
+# data_path = f"{region}/adloc_plus"
+# result_path = f"{region}/hypodd_plus"
+
 if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")
 
@@ -20,8 +31,9 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 # station_json = f"{region}/results/data/stations.json"
 # stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
 # station_csv = f"{region}/cctorch/cctorch_stations.csv"
-station_csv = f"{region}/adloc/ransac_stations.csv"
-stations = pd.read_csv(f"{root_path}/{station_csv}")
+# station_csv = f"{region}/adloc/ransac_stations.csv"
+# stations = pd.read_csv(f"{root_path}/{station_csv}")
+stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
 stations.set_index("station_id", inplace=True)
 
 shift_topo = stations["elevation_m"].max() / 1e3
@@ -53,8 +65,10 @@ with open(f"{root_path}/{result_path}/stations.dat", "w") as f:
 
 # %%
 ############################################# Picks Format ######################################################
-picks_csv = f"{region}/adloc/ransac_picks.csv"
-events_csv = f"{region}/adloc/ransac_events.csv"
+# picks_csv = f"{region}/adloc/ransac_picks.csv"
+# events_csv = f"{region}/adloc/ransac_events.csv"
+picks_csv = f"{data_path}/ransac_picks.csv"
+events_csv = f"{data_path}/ransac_events.csv"
 
 picks = pd.read_csv(f"{root_path}/{picks_csv}")
 events = pd.read_csv(f"{root_path}/{events_csv}")

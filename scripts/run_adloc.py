@@ -35,21 +35,30 @@ def run_adloc(
     fs = fsspec.filesystem(protocol=protocol, token=token)
 
     # %%
-    result_path = f"{root_path}/{region}/adloc"
-    if not os.path.exists(result_path):
-        os.makedirs(result_path)
-    figure_path = f"{root_path}/{region}/adloc/figures"
-    if not os.path.exists(figure_path):
-        os.makedirs(figure_path)
-
-    # %%
     data_path = f"{root_path}/{region}/gamma"
     picks_file = f"{data_path}/gamma_picks.csv"
     events_file = f"{data_path}/gamma_events.csv"
+
+    # picks_file = f"{root_path}/{region}/gamma/gamma_picks.csv"
+    # events_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+    # result_path = f"{root_path}/{region}/adloc_gamma"
+    # figure_path = f"{root_path}/{region}/adloc_gamma/figures"
+
     # picks_file = f"{root_path}/{region}/gamma_plus/gamma_picks.csv"
     # events_file = f"{root_path}/{region}/gamma_plus/gamma_events.csv"
+    # result_path = f"{root_path}/{region}/adloc_gamma_plus"
+    # figure_path = f"{root_path}/{region}/adloc_gamma_plus/figures"
+
     # picks_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv"
     # events_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv"
+    # result_path = f"{root_path}/{region}/adloc_plus"
+    # figure_path = f"{root_path}/{region}/adloc_plus/figures"
+
+    # %%
+    if not os.path.exists(result_path):
+        os.makedirs(result_path)
+    if not os.path.exists(figure_path):
+        os.makedirs(figure_path)
 
     # stations_file = os.path.join(data_path, "stations.csv")
     stations_file = f"{root_path}/{region}/obspy/stations.json"
@@ -70,7 +79,7 @@ def run_adloc(
     stations.reset_index(drop=True, inplace=True)
 
     config["mindepth"] = config["mindepth"] if "mindepth" in config else 0.0
-    config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 60.0
+    config["maxdepth"] = config["maxdepth"] if "maxdepth" in config else 30.0
     config["use_amplitude"] = True
 
     # %%
@@ -149,6 +158,8 @@ def run_adloc(
     config["min_picks_ratio"] = 0.5
     config["max_residual_time"] = 1.0
     config["max_residual_amplitude"] = 1.0
+    # config["max_residual_time"] = 0.2  ## Forge
+    # config["max_residual_amplitude"] = 0.5
     config["min_score"] = 0.5
     config["min_s_picks"] = 1.5
     config["min_p_picks"] = 1.5
