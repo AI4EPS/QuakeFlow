@@ -173,8 +173,10 @@ def associate(
 
         event = event.sort_values(by="num_picks", ascending=True)
         ps_delta = event["travel_time_s"].values * 2 * (VPVS_RATIO - 1) / (VPVS_RATIO + 1)
-        t1 = event["timestamp_center"].values - ps_delta * 1.2
-        t2 = event["timestamp_center"].values + ps_delta * 1.2
+        # t1 = event["timestamp_center"].values - ps_delta * 1.1 - 1.0
+        # t2 = event["timestamp_center"].values + ps_delta * 1.1 + 1.0
+        t1 = event["timestamp_center"].values - (ps_delta * 0.6 + 1.0)
+        t2 = event["timestamp_center"].values + (ps_delta * 0.6 + 1.0)
 
         picks_ = picks.loc[group_id, "timestamp"].values  # (Npk, )
         mask = (picks_[None, :] >= t1[:, None]) & (picks_[None, :] <= t2[:, None])  # (Nev, Npk)
