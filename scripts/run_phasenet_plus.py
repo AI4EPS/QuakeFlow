@@ -73,8 +73,10 @@ def run_phasenet(
         processed = ["/".join(f.replace(".csv", "").split("/")[-subdir - 1 :]) for f in processed]
         processed = [p[:-1] for p in processed]  ## remove the channel suffix
         print(f"Number of processed files: {len(processed)}")
+        keys = sorted(list(set(mseed_3c.keys()) - set(processed)))
+    else:
+        keys = list(mseed_3c.keys())
 
-    keys = sorted(list(set(mseed_3c.keys()) - set(processed)))
     print(f"Number of unprocessed files: {len(keys)}")
     keys = list(np.array_split(keys, num_nodes)[node_rank])
     print(f"Node {node_rank:03d}/{num_nodes:03d}: processing {len(keys)} files")
@@ -117,7 +119,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    run_phasenet(root_path=root_path, region=region, config=config)
+    run_phasenet(root_path=root_path, region=region, config=config, overwrite=args.overwrite)
 
     if num_nodes == 1:
         os.system(f"python merge_phasenet_plus_picks.py --region {region}")
