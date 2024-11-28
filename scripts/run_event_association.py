@@ -148,6 +148,12 @@ def associate(
         mask = (timestamp >= t00[i]) & (timestamp <= t11[i])
         events.loc[mask, "event_index"] = i
     events["num_picks"] = events.groupby("event_index").size()
+    ## logPGV = -4.75 + 1.68 * logR + 0.93M => M = (logPGV - 4.175 - 1.68 * logR) / 0.93
+    events["magnitude"] = (
+        np.log10(events["event_amplitude"])
+        + 4.175
+        + 1.68 * np.log10(events["travel_time"] * VP * (VPVS_RATIO + 1.0) / 2.0)
+    ) / 0.93
 
     # # refine event index using DBSCAN
     # events["group_index"] = -1
@@ -214,6 +220,7 @@ def associate(
                 "event_score": "sum",
                 "latitude": "median",
                 "longitude": "median",
+                "magnitude": "median",
             }
         )
         .reset_index()
