@@ -22,6 +22,9 @@ def parse_args():
     ## Model
     parser.add_argument("--model", type=str, default="phasenet", help="model")
 
+    ## PhaseNet
+    parser.add_argument("--overwrite", action="store_true", help="overwrite existing results")
+
     ## ADLOC
     parser.add_argument("--iter", type=int, default=0, help="iteration")
 

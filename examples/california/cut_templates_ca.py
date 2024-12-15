@@ -5,6 +5,7 @@ import os
 import sys
 from glob import glob
 
+import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
 import obspy
@@ -141,10 +142,8 @@ def extract_template_numpy(
     traveltime_fname,
     traveltime_index_fname,
     traveltime_mask_fname,
-    mseed_path,
+    picks_group,
     events,
-    picks,
-    stations,
     config,
     lock,
 ):
@@ -158,87 +157,81 @@ def extract_template_numpy(
     )
     traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="r+", shape=tuple(config["traveltime_shape"]))
 
-    ## Load waveforms
-    waveforms_dict = {}
-    for i, station in stations.iterrows():
-        station_id = station["station_id"]
-        for c in station["component"]:
-            mseed_name = f"{mseed_path}/{station_id}{c}.mseed"
-            if os.path.exists(mseed_name):
-                try:
-                    stream = obspy.read(mseed_name)
-                    stream.merge(fill_value="latest")
-                    if len(stream) > 1:
-                        print(f"More than one trace: {stream}")
-                    trace = stream[0]
-                    if trace.stats.sampling_rate != config["sampling_rate"]:
-                        if trace.stats.sampling_rate % config["sampling_rate"] == 0:
-                            trace.decimate(int(trace.stats.sampling_rate / config["sampling_rate"]))
-                        else:
-                            trace.resample(config["sampling_rate"])
-                    # trace.detrend("linear")
-                    # trace.taper(max_percentage=0.05, type="cosine")
-                    trace.filter("bandpass", freqmin=2.0, freqmax=12.0, corners=4, zerophase=True)
-                    waveforms_dict[f"{station_id}{c}"] = trace
-                except Exception as e:
-                    print(e)
-                    continue
+    for picks in picks_group:
 
-    ## Cut templates
-    for (idx_eve, idx_sta, phase_type), pick in picks.iterrows():
+        waveforms_dict = {}
+        picks = picks.set_index(["idx_eve", "idx_sta", "phase_type"])
+        picks_index = list(picks.index.unique())
 
-        idx_pick = pick["idx_pick"]
-        phase_timestamp = pick["phase_timestamp"]
+        ## Cut templates
+        for (idx_eve, idx_sta, phase_type), pick in picks.iterrows():
 
-        station = stations.loc[idx_sta]
-        station_id = station["station_id"]
-        event = events.loc[idx_eve]
+            idx_pick = pick["idx_pick"]
+            phase_timestamp = pick["phase_timestamp"]
 
-        for c in station["component"]:
-            ic = config["component_mapping"][c]  # 012 for P, 345 for S
+            event = events.loc[idx_eve]
+            ENZ = pick["ENZ"].split(",")
+            for c in ENZ:
+                if c not in waveforms_dict:
+                    with fsspec.open(c, "rb", anon=True) as f:
+                        stream = obspy.read(f)
+                        stream.merge(fill_value="latest")
+                        if len(stream) > 1:
+                            print(f"More than one trace: {stream}")
+                        trace = stream[0]
+                        if trace.stats.sampling_rate != config["sampling_rate"]:
+                            if trace.stats.sampling_rate % config["sampling_rate"] == 0:
+                                trace.decimate(int(trace.stats.sampling_rate / config["sampling_rate"]))
+                            else:
+                                trace.resample(config["sampling_rate"])
+                        # trace.detrend("linear")
+                        # trace.taper(max_percentage=0.05, type="cosine")
+                        trace.filter("bandpass", freqmin=2.0, freqmax=12.0, corners=4, zerophase=True)
+                        waveforms_dict[c] = trace
+                else:
+                    trace = waveforms_dict[c]
 
-            if f"{station_id}{c}" in waveforms_dict:
-                trace = waveforms_dict[f"{station_id}{c}"]
+                ic = config["component_mapping"][trace.stats.channel[-1]]
+
                 trace_starttime = (
                     pd.to_datetime(trace.stats.starttime.datetime, utc=True) - reference_t0
                 ).total_seconds()
-            else:
-                continue
 
-            begin_time = phase_timestamp - trace_starttime - config[f"time_before_{phase_type.lower()}"]
-            end_time = phase_timestamp - trace_starttime + config[f"time_after_{phase_type.lower()}"]
+                begin_time = phase_timestamp - trace_starttime - config[f"time_before_{phase_type.lower()}"]
+                end_time = phase_timestamp - trace_starttime + config[f"time_after_{phase_type.lower()}"]
 
-            if phase_type == "P" and ((idx_eve, idx_sta, "S") in picks.index):
-                s_begin_time = (
-                    picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"] - trace_starttime - config[f"time_before_s"]
+                if phase_type == "P" and ((idx_eve, idx_sta, "S") in picks_index):
+
+                    s_begin_time = (
+                        picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"] - trace_starttime - config[f"time_before_s"]
+                    )
+                    if config["no_overlapping"]:
+                        end_time = min(end_time, s_begin_time)
+
+                begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
+                end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
+
+                ## define traveltime at the exact data point of event origin time
+                traveltime_array[idx_pick, ic, 0] = begin_time_index / config["sampling_rate"] - (
+                    event["event_timestamp"] - trace_starttime - config[f"time_before_{phase_type.lower()}"]
                 )
-                if config["no_overlapping"]:
-                    end_time = min(end_time, s_begin_time)
+                traveltime_index_array[idx_pick, ic, 0] = begin_time_index - int(
+                    (event["event_timestamp"] - trace_starttime - config[f"time_before_{phase_type.lower()}"])
+                    * config["sampling_rate"]
+                )
+                traveltime_mask[idx_pick, ic, 0] = True
 
-            begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
-            end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
+                trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
+                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
 
-            ## define traveltime at the exact data point of event origin time
-            traveltime_array[idx_pick, ic, 0] = begin_time_index / config["sampling_rate"] - (
-                event["event_timestamp"] - trace_starttime - config[f"time_before_{phase_type.lower()}"]
-            )
-            traveltime_index_array[idx_pick, ic, 0] = begin_time_index - int(
-                (event["event_timestamp"] - trace_starttime - config[f"time_before_{phase_type.lower()}"])
-                * config["sampling_rate"]
-            )
-            traveltime_mask[idx_pick, ic, 0] = True
+        if lock is not None:
+            with lock:
+                template_array.flush()
+                traveltime_array.flush()
+                traveltime_index_array.flush()
+                traveltime_mask.flush()
 
-            trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-            template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
-
-    if lock is not None:
-        with lock:
-            template_array.flush()
-            traveltime_array.flush()
-            traveltime_index_array.flush()
-            traveltime_mask.flush()
-
-    return mseed_path
+    return
 
 
 # %%
@@ -292,7 +285,7 @@ def cut_templates(root_path, region, config):
     # result_path = f"{region}/cctorch"
 
     data_path = f"{region}/adloc_gamma"
-    result_path = f"{region}/cctorch"
+    result_path = f"{region}/cctorch_ca"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
@@ -416,6 +409,7 @@ def cut_templates(root_path, region, config):
     eikonal = init_eikonal2d(eikonal)
 
     # %%
+    # picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks.csv")
     picks = pd.read_csv(f"{root_path}/{data_path}/ransac_picks.csv")
     picks = picks[picks["adloc_mask"] == 1]
     picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
@@ -506,7 +500,18 @@ def cut_templates(root_path, region, config):
     config["reference_t0"] = reference_t0
     events = events[["idx_eve", "x_km", "y_km", "z_km", "event_index", "event_time", "event_timestamp"]]
     stations = stations[["idx_sta", "x_km", "y_km", "z_km", "station_id", "component", "network", "station"]]
-    picks = picks[["idx_eve", "idx_sta", "phase_type", "phase_score", "phase_time", "phase_timestamp", "phase_source"]]
+    picks = picks[
+        [
+            "idx_eve",
+            "idx_sta",
+            "phase_type",
+            "phase_score",
+            "phase_time",
+            "phase_timestamp",
+            "phase_source",
+            "station_id",
+        ]
+    ]
     events.set_index("idx_eve", inplace=True)
     stations.set_index("idx_sta", inplace=True)
     picks.sort_values(by=["idx_eve", "idx_sta", "phase_type"], inplace=True)
@@ -514,39 +519,59 @@ def cut_templates(root_path, region, config):
 
     picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
 
-    dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
+    ############################# CLOUD #########################################
+    # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
+
+    protocol = "gs"
+    bucket = "quakeflow_catalog"
+    folder = "SC"
+    token_json = "application_default_credentials.json"
+    with open(token_json, "r") as fp:
+        token = json.load(fp)
+    fs = fsspec.filesystem(protocol=protocol, token=token)
+    year = 2019
+    with fs.open(f"{bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
+        mseeds = f.readlines()
+    mseeds = [x.strip("\n") for x in mseeds]
+    mseeds = pd.DataFrame(mseeds, columns=["ENZ"])
+    mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+    mseeds["network"] = mseeds["fname"].apply(lambda x: x[:2])
+    mseeds["station"] = mseeds["fname"].apply(lambda x: x[2:7].strip("_"))
+    mseeds["instrument"] = mseeds["fname"].apply(lambda x: x[7:9])
+    mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
+    mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
+    mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
+
+    picks["network"] = picks["station_id"].apply(lambda x: x.split(".")[0])
+    picks["station"] = picks["station_id"].apply(lambda x: x.split(".")[1])
+    picks["location"] = picks["station_id"].apply(lambda x: x.split(".")[2])
+    picks["instrument"] = picks["station_id"].apply(lambda x: x.split(".")[3])
+    picks["year"] = picks["phase_time"].dt.strftime("%Y")
+    picks["jday"] = picks["phase_time"].dt.strftime("%j")
+    picks = picks.merge(mseeds, on=["network", "station", "location", "instrument", "year", "jday"])
+    picks.drop(columns=["fname", "station_id", "network", "location", "instrument", "year", "jday"], inplace=True)
+
+    picks_group = picks.copy()
+    picks_group = picks_group.groupby("ENZ")
+
+    ############################################################
+
     ncpu = min(16, mp.cpu_count())
+    nsplit = min(ncpu * 2, len(picks_group))
     print(f"Using {ncpu} cores")
 
-    pbar = tqdm(total=len(dirs), desc="Cutting templates")
-
-    def pbar_update(x):
-        """
-        x: the return value of extract_template_numpy
-        """
-        pbar.update()
-        pbar.set_description(f"Cutting templates: {'/'.join(x.split('/')[-3:])}")
-
+    pbar = tqdm(total=nsplit, desc="Cutting templates")
     ctx = mp.get_context("spawn")
-    picks_group = picks.copy()
-    picks_group["year_jday_hour"] = picks_group["phase_time"].dt.strftime("%Y-%jT%H")
-    picks_group = picks_group.groupby("year_jday_hour")
 
     with ctx.Manager() as manager:
         lock = manager.Lock()
         with ctx.Pool(ncpu) as pool:
             jobs = []
-            for d in dirs:
 
-                tmp = d.split("/")
-                year, jday, hour = tmp[-3:]
+            group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
+            picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
 
-                if f"{year}-{jday}T{hour}" not in picks_group.groups:
-                    pbar_update(d)
-                    continue
-                picks_ = picks_group.get_group(f"{year}-{jday}T{hour}")
-                events_ = events.loc[picks_["idx_eve"].unique()]
-                picks_ = picks_.set_index(["idx_eve", "idx_sta", "phase_type"])
+            for picks_group in picks_group_chunk:
 
                 job = pool.apply_async(
                     extract_template_numpy,
@@ -555,14 +580,12 @@ def cut_templates(root_path, region, config):
                         traveltime_fname,
                         traveltime_index_fname,
                         traveltime_mask_fname,
-                        d,
-                        events_,
-                        picks_,
-                        stations,
+                        picks_group,
+                        events,
                         config,
                         lock,
                     ),
-                    callback=pbar_update,
+                    callback=lambda x: pbar.update(),
                 )
                 jobs.append(job)
             pool.close()

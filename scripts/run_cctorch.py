@@ -11,6 +11,13 @@ region = args.region
 
 data_path = f"{region}/cctorch"
 result_path = f"{region}/cctorch/ccpairs"
+
+# data_path = f"{region}/cctorch_ca"
+# result_path = f"{region}/cctorch_ca/ccpairs"
+
+# data_path = f"{region}/cctorch_gamma"
+# result_path = f"{region}/cctorch_gamma/ccpairs"
+
 if not os.path.exists(f"{root_path}/{result_path}"):
     os.makedirs(f"{root_path}/{result_path}")
 
@@ -40,10 +47,10 @@ if args.dtct_pair:
 
 else:
     base_cmd = (
-        f"../CCTorch/run.py --pair_list={root_path}/{region}/cctorch/pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap "
-        f"--data_list1={root_path}/{region}/cctorch/cctorch_picks.csv "
-        f"--events_csv={root_path}/{region}/cctorch/cctorch_events.csv --picks_csv={root_path}/{region}/cctorch/cctorch_picks.csv --stations_csv={root_path}/{region}/cctorch/cctorch_stations.csv "
-        f"--config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
+        f"../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
+        f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
+        f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
+        f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
     )
 
 num_gpu = torch.cuda.device_count()
@@ -62,14 +69,16 @@ for rank in range(num_gpu):
     if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
         continue
     if rank == 0:
-        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{region}/cctorch/dtcc.csv"
+        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
     else:
-        cmd = f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{region}/cctorch/dtcc.csv"
+        cmd = (
+            f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
+        )
     print(cmd)
     os.system(cmd)
 
 
-cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{region}/cctorch/dt.cc"
+cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
 print(cmd)
 os.system(cmd)
 
