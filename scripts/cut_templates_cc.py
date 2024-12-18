@@ -158,10 +158,9 @@ def extract_template_numpy(
     )
     traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="r+", shape=tuple(config["traveltime_shape"]))
 
-    waveforms_dict = {}
     for picks in picks_group:
 
-        # waveforms_dict = {}
+        waveforms_dict = {}
         picks = picks.set_index(["idx_eve", "idx_sta", "phase_type"])
         picks_index = list(picks.index.unique())
 
@@ -203,7 +202,8 @@ def extract_template_numpy(
                 begin_time = phase_timestamp - trace_starttime - config[f"time_before_{phase_type.lower()}"]
                 end_time = phase_timestamp - trace_starttime + config[f"time_after_{phase_type.lower()}"]
 
-                if phase_type == "P" and ((idx_eve, idx_sta, "S") in picks.index):
+                if phase_type == "P" and ((idx_eve, idx_sta, "S") in picks_index):
+
                     s_begin_time = (
                         picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"] - trace_starttime - config[f"time_before_s"]
                     )
@@ -226,12 +226,12 @@ def extract_template_numpy(
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
                 template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
 
-    if lock is not None:
-        with lock:
-            template_array.flush()
-            traveltime_array.flush()
-            traveltime_index_array.flush()
-            traveltime_mask.flush()
+        if lock is not None:
+            with lock:
+                template_array.flush()
+                traveltime_array.flush()
+                traveltime_index_array.flush()
+                traveltime_mask.flush()
 
     return
 
@@ -557,7 +557,6 @@ def cut_templates(root_path, region, config):
     print(f"Using {ncpu} cores")
 
     pbar = tqdm(total=nsplit, desc="Cutting templates")
-
     ctx = mp.get_context("spawn")
 
     with ctx.Manager() as manager:
