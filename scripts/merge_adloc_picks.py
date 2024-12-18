@@ -4,19 +4,19 @@ import multiprocessing as mp
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from glob import glob
 from threading import Lock, Thread
 
 import fsspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyproj
+from args import parse_args
 from obspy import read_inventory
 from obspy.clients.fdsn import Client
 from sklearn.cluster import DBSCAN
 from tqdm import tqdm
-from args import parse_args
-from glob import glob
-import matplotlib.pyplot as plt
 from utils.plotting import plotting_ransac
 
 # %%
@@ -26,6 +26,7 @@ if __name__ == "__main__":
     root_path = args.root_path
     region = args.region
     iter = args.iter
+    print(f"Merge adloc picks iter={iter}")
 
     data_path = f"{region}/adloc"
     result_path = f"{region}/adloc"
@@ -125,8 +126,12 @@ if __name__ == "__main__":
     picks.to_csv(f"{root_path}/{result_path}/adloc_picks_sst_{iter}.csv", index=False)
     stations.to_csv(f"{root_path}/{result_path}/adloc_stations_sst_{iter}.csv", index=False)
 
-    # %%
+    ## save current iteration as the latest
+    events.to_csv(f"{root_path}/{result_path}/adloc_events.csv", index=False)
+    picks.to_csv(f"{root_path}/{result_path}/adloc_picks.csv", index=False)
+    stations.to_csv(f"{root_path}/{result_path}/adloc_stations.csv", index=False)
 
+    # %%
     events = pd.read_csv(f"{root_path}/{result_path}/adloc_events_sst_{iter}.csv")
     picks = pd.read_csv(f"{root_path}/{result_path}/adloc_picks_sst_{iter}.csv")
     stations = pd.read_csv(f"{root_path}/{result_path}/adloc_stations_sst_{iter}.csv")

@@ -3,6 +3,7 @@ import argparse
 import json
 import multiprocessing as mp
 import os
+from glob import glob
 from typing import Dict, List, NamedTuple
 
 import fsspec
@@ -13,11 +14,10 @@ from adloc.eikonal2d import init_eikonal2d
 from adloc.sacloc2d import ADLoc
 from adloc.utils import invert_location, invert_location_iter
 from args import parse_args
-from glob import glob
+from pyproj import Proj
 
 # from utils import plotting_ransac
 from utils.plotting import plotting, plotting_ransac
-from pyproj import Proj
 
 
 # %%
@@ -375,28 +375,19 @@ if __name__ == "__main__":
     # %%
     print(f"{jdays[node_rank] = }")
     if num_nodes == 1:
-        for i in range(10):
-            run_adloc(
-                root_path=root_path,
-                region=region,
-                config=config,
-                jdays=jdays[node_rank],
-                iter=i,
-                protocol=protocol,
-                token=token,
-                bucket=bucket,
-            )
-            os.system(
-                f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {i}"
-            )
+        max_iter = 10
     else:
+        max_iter = 1
+
+    for i in range(max_iter):
         run_adloc(
             root_path=root_path,
             region=region,
             config=config,
             jdays=jdays[node_rank],
-            iter=iter,
+            iter=i,
             protocol=protocol,
             token=token,
             bucket=bucket,
         )
+        os.system(f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {i}")

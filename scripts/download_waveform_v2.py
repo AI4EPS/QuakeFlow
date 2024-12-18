@@ -210,8 +210,8 @@ def download_waveform(
 
         client = obspy.clients.fdsn.Client(provider)
 
-        DELTATIME = "1H"  # 1H or 1D
-        # DELTATIME = "1D"
+        # DELTATIME = "1H"  # 1H or 1D
+        DELTATIME = "1D"
         if DELTATIME == "1H":
             start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
         elif DELTATIME == "1D":
@@ -289,31 +289,6 @@ def download_waveform(
                     out = job.get()
                     if out is not None:
                         print(out)
-
-    tmp_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed", recursive=True))
-    mseed_list = []
-    for mseed in tmp_list:
-        tmp = mseed.split("/")
-        # year, jday = tmp[-3].split("-")
-        # hour = tmp[-2]
-        year, jday, hour = tmp[-4], tmp[-3], tmp[-2]
-        if starttimes[0].strftime("%Y-%jT%H") <= f"{year}-{jday}T{hour}" <= starttimes[-1].strftime("%Y-%jT%H"):
-            mseed_list.append(mseed)
-
-    print(f"rank {rank}: {len(mseed_list) = }, {mseed_list[0]}, {mseed_list[-1]}")
-
-    # %% copy to results/network
-    if not os.path.exists(f"{root_path}/{region}/results/network"):
-        os.makedirs(f"{root_path}/{region}/results/network")
-    with open(f"{root_path}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv", "w") as fp:
-        fp.write("\n".join(mseed_list))
-    if protocol != "file":
-        fs.put(
-            f"{root_path}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv",
-            f"{bucket}/{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv",
-        )
-
-    return f"{region}/results/network/mseed_list_{rank:03d}_{num_nodes:03d}.csv"
 
 
 if __name__ == "__main__":

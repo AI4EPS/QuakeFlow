@@ -34,10 +34,10 @@ def run_phasenet(
 
     # %%
     waveform_dir = f"{region}/waveforms"
-    mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
-    subdir = 3
-    # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
-    # subdir = 2
+    # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
+    # subdir = 3
+    mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
+    subdir = 2
 
     # %%
     mseed_3c = defaultdict(list)
@@ -49,8 +49,8 @@ def run_phasenet(
 
     # %%
     if not overwrite:
-        processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/??/*.csv"))
-        # processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/*.csv"))
+        # processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/??/*.csv"))
+        processed = sorted(glob(f"{root_path}/{result_path}/picks/????/???/*.csv"))
         processed = ["/".join(f.replace(".csv", "").split("/")[-subdir - 1 :]) for f in processed]
         processed = [p[:-1] for p in processed]  ## remove the channel suffix
         print(f"Number of processed files: {len(processed)}")

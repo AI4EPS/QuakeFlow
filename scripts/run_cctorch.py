@@ -50,17 +50,25 @@ else:
         f"../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
         f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
         f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
-        f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
+        f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
+        f"--result_path={root_path}/{result_path}"
     )
 
-num_gpu = torch.cuda.device_count()
-if num_gpu == 0:
-    if os.uname().sysname == "Darwin":
-        cmd = f"python {base_cmd} --device=cpu"
-    else:
-        cmd = f"python {base_cmd} --device=cpu"
+
+if torch.cuda.is_available():
+    device = "cuda"
+    num_gpu = torch.cuda.device_count()
+elif torch.backends.mps.is_available():
+    device = "mps"
+    num_gpu = 0
 else:
-    cmd = f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd}"
+    device = "cpu"
+    num_gpu = 0
+
+if num_gpu > 0:
+    cmd = f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd} --device={device}"
+else:
+    cmd = f"python {base_cmd} --device={device}"
 print(cmd)
 os.system(cmd)
 

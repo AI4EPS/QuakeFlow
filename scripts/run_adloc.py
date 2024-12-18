@@ -39,10 +39,10 @@ def run_adloc(
     picks_file = f"{data_path}/gamma_picks.csv"
     events_file = f"{data_path}/gamma_events.csv"
 
-    # picks_file = f"{root_path}/{region}/gamma/gamma_picks.csv"
-    # events_file = f"{root_path}/{region}/gamma/gamma_events.csv"
-    # result_path = f"{root_path}/{region}/adloc_gamma"
-    # figure_path = f"{root_path}/{region}/adloc_gamma/figures"
+    picks_file = f"{root_path}/{region}/gamma/gamma_picks.csv"
+    events_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+    result_path = f"{root_path}/{region}/adloc_gamma"
+    figure_path = f"{root_path}/{region}/adloc_gamma/figures"
 
     # picks_file = f"{root_path}/{region}/gamma_plus/gamma_picks.csv"
     # events_file = f"{root_path}/{region}/gamma_plus/gamma_events.csv"
@@ -242,7 +242,7 @@ def run_adloc(
             stations["idx_sta"].map(station_term_time[station_term_time["phase_type"] == 1]["residual_time"]).fillna(0)
         )
 
-        plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_ransac_sst_{iter}")
+        plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_adloc_sst_{iter}")
 
         if "event_index" not in events.columns:
             events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
@@ -254,9 +254,9 @@ def run_adloc(
         picks["adloc_mask"] = picks["mask"]
         picks["adloc_residual_time"] = picks["residual_time"]
         picks["adloc_residual_amplitude"] = picks["residual_amplitude"]
-        picks.to_csv(os.path.join(result_path, f"ransac_picks_sst_{iter}.csv"), index=False)
-        events.to_csv(os.path.join(result_path, f"ransac_events_sst_{iter}.csv"), index=False)
-        stations.to_csv(os.path.join(result_path, f"ransac_stations_sst_{iter}.csv"), index=False)
+        picks.to_csv(os.path.join(result_path, f"adloc_picks_sst_{iter}.csv"), index=False)
+        events.to_csv(os.path.join(result_path, f"adloc_events_sst_{iter}.csv"), index=False)
+        stations.to_csv(os.path.join(result_path, f"adloc_stations_sst_{iter}.csv"), index=False)
 
         if iter == 0:
             MIN_SST_S = (
@@ -290,9 +290,9 @@ def run_adloc(
     stations.drop(["idx_sta", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
     # stations.rename({"station_term": "adloc_station_term_s"}, axis=1, inplace=True)
 
-    picks.to_csv(os.path.join(result_path, "ransac_picks.csv"), index=False)
-    events.to_csv(os.path.join(result_path, "ransac_events.csv"), index=False)
-    stations.to_csv(os.path.join(result_path, "ransac_stations.csv"), index=False)
+    picks.to_csv(os.path.join(result_path, "adloc_picks.csv"), index=False)
+    events.to_csv(os.path.join(result_path, "adloc_events.csv"), index=False)
+    stations.to_csv(os.path.join(result_path, "adloc_stations.csv"), index=False)
 
 
 # %%
