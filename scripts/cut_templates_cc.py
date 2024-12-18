@@ -162,7 +162,8 @@ def extract_template_numpy(
     waveforms_dict = {}
     for i, station in stations.iterrows():
         station_id = station["station_id"]
-        for c in station["component"]:
+        # for c in station["component"]:
+        for c in ["E", "N", "Z", "1", "2", "3"]:
             mseed_name = f"{mseed_path}/{station_id}{c}.mseed"
             if os.path.exists(mseed_name):
                 try:
@@ -194,7 +195,8 @@ def extract_template_numpy(
         station_id = station["station_id"]
         event = events.loc[idx_eve]
 
-        for c in station["component"]:
+        # for c in station["component"]:
+        for c in ["E", "N", "Z", "1", "2", "3"]:
             ic = config["component_mapping"][c]  # 012 for P, 345 for S
 
             if f"{station_id}{c}" in waveforms_dict:
@@ -291,7 +293,7 @@ def cut_templates(root_path, region, config):
     # data_path = f"{region}/adloc"
     # result_path = f"{region}/cctorch"
 
-    data_path = f"{region}/adloc_gamma"
+    data_path = f"{region}/adloc"
     result_path = f"{region}/cctorch"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
@@ -350,13 +352,13 @@ def cut_templates(root_path, region, config):
     )
 
     # %%
-    stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
+    stations = pd.read_csv(f"{root_path}/{data_path}/adloc_stations.csv")
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
     print(f"{len(stations) = }")
     print(stations.iloc[:5])
 
     # %%
-    events = pd.read_csv(f"{root_path}/{data_path}/ransac_events.csv", parse_dates=["time"])
+    events = pd.read_csv(f"{root_path}/{data_path}/adloc_events.csv", parse_dates=["time"])
     events.rename(columns={"time": "event_time"}, inplace=True)
     events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
     reference_t0 = events["event_time"].min()
@@ -416,7 +418,7 @@ def cut_templates(root_path, region, config):
     eikonal = init_eikonal2d(eikonal)
 
     # %%
-    picks = pd.read_csv(f"{root_path}/{data_path}/ransac_picks.csv")
+    picks = pd.read_csv(f"{root_path}/{data_path}/adloc_picks.csv")
     picks = picks[picks["adloc_mask"] == 1]
     picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
     min_phase_score = picks["phase_score"].min()
@@ -514,7 +516,11 @@ def cut_templates(root_path, region, config):
 
     picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
 
-    dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
+    ## By hour
+    # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
+    ## By day
+    dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???"), reverse=True)
+
     ncpu = min(16, mp.cpu_count())
     print(f"Using {ncpu} cores")
 
@@ -529,8 +535,12 @@ def cut_templates(root_path, region, config):
 
     ctx = mp.get_context("spawn")
     picks_group = picks.copy()
-    picks_group["year_jday_hour"] = picks_group["phase_time"].dt.strftime("%Y-%jT%H")
-    picks_group = picks_group.groupby("year_jday_hour")
+    ## By hour
+    # picks_group["year_jday_hour"] = picks_group["phase_time"].dt.strftime("%Y-%jT%H")
+    # picks_group = picks_group.groupby("year_jday_hour")
+    ## By day
+    picks_group["year_jday"] = picks_group["phase_time"].dt.strftime("%Y-%j")
+    picks_group = picks_group.groupby("year_jday")
 
     with ctx.Manager() as manager:
         lock = manager.Lock()
@@ -539,12 +549,22 @@ def cut_templates(root_path, region, config):
             for d in dirs:
 
                 tmp = d.split("/")
-                year, jday, hour = tmp[-3:]
+                ## By hour
+                # year, jday, hour = tmp[-3:]
+                ## By day
+                year, jday = tmp[-2:]
 
-                if f"{year}-{jday}T{hour}" not in picks_group.groups:
+                ## By hour
+                # if f"{year}-{jday}T{hour}" not in picks_group.groups:
+                ## By day
+                if f"{year}-{jday}" not in picks_group.groups:
                     pbar_update(d)
                     continue
-                picks_ = picks_group.get_group(f"{year}-{jday}T{hour}")
+
+                ## By hour
+                # picks_ = picks_group.get_group(f"{year}-{jday}T{hour}")
+                ## By day
+                picks_ = picks_group.get_group(f"{year}-{jday}")
                 events_ = events.loc[picks_["idx_eve"].unique()]
                 picks_ = picks_.set_index(["idx_eve", "idx_sta", "phase_type"])
 
