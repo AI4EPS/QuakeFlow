@@ -44,7 +44,7 @@ task = sky.Task(
     setup="""
 echo "Begin setup."                                                           
 echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
-pip install h5py tqdm wandb pandas numpy scipy
+pip install h5py tqdm wandb pandas scipy numpy==1.26.4
 pip install fsspec gcsfs s3fs                                                   
 pip install obspy pyproj
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121

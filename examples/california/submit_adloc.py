@@ -24,7 +24,7 @@ task = sky.Task(
     setup="""
 echo "Begin setup."                                                           
 echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
-pip install -U h5py tqdm wandb pandas numpy scipy scikit-learn
+pip install -U h5py tqdm wandb pandas scipy scikit-learn numpy==1.26.4
 pip install -U fsspec gcsfs                                                    
 pip install -U obspy pyproj
 pip install -e /opt/ADLoc
