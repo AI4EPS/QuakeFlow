@@ -421,8 +421,15 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 stations = pd.read_json(fp, orient="index")
         stations["station_id"] = stations.index
         stations.sort_values(by=["latitude", "longitude"], inplace=True)
-        print(f"{len(stations) = }")
-        print(stations.iloc[:5])
+
+        # ############### DEBUG ###############
+        # "minlatitude": 35.205,
+        # "maxlatitude": 36.205,
+        # "minlongitude": -118.004,
+        # "maxlongitude": -117.004,
+        minlat, maxlat = 35.205, 36.205
+        minlon, maxlon = -118.004, -117.004
+        # ############### DEBUG ###############
 
         # %%
         # events = pd.read_csv(f"{root_path}/{data_path}/ransac_events.csv", parse_dates=["time"])
@@ -434,6 +441,18 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         else:
             with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
                 events = pd.read_csv(fp, parse_dates=["time"])
+
+        # ############### DEBUG ###############
+        # events = events[
+        #     (events["latitude"] >= minlat)
+        #     & (events["latitude"] <= maxlat)
+        #     & (events["longitude"] >= minlon)
+        #     & (events["longitude"] <= maxlon)
+        # ]
+        # plt.figure(figsize=(10, 10))
+        # plt.scatter(events["longitude"], events["latitude"], s=1)
+        # plt.savefig(f"events_{year:04d}_{jday:03d}.png")
+        # ############### DEBUG ###############
 
         events.rename(columns={"time": "event_time"}, inplace=True)
         events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
@@ -466,6 +485,10 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         else:
             with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv", "r") as fp:
                 picks = pd.read_csv(fp)
+
+        # ############### DEBUG ###############
+        # picks = picks[(picks["event_index"].isin(events["event_index"]))]
+        # ############### DEBUG ###############
 
         picks = picks[picks["adloc_mask"] == 1]
         picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
@@ -507,6 +530,12 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         print(f"{len(picks) = }")
         picks = picks[picks["dist_km"] < config["max_epicenter_dist_km"]]
         print(f"{len(picks) = } with dist_km < {config['max_epicenter_dist_km']} km")
+        print(picks.iloc[:5])
+
+        ## filter stations
+        stations = stations[stations["station_id"].isin(picks["station_id"])]
+        print(f"{len(stations) = }")
+        print(stations.iloc[:5])
 
         # %% Reindex event and station to make it continuous
         stations["idx_sta"] = np.arange(len(stations))

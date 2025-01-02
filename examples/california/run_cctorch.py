@@ -1,15 +1,33 @@
 # %%
+import argparse
 import os
 
 import torch
-from args import parse_args
+
+
+##
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Gamma on NCEDC/SCEDC data")
+    parser.add_argument("--num_nodes", type=int, default=1)
+    parser.add_argument("--node_rank", type=int, default=0)
+    parser.add_argument("--year", type=int, default=2023)
+    parser.add_argument("--root_path", type=str, default="local")
+    parser.add_argument("--region", type=str, default="Cal")
+    parser.add_argument("--bucket", type=str, default="quakeflow_catalog")
+    return parser.parse_args()
+
 
 args = parse_args()
+
+##
+year = 2019
+jday = 185
+
 # %%
 root_path = args.root_path
 region = args.region
 
-data_path = f"{region}/cctorch"
+data_path = f"{region}/cctorch/{year}"
 result_path = f"{region}/cctorch/ccpairs"
 
 # data_path = f"{region}/cctorch_ca"
@@ -28,31 +46,14 @@ batch = 1_024
 block_size1 = 1000_000
 block_size2 = 1000_000
 
-if args.dtct_pair:
-    dt_ct = f"{root_path}/{region}/hypodd/dt.ct"
-    pair_list = f"{root_path}/{region}/hypodd/pairs.txt"
-    lines = []
-    with open(dt_ct, "r") as fp:
-        for line in fp:
-            if line.startswith("#"):
-                ev1, ev2 = line.split()[1:3]
-                if ev1 > ev2:
-                    ev1, ev2 = ev2, ev1
-                lines.append(f"{ev1},{ev2}\n")
 
-    print(f"Number of pairs from hypodd dt.ct: {len(lines)}")
-    with open(f"{root_path}/{region}/hypodd/pairs.txt", "w") as fp:
-        fp.writelines(lines)
-    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/hypodd/pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
-
-else:
-    base_cmd = (
-        f"../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
-        f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
-        f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
-        f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
-        f"--result_path={root_path}/{result_path}"
-    )
+base_cmd = (
+    f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs_{jday:03d}.txt --data_path1={root_path}/{data_path}/template_{jday:03d}.dat --data_format1=memmap "
+    f"--data_list1={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv "
+    f"--events_csv={root_path}/{data_path}/cctorch_events_{jday:03d}.csv --picks_csv={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv --stations_csv={root_path}/{data_path}/cctorch_stations_{jday:03d}.csv "
+    f"--config={root_path}/{data_path}/config_{jday:03d}.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
+    f"--result_path={root_path}/{result_path}"
+)
 
 
 if torch.cuda.is_available():
@@ -70,23 +71,34 @@ if num_gpu > 0:
 else:
     cmd = f"python {base_cmd} --device={device}"
 print(cmd)
-os.system(cmd)
+# os.system(cmd)
 
 # %%
 for rank in range(num_gpu):
     if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
         continue
     if rank == 0:
-        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
+        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/../dtcc.csv"
     else:
-        cmd = (
-            f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
-        )
+        cmd = f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/../dtcc.csv"
     print(cmd)
     os.system(cmd)
 
 
-cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
+cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/../dt.cc"
+print(cmd)
+os.system(cmd)
+
+##
+cmd = f"cp {root_path}/{data_path}/cctorch_stations_{jday:03d}.csv {root_path}/{data_path}/../cctorch_stations.csv"
+print(cmd)
+os.system(cmd)
+
+cmd = f"cp {root_path}/{data_path}/cctorch_events_{jday:03d}.csv {root_path}/{data_path}/../cctorch_events.csv"
+print(cmd)
+os.system(cmd)
+
+cmd = f"cp {root_path}/{data_path}/cctorch_picks_{jday:03d}.csv {root_path}/{data_path}/../cctorch_picks.csv"
 print(cmd)
 os.system(cmd)
 
