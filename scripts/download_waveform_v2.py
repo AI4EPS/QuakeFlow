@@ -182,7 +182,8 @@ def download_waveform(
     root_path: str,
     region: str,
     config: Dict,
-    rank: int = 0,
+    node_rank: int = 0,
+    num_nodes: int = 1,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
@@ -192,8 +193,7 @@ def download_waveform(
     fs = fsspec.filesystem(protocol=protocol, token=token)
     # %%
     network_dir = f"{region}/results/network"
-    num_nodes = config["num_nodes"] if "num_nodes" in config else 1
-    print(f"{num_nodes = }, {rank = }")
+    print(f"{num_nodes = }, {node_rank = }")
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
@@ -219,8 +219,8 @@ def download_waveform(
         else:
             raise ValueError("Invalid interval")
         starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left").to_list()
-        starttimes = np.array_split(starttimes, num_nodes)[rank]
-        print(f"rank {rank}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
+        starttimes = np.array_split(starttimes, num_nodes)[node_rank]
+        print(f"rank {node_rank}: {len(starttimes) = }, {starttimes[0]}, {starttimes[-1]}")
 
         if provider.lower() in ["scedc", "ncedc"]:
             cloud_config = {
@@ -299,9 +299,11 @@ if __name__ == "__main__":
     protocol = args.protocol
     bucket = args.bucket
     token = args.token
+    node_rank = args.node_rank
+    num_nodes = args.num_nodes
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_waveform(root_path=root_path, region=region, config=config)
+    download_waveform(root_path=root_path, region=region, config=config, node_rank=node_rank, num_nodes=num_nodes)
 # %%

@@ -38,11 +38,13 @@ def run_adloc(
     data_path = f"{root_path}/{region}/gamma"
     picks_file = f"{data_path}/gamma_picks.csv"
     events_file = f"{data_path}/gamma_events.csv"
+    result_path = f"{root_path}/{region}/adloc"
+    figure_path = f"{root_path}/{region}/adloc/figures"
 
-    picks_file = f"{root_path}/{region}/gamma/gamma_picks.csv"
-    events_file = f"{root_path}/{region}/gamma/gamma_events.csv"
-    result_path = f"{root_path}/{region}/adloc_gamma"
-    figure_path = f"{root_path}/{region}/adloc_gamma/figures"
+    # picks_file = f"{root_path}/{region}/gamma/gamma_picks.csv"
+    # events_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+    # result_path = f"{root_path}/{region}/adloc_gamma"
+    # figure_path = f"{root_path}/{region}/adloc_gamma/figures"
 
     # picks_file = f"{root_path}/{region}/gamma_plus/gamma_picks.csv"
     # events_file = f"{root_path}/{region}/gamma_plus/gamma_events.csv"

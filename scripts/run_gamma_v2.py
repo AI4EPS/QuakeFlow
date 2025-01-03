@@ -2,16 +2,16 @@
 import argparse
 import json
 import os
+from glob import glob
 from typing import Dict, NamedTuple
 
 import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from args import parse_args
 from gamma.utils import association
 from pyproj import Proj
-from glob import glob
-from args import parse_args
 
 
 def run_gamma(

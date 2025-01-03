@@ -90,6 +90,7 @@ if __name__ == "__main__":
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
+    os.system("cd ../PhaseNet && git checkout quakeflow && git pull")
     run_phasenet(root_path=root_path, region=region, config=config)
 
     if num_nodes == 1:

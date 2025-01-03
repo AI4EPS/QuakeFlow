@@ -1,46 +1,45 @@
-from typing import Dict, List
+import json
+import os
+import sys
+from datetime import datetime
+from glob import glob
+from typing import Dict
 
-from kfp import dsl
+import fsspec
+import numpy as np
+import obspy
+import obspy.clients.fdsn
+import pandas as pd
+from args import parse_args
+from obspy.clients.fdsn.mass_downloader import (
+    CircularDomain,
+    GlobalDomain,
+    MassDownloader,
+    RectangularDomain,
+    Restrictions,
+)
 
 
-@dsl.component(base_image="zhuwq0/quakeflow:latest")
 def download_waveform(
     root_path: str,
     region: str,
     config: Dict,
-    rank: int = 0,
+    node_rank: int = 0,
+    num_nodes: int = 1,
     protocol: str = "file",
     bucket: str = "",
     token: Dict = None,
-) -> List:
-    import os
-    from datetime import datetime
-    from glob import glob
-
-    import fsspec
-    import numpy as np
-    import obspy
-    import obspy.clients.fdsn
-    import pandas as pd
-    from obspy.clients.fdsn.mass_downloader import (
-        CircularDomain,
-        GlobalDomain,
-        MassDownloader,
-        RectangularDomain,
-        Restrictions,
-    )
+):
 
     # %%
     fs = fsspec.filesystem(protocol, token=token)
 
     # %%
-    num_nodes = config["kubeflow"]["num_nodes"] if "kubeflow" in config else 1
-
     waveform_dir = f"{region}/waveforms"
     if not os.path.exists(f"{root_path}/{waveform_dir}"):
         os.makedirs(f"{root_path}/{waveform_dir}")
 
-    DELTATIME = "1H"  # "1D"
+    DELTATIME = "1D"  # "1D"
     if DELTATIME == "1H":
         start = datetime.fromisoformat(config["starttime"]).strftime("%Y-%m-%dT%H")
         DELTATIME_SEC = 3600
@@ -49,7 +48,7 @@ def download_waveform(
         DELTATIME_SEC = 3600 * 24
     starttimes = pd.date_range(start, config["endtime"], freq=DELTATIME, tz="UTC", inclusive="left")
     # starttimes = starttimes[rank::num_nodes]
-    starttimes = np.array_split(starttimes, num_nodes)[rank]
+    starttimes = np.array_split(starttimes, num_nodes)[node_rank]
     if len(starttimes) == 0:
         return
 
@@ -93,9 +92,11 @@ def download_waveform(
     print(f"{restrictions = }")
 
     def get_mseed_storage(network, station, location, channel, starttime, endtime):
-        mseed_name = (
-            f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
-        )
+        if DELTATIME == "1H":
+            mseed_name = f"{starttime.strftime('%Y-%j')}/{starttime.strftime('%H')}/{network}.{station}.{location}.{channel}.mseed"
+        elif DELTATIME == "1D":
+            mseed_name = f"{starttime.strftime('%Y/%j')}/{network}.{station}.{location}.{channel}.mseed"
+        mseed_name = f"{starttime.strftime('%Y/%j')}/{network}.{station}.{location}.{channel}.mseed"
         if os.path.exists(f"{root_path}/{waveform_dir}/{mseed_name}"):
             print(f"{root_path}/{waveform_dir}/{mseed_name} already exists. Skip.")
             return True
@@ -123,30 +124,24 @@ def download_waveform(
         fs.put(f"{root_path}/{waveform_dir}/", f"{bucket}/{waveform_dir}/", recursive=True)
         # fs.put(f"{root_path}/{waveform_dir}/stations/", f"{bucket}/{waveform_dir}/stations/", recursive=True)
 
-    mseed_list = glob(f"{root_path}/{waveform_dir}/**/*.mseed", recursive=True)
-    with open(f"{root_path}/{region}/data/mseed_list_{rank:03d}.csv", "w") as fp:
-        fp.write("\n".join(mseed_list))
-
-    return f"{region}/data/mseed_list_{rank:03d}.csv"
+    return
 
 
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
 
-    root_path = "local"
-    region = "demo"
-    rank = int(os.environ["RANK"]) if "RANK" in os.environ else 0
-    world_size = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
-    if len(sys.argv) > 1:
-        root_path = sys.argv[1]
-        region = sys.argv[2]
+    args = parse_args()
+    root_path = args.root_path
+    region = args.region
+    protocol = args.protocol
+    bucket = args.bucket
+    token = args.token
+    node_rank = args.node_rank
+    num_nodes = args.num_nodes
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)
 
-    download_waveform.execute(root_path, region=region, config=config, rank=rank)
+    download_waveform(root_path, region=region, config=config, node_rank=node_rank, num_nodes=num_nodes)
 
     # # %%
     # bucket = "quakeflow_share"

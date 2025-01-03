@@ -58,7 +58,7 @@ if os.path.exists(gamma_file):
 
 
 # %%
-adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
+adloc_file = f"{root_path}/{region}/adloc/adloc_events.csv"
 adloc_exist = False
 if os.path.exists(adloc_file):
     print(f"Reading {adloc_file}")
@@ -66,6 +66,14 @@ if os.path.exists(adloc_file):
     adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
     # adloc_catalog["magnitude"] = 0.0
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
+
+# %%
+qtm_file = f"{root_path}/{region}/qtm/qtm_events.csv"
+qtm_exist = False
+if os.path.exists(qtm_file):
+    print(f"Reading {qtm_file}")
+    qtm_exist = True
+    qtm_catalog = pd.read_csv(qtm_file, parse_dates=["time"])
 
 # %%
 adloc_dt_file = f"{root_path}/{region}/adloc_dd/adloc_dt_events.csv"
@@ -335,9 +343,9 @@ if os.path.exists(growclust_file):
 
 # %%
 size_factor = 2600
-fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(10, 15), sharex=True, sharey=True)
+fig, ax = plt.subplots(4, 3, squeeze=False, figsize=(15, 15), sharex=True, sharey=True)
 for i in range(4):
-    for j in range(2):
+    for j in range(3):
         ax[i, j].set_xlim(xlim)
         ax[i, j].set_ylim(ylim)
         ax[i, j].set_aspect((ylim[1] - ylim[0]) / ((xlim[1] - xlim[0]) * np.cos(np.mean(ylim) * np.pi / 180)))
@@ -375,7 +383,7 @@ if gamma_exist and (len(gamma_catalog) > 0):
     # ylim = ax[0, 1].get_ylim()
 
 if adloc_exist and (len(adloc_catalog) > 0):
-    ax[0, 1].scatter(
+    ax[0, 2].scatter(
         adloc_catalog["longitude"],
         adloc_catalog["latitude"],
         s=min(2, size_factor / len(adloc_catalog)),
@@ -383,8 +391,19 @@ if adloc_exist and (len(adloc_catalog) > 0):
         linewidth=0,
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    # ax[0, 2].legend()
+    ax[0, 2].set_title(f"AdLoc: {len(adloc_catalog)}")
+
+if qtm_exist and (len(qtm_catalog) > 0):
+    ax[1, 2].scatter(
+        qtm_catalog["longitude"],
+        qtm_catalog["latitude"],
+        s=min(2, size_factor / len(qtm_catalog)),
+        alpha=1.0,
+        linewidth=0,
+        label=f"QTM: {len(qtm_catalog)}",
+    )
+    ax[1, 2].set_title(f"QTM: {len(qtm_catalog)}")
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -459,11 +478,11 @@ plt.savefig(f"{root_path}/{figure_path}/catalogs_location.png", dpi=300)
 plt.show()
 
 # %%
-fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(15, 30), sharex=True, sharey=True)
+fig, ax = plt.subplots(4, 3, squeeze=False, figsize=(20, 30), sharex=True, sharey=True)
 cmin = 0
 cmax = 10
 for i in range(4):
-    for j in range(2):
+    for j in range(3):
         ax[i, j].grid()
 
 if routine_exist and (len(routine_catalog) > 0):
@@ -509,7 +528,7 @@ else:
     ylim = None
 
 if adloc_exist and (len(adloc_catalog) > 0):
-    ax[0, 1].scatter(
+    ax[0, 2].scatter(
         adloc_catalog["longitude"],
         adloc_catalog["depth_km"],
         c=adloc_catalog["depth_km"],
@@ -521,10 +540,27 @@ if adloc_exist and (len(adloc_catalog) > 0):
         cmap="viridis_r",
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 1].set_xlim(xlim)
-    ax[0, 1].set_ylim(ylim)
+    # ax[0, 2].legend()
+    ax[0, 2].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[0, 2].set_xlim(xlim)
+    ax[0, 2].set_ylim(ylim)
+
+if qtm_exist and (len(qtm_catalog) > 0):
+    ax[1, 2].scatter(
+        qtm_catalog["longitude"],
+        qtm_catalog["depth_km"],
+        c=qtm_catalog["depth_km"],
+        s=8000 / len(qtm_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+    )
+    # ax[1, 2].legend()
+    ax[1, 2].set_title(f"QTM: {len(qtm_catalog)}")
+    ax[1, 2].set_xlim(xlim)
+    ax[1, 2].set_ylim(ylim)
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -630,11 +666,11 @@ plt.show()
 
 
 # %%
-fig, ax = plt.subplots(4, 2, squeeze=False, figsize=(15, 30), sharex=True, sharey=True)
+fig, ax = plt.subplots(4, 3, squeeze=False, figsize=(20, 30), sharex=True, sharey=True)
 cmin = 0
 cmax = 10
 for i in range(4):
-    for j in range(2):
+    for j in range(3):
         ax[i, j].grid()
 
 if routine_exist and (len(routine_catalog) > 0):
@@ -680,7 +716,7 @@ else:
     ylim = None
 
 if adloc_exist and (len(adloc_catalog) > 0):
-    ax[0, 1].scatter(
+    ax[0, 2].scatter(
         adloc_catalog["latitude"],
         adloc_catalog["depth_km"],
         c=adloc_catalog["depth_km"],
@@ -692,10 +728,26 @@ if adloc_exist and (len(adloc_catalog) > 0):
         cmap="viridis_r",
         label=f"AdLoc: {len(adloc_catalog)}",
     )
-    # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 1].set_xlim(xlim)
-    ax[0, 1].set_ylim(ylim)
+    # ax[0, 2].legend()
+    ax[0, 2].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[0, 2].set_xlim(xlim)
+    ax[0, 2].set_ylim(ylim)
+
+if qtm_exist and (len(qtm_catalog) > 0):
+    ax[1, 2].scatter(
+        qtm_catalog["latitude"],
+        qtm_catalog["depth_km"],
+        c=qtm_catalog["depth_km"],
+        s=8000 / len(qtm_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+    )
+    ax[1, 2].set_title(f"QTM: {len(qtm_catalog)}")
+    ax[1, 2].set_xlim(xlim)
+    ax[1, 2].set_ylim(ylim)
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -815,6 +867,9 @@ if gamma_exist:
 if adloc_exist:
     ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
     ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+# if qtm_exist:
+#     ax[0, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+#     ax[1, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
 if adloc_dt_exist:
     ax[0, 0].plot(
         adloc_dt_catalog["time"], adloc_dt_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
@@ -862,6 +917,9 @@ if gamma_exist:
 if adloc_exist:
     ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
     ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
+# if qtm_exist:
+#     ax[0, 0].hist(qtm_catalog["magnitude"], bins=bins, alpha=0.5, label="QTM")
+#     ax[1, 0].hist(qtm_catalog["magnitude"], bins=bins, alpha=0.5, label="QTM")
 if adloc_dt_exist:
     ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc (CT)")
 if adloc_dtcc_exist:
@@ -952,6 +1010,15 @@ if plot3d:
             adloc_catalog["depth_km"],
             config_plot3d,
             f"{root_path}/{figure_path}/earthquake_location_adloc.html",
+        )
+
+    if qtm_exist and len(qtm_catalog) > 0:
+        plot3d(
+            qtm_catalog["longitude"],
+            qtm_catalog["latitude"],
+            qtm_catalog["depth_km"],
+            config_plot3d,
+            f"{root_path}/{figure_path}/earthquake_location_qtm.html",
         )
 
     if adloc_dt_exist and len(adloc_dt_catalog) > 0:
