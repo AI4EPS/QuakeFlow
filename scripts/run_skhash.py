@@ -1,4 +1,3 @@
-# %%
 import argparse
 import os
 from glob import glob
@@ -10,7 +9,6 @@ import pandas as pd
 from obspy.imaging.beachball import beach
 from sklearn.cluster import DBSCAN
 from args import parse_args
-
 
 args = parse_args()
 root_path = args.root_path
@@ -27,9 +25,12 @@ if not os.path.exists(f"{root_path}/{result_path}/IN"):
 if not os.path.exists(f"{root_path}/{result_path}/OUT"):
     os.makedirs(f"{root_path}/{result_path}/OUT")
 
+
 # %%
 if not os.path.exists(f"../SKHASH"):
-    os.system(f"git clone git@github.com:AI4EPS/SKHASH.git ../SKHASH")
+    os.system(f"git clone https://code.usgs.gov/esc/SKHASH.git ../SKHASH")
+    # os.system(f"git clone git@github.com:AI4EPS/SKHASH.git ../SKHASH")
+
 
 # %%
 stations = pd.read_json(f"{root_path}/{region}/obspy/stations.json", orient="index")
@@ -48,7 +49,6 @@ stations.to_csv(
 
 # %%
 events = pd.read_csv(f"{root_path}/{region}/adloc/ransac_events.csv", parse_dates=["time"])
-# events = pd.read_csv(f"{root_path}/{region}/adloc/debug_events.csv", parse_dates=["time"])
 if "magnitude" not in events.columns:
     events["magnitude"] = pd.NA
 events = events[["event_index", "time", "latitude", "longitude", "depth_km", "magnitude"]]
@@ -59,37 +59,14 @@ events["vert_uncert_km"] = 0.0
 events = events[events["depth"] >= 0]
 events.to_csv(f"{root_path}/{result_path}/IN/catalog.csv", index=None)
 
-# %%
-picks = pd.read_csv(f"{root_path}/{region}/adloc/ransac_picks.csv", parse_dates=["phase_time"])
+##
+picks = pd.read_csv(f"{root_path}/{region}/adloc_plus/ransac_picks.csv", parse_dates=["phase_time"])
+# picks = picks[picks['phase_time'] < pd.to_datetime("2019-07-05 00:00:00")].copy()
 if "adloc_mask" in picks.columns:
     picks = picks[picks["adloc_mask"] == 1.0]
-# picks = pd.read_csv(f"{root_path}/{region}/adloc/debug_picks.csv", parse_dates=["phase_time"])
 picks.sort_values("phase_index", inplace=True)
 picks.rename(columns={"event_index": "event_id"}, inplace=True)
-
-# TODO: check why ADLOC keep picks that are not in events
 picks = picks.merge(events[["event_id"]], on="event_id", how="right")
-
-
-# TODO: do the filtering in EQNet
-def filter_duplicates(picks):
-    picks_filt = []
-    picks["t"] = (picks["phase_time"] - picks["phase_time"].min()).dt.total_seconds()
-    print(f"before {len(picks)} picks")
-    dbscan = DBSCAN(eps=0.10, min_samples=1)
-    for station_id, picks_ in picks.groupby("station_id"):
-        dbscan.fit(picks_[["t"]])
-        picks_["label"] = dbscan.labels_
-        picks_ = picks_.groupby("label").first().reset_index()
-        picks_.drop(columns=["label", "t"], inplace=True)
-        picks_filt.append(picks_)
-    picks_filt = pd.concat(picks_filt)
-    print(f"after {len(picks_filt)} picks")
-    return picks_filt
-
-
-picks = filter_duplicates(picks)
-
 picks = picks[picks["event_id"] != -1]
 picks = picks.merge(
     stations[["station_id", "network", "station", "location", "channel"]],
@@ -105,36 +82,16 @@ ppicks = ppicks[["event_id", "network", "station", "location", "channel", "p_pol
 ppicks.sort_values(["event_id", "network", "station", "location", "channel"], inplace=True)
 ppicks.to_csv(f"{root_path}/{result_path}/IN/pol.csv", index=None)
 
-# %%
-picks["station_id"] = picks["network"] + "." + picks["station"] + "." + picks["location"] + "." + picks["channel"]
-stations["station_id"] = (
-    stations["network"] + "." + stations["station"] + "." + stations["location"] + "." + stations["channel"]
-)
-sp_ratio = []
-for (event_id, staton_id), picks_ in picks.groupby(["event_id", "station_id"]):
-    if len(picks_["phase_type"].unique()) < 2:  ## assume P and S
-        continue
-    if picks_["phase_score"].max() < 0.3:
-        continue
-    ratio = (
-        picks_[picks_["phase_type"] == "S"]["phase_amplitude"].values[0]
-        / picks_[picks_["phase_type"] == "P"]["phase_amplitude"].values[0]
-    )
-    network, station, location, channel = staton_id.split(".")
-    sp_ratio.append(
-        {
-            "event_id": event_id,
-            "network": network,
-            "station": station,
-            "location": location,
-            "channel": channel,
-            "sp_ratio": ratio,
-        }
-    )
-sp_ratio = pd.DataFrame(sp_ratio)
-sp_ratio.to_csv(f"{root_path}/{result_path}/IN/amp.csv", index=None)
 
-# %%
+##
+amps = picks.drop_duplicates(subset=['event_id', 'station_id', 'sp_ratio']).copy()
+amps = amps.drop_duplicates(subset=["event_id", "station_id"]).copy()
+amps = amps[["event_id", "network", "station", "location", "channel", "sp_ratio"]]
+amps.sort_values(["event_id", "network", "station", "location", "channel"], inplace=True)
+amps.to_csv(f"{root_path}/{result_path}/IN/amp.csv", index=None)
+
+
+
 # 1D model from Shelly (2020)
 velocity_model = """# 1D model from Shelly (2020)
 # Depth(km), Vp(km/s)
@@ -193,7 +150,7 @@ $min_polarity_weight  # Any polarities with a abs(weight) < min_polarity_weight 
 0.1
 
 $nmc           # number of trials (e.g., 30)
-50
+30
 
 $maxout        # max num of acceptable focal mech. outputs (e.g., 500)
 500
@@ -205,13 +162,13 @@ $qbadfrac      # assumed noise in amplitude ratios, log10 (e.g. 0.3 for a factor
 0.2
 
 $delmax        # maximum allowed source-receiver distance in km.
-100
+120
 
 $prob_max      # probability threshold for multiples (e.g., 0.1)
 0.2
 
 $max_agap      # maximum azimuthal gap between stations in degree
-150
+180
 
 $max_pgap      # maximum "plungal" gap between stations in degree
 90
@@ -220,12 +177,15 @@ $cangle        # cutoff angle for computing focal mechanism probability
 45
 
 $num_cpus      # number of cpus for computing
-50
+30
+
+$use_fortran
+True
 """
+
 with open(f"{root_path}/{result_path}/control_file.txt", "w") as fp:
     fp.writelines(control_params)
 
-# %%
 # ! python SKHASH.py control_file.txt
 os.system(f"python ../SKHASH/SKHASH/SKHASH.py {root_path}/{result_path}/control_file.txt")
 
