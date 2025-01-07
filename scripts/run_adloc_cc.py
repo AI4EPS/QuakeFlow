@@ -112,7 +112,6 @@ if __name__ == "__main__":
 
     mapping_phase_type_int = {"P": 0, "S": 1}
     config["vel"] = {"P": 6.0, "S": 6.0 / 1.73}
-    config["vel"] = {mapping_phase_type_int[k]: v for k, v in config["vel"].items()}
 
     # %%
     config["eikonal"] = None
@@ -126,12 +125,12 @@ if __name__ == "__main__":
     # vs = [2.469, 2.470, 2.929, 2.930, 3.402, 3.403, 3.848, 3.907, 3.963, 4.500]
     # h = 0.3
 
-    if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
-        velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
-        zz = velocity["z_km"].values
-        vp = velocity["vp"].values
-        vs = velocity["vs"].values
-        h = 0.1
+    # if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
+    #     velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
+    #     zz = velocity["z_km"].values
+    #     vp = velocity["vp"].values
+    #     vs = velocity["vs"].values
+    #     h = 0.1
 
     vel = {"Z": zz, "P": vp, "S": vs}
     config["eikonal"] = {
@@ -164,8 +163,10 @@ if __name__ == "__main__":
         num_event,
         num_station,
         station_loc=station_loc,
+        # event_loc0=event_loc,
         event_loc=event_loc,
         # event_time=event_time,
+        velocity=config["vel"],
         eikonal=config["eikonal"],
     )
     if ddp:
@@ -177,17 +178,23 @@ if __name__ == "__main__":
 
     ## invert loss
     ######################################################################################################
-    # optimizer = optim.Adam(params=travel_time.parameters(), lr=0.1)
-    # optimizer = optim.Adam(params=travel_time.parameters(), lr=0.001)
-    optimizer = optim.RMSprop(params=travel_time.parameters(), lr=0.001)
-    # optimizer = optim.SGD(params=travel_time.parameters(), lr=0.0003)
+    optimizer = optim.Adam(params=travel_time.parameters(), lr=0.001)
+    # optimizer = optim.AdamW(params=travel_time.parameters(), lr=0.001, weight_decay=1.0)
 
     valid_index = np.ones(len(pairs), dtype=bool)
-    EPOCHS = 100
+    EPOCHS = 200
     prev_loss = 1e10
     for epoch in range(EPOCHS):
+
+        # if epoch % 10 == 0 and epoch > 0:
+        #     travel_time.event_loc0.weight.data += travel_time.event_loc.weight.data.detach()
+        #     travel_time.event_loc.weight.data.zero_()
+        # travel_time.event_time0.weight.data += travel_time.event_time.weight.data.detach()
+        # travel_time.event_time.weight.data.zero_()
+
         loss = 0
         optimizer.zero_grad()
+
         # for meta in tqdm(phase_dataset, desc=f"Epoch {i}"):
         for meta in data_loader:
             out = travel_time(
@@ -239,7 +246,7 @@ if __name__ == "__main__":
 
         pred_time = np.concatenate(pred_time)
         valid_index = (
-            np.abs(pred_time - pairs["dt"]) < np.std((pred_time - pairs["dt"])[valid_index]) * 4.0
+            np.abs(pred_time - pairs["dt"]) < np.std((pred_time - pairs["dt"])[valid_index]) * 3.0
         )  # * (np.cos(epoch * np.pi / EPOCHS) + 2.0) # 3std -> 1std
 
         pairs_df = pd.DataFrame(
@@ -262,19 +269,25 @@ if __name__ == "__main__":
 
         phase_dataset.valid_index = valid_index
 
-        ## correct origin time
-        time_shift = np.zeros(len(travel_time.event_time.weight))
-        time_count = np.zeros(len(travel_time.event_time.weight))
-        np.add.at(time_shift, pairs_df["event_index1"].values, pairs_df["time_error"].values)
-        np.add.at(time_shift, pairs_df["event_index2"].values, -pairs_df["time_error"].values)
-        np.add.at(time_count, pairs_df["event_index1"].values, 1)
-        np.add.at(time_count, pairs_df["event_index2"].values, 1)
-        time_shift[time_count > 0] /= time_count[time_count > 0]
-        print(f"loss origin time: {np.mean(time_shift):.3f} {np.std(time_shift):.3f}")
-        travel_time.event_time.weight.data -= torch.tensor(time_shift[:, None], dtype=torch.float32)
+        # ## correct origin time
+        if epoch % 10 == 0 and epoch > 0:
+            time_shift = np.zeros(len(travel_time.event_time.weight))
+            time_count = np.zeros(len(travel_time.event_time.weight))
+            np.add.at(time_shift, pairs_df["event_index1"].values, pairs_df["time_error"].values)
+            np.add.at(time_shift, pairs_df["event_index2"].values, -pairs_df["time_error"].values)
+            np.add.at(time_count, pairs_df["event_index1"].values, 1)
+            np.add.at(time_count, pairs_df["event_index2"].values, 1)
+            time_shift[time_count > 0] /= time_count[time_count > 0]
+            print(f"loss origin time: {np.mean(time_shift):.3e} {np.std(time_shift):.3e}")
+            travel_time.event_time.weight.data -= torch.tensor(time_shift[:, None], dtype=torch.float32)
 
         invert_event_loc = raw_travel_time.event_loc.weight.clone().detach().numpy()
         invert_event_time = raw_travel_time.event_time.weight.clone().detach().numpy()
+        invert_event_loc0 = raw_travel_time.event_loc0.weight.clone().detach().numpy()
+        invert_event_time0 = raw_travel_time.event_time0.weight.clone().detach().numpy()
+        invert_event_loc = invert_event_loc0 + invert_event_loc
+        invert_event_time = invert_event_time0 + invert_event_time
+
         valid_event_index = np.unique(pairs["idx_eve1"][valid_index])
         valid_event_index = np.concatenate(
             [np.unique(pairs["idx_eve1"][valid_index]), np.unique(pairs["idx_eve2"][valid_index])]
@@ -300,50 +313,52 @@ if __name__ == "__main__":
             )
             plotting_dd(events, stations, config, figure_path, events_init, suffix=f"_ddcc_{epoch//10}")
 
-    # ######################################################################################################
-    if len(pairs_df) < 1_000_000:
-        optimizer = optim.LBFGS(params=raw_travel_time.parameters(), max_iter=200, line_search_fn="strong_wolfe")
+    # # ######################################################################################################
+    # if len(pairs_df) < 1_000_000:
+    #     travel_time.event_loc.weight.requires_grad = True
+    #     # travel_time.event_time.weight.requires_grad = True
+    #     optimizer = optim.LBFGS(params=travel_time.parameters(), max_iter=100, line_search_fn="strong_wolfe")
 
-        prev_loss = 1e10
+    #     prev_loss = 1e10
 
-        def closure():
-            optimizer.zero_grad()
-            loss = 0
-            # for meta in tqdm(phase_dataset, desc=f"BFGS"):
-            if ddp_local_rank == 0:
-                print(f"BFGS: ", end="")
-            for meta in phase_dataset:
-                if ddp_local_rank == 0:
-                    print(".", end="")
+    #     def closure():
+    #         optimizer.zero_grad()
+    #         loss = 0
+    #         # for meta in tqdm(phase_dataset, desc=f"BFGS"):
+    #         if ddp_local_rank == 0:
+    #             print(f"BFGS: ", end="")
+    #         for meta in phase_dataset:
+    #             if ddp_local_rank == 0:
+    #                 print(".", end="")
 
-                loss_ = travel_time(
-                    meta["idx_sta"],
-                    meta["idx_eve"],
-                    meta["phase_type"],
-                    meta["phase_time"],
-                    meta["phase_weight"],
-                )["loss"]
-                loss_.backward()
+    #             loss_ = travel_time(
+    #                 meta["idx_sta"],
+    #                 meta["idx_eve"],
+    #                 meta["phase_type"],
+    #                 meta["phase_time"],
+    #                 meta["phase_weight"],
+    #             )["loss"]
+    #             loss_.backward()
 
-                if ddp:
-                    dist.all_reduce(loss_, op=dist.ReduceOp.SUM)
-                    # loss_ /= ddp_world_size
+    #             if ddp:
+    #                 dist.all_reduce(loss_, op=dist.ReduceOp.SUM)
+    #                 # loss_ /= ddp_world_size
 
-                loss += loss_
+    #             loss += loss_
 
-            if ddp:
-                dist.barrier()
-                if prev_loss < loss:
-                    print(f"{prev_loss = } {loss = }")
-                    return loss
-            prev_loss = loss.item()
-            if ddp_local_rank == 0:
-                print(f"Loss: {loss}")
-            raw_travel_time.event_loc.weight.data[:, 2].clamp_(min=config["zlim_km"][0], max=config["zlim_km"][1])
-            return loss
+    #         if ddp:
+    #             dist.barrier()
+    #             if prev_loss < loss:
+    #                 print(f"{prev_loss = } {loss = }")
+    #                 return loss
+    #         prev_loss = loss.item()
+    #         if ddp_local_rank == 0:
+    #             print(f"Loss: {loss}")
+    #         raw_travel_time.event_loc.weight.data[:, 2].clamp_(min=config["zlim_km"][0], max=config["zlim_km"][1])
+    #         return loss
 
-        optimizer.step(closure)
-    # ######################################################################################################
+    #     optimizer.step(closure)
+    # # ######################################################################################################
 
     # %%
     if ddp_local_rank == 0:
@@ -352,6 +367,10 @@ if __name__ == "__main__":
 
         invert_event_loc = raw_travel_time.event_loc.weight.clone().detach().numpy()
         invert_event_time = raw_travel_time.event_time.weight.clone().detach().numpy()
+        invert_event_loc0 = raw_travel_time.event_loc0.weight.clone().detach().numpy()
+        invert_event_time0 = raw_travel_time.event_time0.weight.clone().detach().numpy()
+        invert_event_loc = invert_event_loc0 + invert_event_loc
+        invert_event_time = invert_event_time0 + invert_event_time
 
         events = events_init.copy()
         events["time"] = events["time"] + pd.to_timedelta(np.squeeze(invert_event_time), unit="s")

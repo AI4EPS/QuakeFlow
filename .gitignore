@@ -171,3 +171,4 @@ slurm/*/waveforms/
 slurm/*/results/
 slurm/*/*.xml
 .history/
+*.npy

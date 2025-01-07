@@ -388,7 +388,7 @@ if __name__ == "__main__":
     jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
     # jdays = [[f'2023.{i:03d}' for i in range(41, 51)]]
-    jdays = [[f"{year}.366"]] # for leap year
+    jdays = [[f"{year}.366"]]  # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
