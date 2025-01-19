@@ -56,8 +56,8 @@ mseeds = (
     mseeds.groupby("mseed_id")
     .agg(
         {
-            "station_id": lambda x: ",".join(x.unique()),
-            "begin_time": lambda x: ",".join(x.unique()),
+            "station_id": lambda x: "|".join(x.unique()),
+            "begin_time": lambda x: "|".join(x.unique()),
             "file_name": lambda x: "|".join(sorted(x)),
         }
     )
