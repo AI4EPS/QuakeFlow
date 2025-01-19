@@ -51,10 +51,10 @@ def run_adloc(
     # result_path = f"{root_path}/{region}/adloc_gamma_plus"
     # figure_path = f"{root_path}/{region}/adloc_gamma_plus/figures"
 
-    # picks_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv"
-    # events_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv"
-    # result_path = f"{root_path}/{region}/adloc_plus"
-    # figure_path = f"{root_path}/{region}/adloc_plus/figures"
+    picks_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_picks_associated.csv"
+    events_file = f"{root_path}/{region}/phasenet_plus/phasenet_plus_events_associated.csv"
+    result_path = f"{root_path}/{region}/adloc_plus"
+    figure_path = f"{root_path}/{region}/adloc_plus/figures"
 
     # %%
     if not os.path.exists(result_path):

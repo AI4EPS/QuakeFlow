@@ -58,7 +58,7 @@ mseeds = (
         {
             "station_id": lambda x: ",".join(x.unique()),
             "begin_time": lambda x: ",".join(x.unique()),
-            "file_name": lambda x: "_".join(sorted(x)),
+            "file_name": lambda x: "|".join(sorted(x)),
         }
     )
     .reset_index()

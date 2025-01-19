@@ -23,8 +23,8 @@ def scan_csv(year, root_path, region, model, data="picks", fs=None, bucket=None,
         if protocol != "file":
             csvs = fs.glob(f"{jday}/??/*.csv")
         else:
-            csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/??/*.csv")
-            # csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/*.csv")
+            # csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/??/*.csv")
+            csvs = glob(f"{root_path}/{region}/{model}/{data}_{model}/{year}/{jday}/*.csv")
 
         csv_list.extend([[year, jday, csv] for csv in csvs])
 

@@ -36,6 +36,12 @@ with open(f"{root_path}/{region}/config.json", "r") as f:
 print(json.dumps(config, indent=4, sort_keys=True))
 xlim = [config["minlongitude"], config["maxlongitude"]]
 ylim = [config["minlatitude"], config["maxlatitude"]]
+if "mindepth" not in config:
+    config["mindepth"] = 0
+if "maxdepth" not in config:
+    config["maxdepth"] = 60
+zlim = [config["mindepth"], config["maxdepth"]]
+
 
 # %%
 # %%
@@ -485,48 +491,8 @@ for i in range(4):
     for j in range(3):
         ax[i, j].grid()
 
-if routine_exist and (len(routine_catalog) > 0):
-    ax[0, 0].scatter(
-        routine_catalog["longitude"],
-        routine_catalog["depth_km"],
-        c=routine_catalog["depth_km"],
-        s=8000 / len(routine_catalog),
-        alpha=1.0,
-        linewidth=0,
-        vmin=cmin,
-        vmax=cmax,
-        cmap="viridis_r",
-        label=f"Routine: {len(routine_catalog)}",
-    )
-    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
-    # ax[0, 0].invert_yaxis()
-    xlim = ax[0, 0].get_xlim()
-    ylim = ax[0, 0].get_ylim()
-else:
-    xlim = None
-    ylim = None
-
-if gamma_exist and (len(gamma_catalog) > 0):
-    ax[0, 1].scatter(
-        gamma_catalog["longitude"],
-        gamma_catalog["depth_km"],
-        c=gamma_catalog["depth_km"],
-        s=8000 / len(gamma_catalog),
-        alpha=1.0,
-        linewidth=0,
-        vmin=cmin,
-        vmax=cmax,
-        cmap="viridis_r",
-        label=f"GaMMA: {len(gamma_catalog)}",
-    )
-    ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
-    ax[0, 1].invert_yaxis()
-    xlim = ax[0, 1].get_xlim()
-    ylim = ax[0, 1].get_ylim()
-else:
-    xlim = None
-    ylim = None
-
+xlim = None
+ylim = None
 if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 2].scatter(
         adloc_catalog["longitude"],
@@ -542,8 +508,57 @@ if adloc_exist and (len(adloc_catalog) > 0):
     )
     # ax[0, 2].legend()
     ax[0, 2].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 2].set_xlim(xlim)
-    ax[0, 2].set_ylim(ylim)
+    if (xlim is None) and (ylim is None):
+        ax[0, 2].invert_yaxis()
+        xlim = ax[0, 2].get_xlim()
+        ylim = ax[0, 2].get_ylim()
+    else:
+        ax[0, 2].set_xlim(xlim)
+        ax[0, 2].set_ylim(ylim)
+
+if gamma_exist and (len(gamma_catalog) > 0):
+    ax[0, 1].scatter(
+        gamma_catalog["longitude"],
+        gamma_catalog["depth_km"],
+        c=gamma_catalog["depth_km"],
+        s=8000 / len(gamma_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"GaMMA: {len(gamma_catalog)}",
+    )
+    ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
+    if (xlim is None) and (ylim is None):
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
+
+if routine_exist and (len(routine_catalog) > 0):
+    ax[0, 0].scatter(
+        routine_catalog["longitude"],
+        routine_catalog["depth_km"],
+        c=routine_catalog["depth_km"],
+        s=8000 / len(routine_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"Routine: {len(routine_catalog)}",
+    )
+    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
+    if (xlim is None) and (ylim is None):
+        ax[0, 0].invert_yaxis()
+        xlim = ax[0, 0].get_xlim()
+        ylim = ax[0, 0].get_ylim()
+    else:
+        ax[0, 0].set_xlim(xlim)
+        ax[0, 0].set_ylim(ylim)
 
 if qtm_exist and (len(qtm_catalog) > 0):
     ax[1, 2].scatter(
@@ -669,51 +684,11 @@ plt.show()
 fig, ax = plt.subplots(4, 3, squeeze=False, figsize=(20, 30), sharex=True, sharey=True)
 cmin = 0
 cmax = 10
+xlim = None
+ylim = None
 for i in range(4):
     for j in range(3):
         ax[i, j].grid()
-
-if routine_exist and (len(routine_catalog) > 0):
-    ax[0, 0].scatter(
-        routine_catalog["latitude"],
-        routine_catalog["depth_km"],
-        c=routine_catalog["depth_km"],
-        s=8000 / len(routine_catalog),
-        alpha=1.0,
-        linewidth=0,
-        vmin=cmin,
-        vmax=cmax,
-        cmap="viridis_r",
-        label=f"Routine: {len(routine_catalog)}",
-    )
-    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
-    # ax[0, 0].invert_yaxis()
-    xlim = ax[0, 0].get_xlim()
-    ylim = ax[0, 0].get_ylim()
-else:
-    xlim = None
-    ylim = None
-
-if gamma_exist and (len(gamma_catalog) > 0):
-    ax[0, 1].scatter(
-        gamma_catalog["latitude"],
-        gamma_catalog["depth_km"],
-        c=gamma_catalog["depth_km"],
-        s=8000 / len(gamma_catalog),
-        alpha=1.0,
-        linewidth=0,
-        vmin=cmin,
-        vmax=cmax,
-        cmap="viridis_r",
-        label=f"GaMMA: {len(gamma_catalog)}",
-    )
-    ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
-    ax[0, 1].invert_yaxis()
-    xlim = ax[0, 1].get_xlim()
-    ylim = ax[0, 1].get_ylim()
-else:
-    xlim = None
-    ylim = None
 
 if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 2].scatter(
@@ -730,8 +705,57 @@ if adloc_exist and (len(adloc_catalog) > 0):
     )
     # ax[0, 2].legend()
     ax[0, 2].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 2].set_xlim(xlim)
-    ax[0, 2].set_ylim(ylim)
+    if (xlim is None) and (ylim is None):
+        ax[0, 2].invert_yaxis()
+        xlim = ax[0, 2].get_xlim()
+        ylim = ax[0, 2].get_ylim()
+    else:
+        ax[0, 2].set_xlim(xlim)
+        ax[0, 2].set_ylim(ylim)
+
+if gamma_exist and (len(gamma_catalog) > 0):
+    ax[0, 1].scatter(
+        gamma_catalog["latitude"],
+        gamma_catalog["depth_km"],
+        c=gamma_catalog["depth_km"],
+        s=8000 / len(gamma_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"GaMMA: {len(gamma_catalog)}",
+    )
+    ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
+    if (xlim is None) and (ylim is None):
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
+
+if routine_exist and (len(routine_catalog) > 0):
+    ax[0, 0].scatter(
+        routine_catalog["latitude"],
+        routine_catalog["depth_km"],
+        c=routine_catalog["depth_km"],
+        s=8000 / len(routine_catalog),
+        alpha=1.0,
+        linewidth=0,
+        vmin=cmin,
+        vmax=cmax,
+        cmap="viridis_r",
+        label=f"Routine: {len(routine_catalog)}",
+    )
+    ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
+    if (xlim is None) and (ylim is None):
+        ax[0, 0].invert_yaxis()
+        xlim = ax[0, 0].get_xlim()
+        ylim = ax[0, 0].get_ylim()
+    else:
+        ax[0, 0].set_xlim(xlim)
+        ax[0, 0].set_ylim(ylim)
 
 if qtm_exist and (len(qtm_catalog) > 0):
     ax[1, 2].scatter(
@@ -906,8 +930,17 @@ plt.show()
 
 # %%
 fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(10, 10))
-xlim = [int(np.floor(gamma_catalog["magnitude"].min())), int(np.ceil(gamma_catalog["magnitude"].max()))]
-bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
+if gamma_exist:
+    xlim = [int(np.floor(gamma_catalog["magnitude"].min())), int(np.ceil(gamma_catalog["magnitude"].max()))]
+    bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
+elif adloc_exist:
+    xlim = [int(np.floor(adloc_catalog["magnitude"].min())), int(np.ceil(adloc_catalog["magnitude"].max()))]
+    bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
+elif routine_exist:
+    xlim = [int(np.floor(routine_catalog["magnitude"].min())), int(np.ceil(routine_catalog["magnitude"].max()))]
+    bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
+else:
+    raise ValueError("No catalog found")
 if routine_exist:
     ax[0, 0].hist(routine_catalog["magnitude"], bins=bins, alpha=0.5, label="Routine")
     ax[1, 0].hist(routine_catalog["magnitude"], bins=bins, alpha=0.5, label="Routine")

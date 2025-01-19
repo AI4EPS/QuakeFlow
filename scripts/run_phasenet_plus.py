@@ -29,8 +29,8 @@ def run_phasenet(
 
     # %%
     if data_type == "continuous":
-        subdir = 3
-        # subdir = 2
+        # subdir = 3
+        subdir = 2
     elif data_type == "event":
         subdir = 1
 
@@ -49,8 +49,8 @@ def run_phasenet(
     #         fs.get(f"{bucket}/{waveform_dir}/", f"{root_path}/{waveform_dir}/", recursive=True)
 
     if data_type == "continuous":
-        mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
-        # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
+        # mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/??/*.mseed"))
+        mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/????/???/*.mseed"))
     elif data_type == "event":
         mseed_list = sorted(glob(f"{root_path}/{waveform_dir}/*.mseed"))
     else:
@@ -68,8 +68,8 @@ def run_phasenet(
 
     # %% skip processed files
     if not overwrite:
-        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/??/*.csv"))
-        # processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
+        # processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/??/*.csv"))
+        processed = sorted(glob(f"{root_path}/{result_path}/picks_phasenet_plus/????/???/*.csv"))
         processed = ["/".join(f.replace(".csv", "").split("/")[-subdir - 1 :]) for f in processed]
         processed = [p[:-1] for p in processed]  ## remove the channel suffix
         print(f"Number of processed files: {len(processed)}")

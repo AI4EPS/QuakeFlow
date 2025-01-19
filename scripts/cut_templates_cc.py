@@ -415,6 +415,8 @@ def cut_templates(root_path, region, config):
     picks = picks[picks["adloc_mask"] == 1]
     picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
     min_phase_score = picks["phase_score"].min()
+    print(f"Number of picks: {len(picks)}")
+    print(picks.iloc[:5])
 
     picks = picks.merge(events[["event_index", "event_timestamp"]], on="event_index")
     # picks = picks.merge(stations[["station_id", "station_term_time"]], on="station_id")
@@ -427,6 +429,11 @@ def cut_templates(root_path, region, config):
     picks["traveltime"] = (
         picks["phase_timestamp"] - picks["event_timestamp"] - picks["station_term_time"]
     )  ## Separate P and S station term
+
+    # Keep only the pick with highest phase_score for each event-station-phase combination
+    picks = picks.sort_values("phase_score", ascending=False).drop_duplicates(
+        subset=["event_index", "station_id", "phase_type"], keep="first"
+    )
 
     picks = fillin_missing_picks(
         picks,
@@ -529,7 +536,6 @@ def cut_templates(root_path, region, config):
         key = "/".join(mseed.replace(".mseed", "").split("/")[-subdir - 1 :])
         key = key[:-1]  ## remove the channel suffix
         mseed_3c[key].append(mseed)
-    print(f"Number of mseed files: {len(mseed_3c)}")
 
     def parse_key(key):
         year, jday, name = key.split("/")
@@ -537,7 +543,53 @@ def cut_templates(root_path, region, config):
         return [year, jday, network, station, location, instrument]
 
     mseeds = [parse_key(k) + [",".join(sorted(mseed_3c[k]))] for k in mseed_3c]
-    mseeds = pd.DataFrame(mseeds, columns=["year", "jday", "network", "station", "location", "instrument", "ENZ"])
+    mseeds_df = pd.DataFrame(mseeds, columns=["year", "jday", "network", "station", "location", "instrument", "ENZ"])
+
+    # protocol = "gs"
+    # bucket = "quakeflow_catalog"
+    # folder = "SC"
+    # token_json = "application_default_credentials.json"
+    # with open(token_json, "r") as fp:
+    #     token = json.load(fp)
+    # fs = fsspec.filesystem(protocol=protocol, token=token)
+    # year = 2019
+    # mseeds_df = []
+    # # for folder in ["SC", "NC"]:
+    # for folder in ["SC"]:
+    #     with fs.open(f"{bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
+    #         mseeds = f.readlines()
+    #     mseeds = [x.strip("\n") for x in mseeds]
+    #     mseeds = pd.DataFrame(mseeds, columns=["ENZ"])
+    #     if folder == "SC":
+    #         mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+    #         mseeds["network"] = mseeds["fname"].apply(lambda x: x[:2])
+    #         mseeds["station"] = mseeds["fname"].apply(lambda x: x[2:7].strip("_"))
+    #         mseeds["instrument"] = mseeds["fname"].apply(lambda x: x[7:9])
+    #         mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
+    #         mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
+    #         mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
+    #     if folder == "NC":
+    #         mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+    #         mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
+    #         mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[0])
+    #         mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[2][:-1])
+    #         mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
+    #         mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
+    #         mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
+    #     mseeds_df.append(mseeds)
+    # mseeds_df = pd.concat(mseeds_df)
+    # mseeds_df.drop(columns=["fname"], inplace=True, errors="ignore")
+    # mseeds_df = mseeds_df[["year", "jday", "network", "station", "location", "instrument", "ENZ"]]
+    # mseeds_df = mseeds_df.merge(
+    #     picks[["network", "station", "location", "instrument", "year", "jday"]],
+    #     on=["network", "station", "location", "instrument", "year", "jday"],
+    # )
+    # mseeds_df = mseeds_df.drop_duplicates(subset=["ENZ"], keep="first")
+    # mseeds_df.sort_values(by=["year", "jday", "network", "station", "location", "instrument", "ENZ"], inplace=True)
+    # mseeds_df.to_csv(f"debug_mseed_remote.csv", index=False)
+
+    print(f"Number of mseeds: {len(mseeds_df)}")
+    print(mseeds_df.iloc[:5])
 
     ## Match picks with mseed files
     picks["network"] = picks["station_id"].apply(lambda x: x.split(".")[0])
@@ -546,7 +598,7 @@ def cut_templates(root_path, region, config):
     picks["instrument"] = picks["station_id"].apply(lambda x: x.split(".")[3])
     picks["year"] = picks["phase_time"].dt.strftime("%Y")
     picks["jday"] = picks["phase_time"].dt.strftime("%j")
-    picks = picks.merge(mseeds, on=["network", "station", "location", "instrument", "year", "jday"])
+    picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday"])
     picks.drop(columns=["station_id", "network", "location", "instrument", "year", "jday"], inplace=True)
 
     picks_group = picks.copy()
