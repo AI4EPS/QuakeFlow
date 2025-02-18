@@ -928,6 +928,194 @@ ax[1, 0].legend()
 plt.savefig(f"{root_path}/{figure_path}/catalogs_magnitude_time.png", dpi=300)
 plt.show()
 
+
+# %%
+fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10), sharex=True)
+xlim = [datetime.fromisoformat(config["starttime"]), datetime.fromisoformat(config["endtime"])]
+for i in range(2):
+    ax[i, 0].set_xlim(xlim)
+    ax[i, 0].grid()
+    ax[i, 0].invert_yaxis()
+if routine_exist:
+    ax[0, 0].plot(routine_catalog["time"], routine_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="Routine")
+    ax[1, 0].plot(routine_catalog["time"], routine_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="Routine")
+if gamma_exist:
+    ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="GaMMA")
+    ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="GaMMA")
+if adloc_exist:
+    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="AdLoc")
+    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="AdLoc")
+# if qtm_exist:
+#     ax[0, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+#     ax[1, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+if adloc_dt_exist:
+    ax[0, 0].plot(
+        adloc_dt_catalog["time"], adloc_dt_catalog["depth_km"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
+    )
+if adloc_dtcc_exist:
+    ax[1, 0].plot(
+        adloc_dtcc_catalog["time"],
+        adloc_dtcc_catalog["DEPTH"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="AdLoc (CC)",
+    )
+if hypodd_ct_exist:
+    ax[0, 0].plot(
+        catalog_ct_hypodd["time"], catalog_ct_hypodd["DEPTH"], "o", markersize=2, alpha=0.5, label="HypoDD (CT)"
+    )
+if hypodd_cc_exist:
+    ax[1, 0].plot(
+        catalog_cc_hypodd["time"], catalog_cc_hypodd["DEPTH"], "o", markersize=2, alpha=0.5, label="HypoDD (CC)"
+    )
+if growclust_ct_exist:
+    ax[0, 0].plot(
+        growclust_ct_catalog["time"],
+        growclust_ct_catalog["depR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CT)",
+    )
+if growclust_cc_exist:
+    ax[1, 0].plot(
+        growclust_cc_catalog["time"],
+        growclust_cc_catalog["depR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CC)",
+    )
+ax[0, 0].legend()
+ax[1, 0].legend()
+plt.savefig(f"{root_path}/{figure_path}/catalogs_depth_time.png", dpi=300)
+plt.show()
+
+# %%
+fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10), sharex=True)
+xlim = [datetime.fromisoformat(config["starttime"]), datetime.fromisoformat(config["endtime"])]
+for i in range(2):
+    ax[i, 0].set_xlim(xlim)
+    ax[i, 0].grid()
+if routine_exist:
+    ax[0, 0].plot(routine_catalog["time"], routine_catalog["latitude"], "o", markersize=2, alpha=0.5, label="Routine")
+    ax[1, 0].plot(routine_catalog["time"], routine_catalog["latitude"], "o", markersize=2, alpha=0.5, label="Routine")
+if gamma_exist:
+    ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["latitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
+    ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["latitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
+if adloc_exist:
+    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["latitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["latitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+# if qtm_exist:
+#     ax[0, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+#     ax[1, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+if adloc_dt_exist:
+    ax[0, 0].plot(
+        adloc_dt_catalog["time"], adloc_dt_catalog["latitude"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
+    )
+if adloc_dtcc_exist:
+    ax[1, 0].plot(
+        adloc_dtcc_catalog["time"],
+        adloc_dtcc_catalog["LAT"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="AdLoc (CC)",
+    )
+if hypodd_ct_exist:
+    ax[0, 0].plot(
+        catalog_ct_hypodd["time"], catalog_ct_hypodd["LAT"], "o", markersize=2, alpha=0.5, label="HypoDD (CT)"
+    )
+if hypodd_cc_exist:
+    ax[1, 0].plot(
+        catalog_cc_hypodd["time"], catalog_cc_hypodd["LAT"], "o", markersize=2, alpha=0.5, label="HypoDD (CC)"
+    )
+if growclust_ct_exist:
+    ax[0, 0].plot(
+        growclust_ct_catalog["time"],
+        growclust_ct_catalog["latR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CT)",
+    )
+if growclust_cc_exist:
+    ax[1, 0].plot(
+        growclust_cc_catalog["time"],
+        growclust_cc_catalog["latR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CC)",
+    )
+ax[0, 0].legend()
+ax[1, 0].legend()
+plt.savefig(f"{root_path}/{figure_path}/catalogs_latitude_time.png", dpi=300)
+plt.show()
+
+# %%
+fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(15, 10), sharex=True)
+xlim = [datetime.fromisoformat(config["starttime"]), datetime.fromisoformat(config["endtime"])]
+for i in range(2):
+    ax[i, 0].set_xlim(xlim)
+    ax[i, 0].grid()
+if routine_exist:
+    ax[0, 0].plot(routine_catalog["time"], routine_catalog["longitude"], "o", markersize=2, alpha=0.5, label="Routine")
+    ax[1, 0].plot(routine_catalog["time"], routine_catalog["longitude"], "o", markersize=2, alpha=0.5, label="Routine")
+if gamma_exist:
+    ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["longitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
+    ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["longitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
+if adloc_exist:
+    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["longitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["longitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+# if qtm_exist:
+#     ax[0, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+#     ax[1, 0].plot(qtm_catalog["time"], qtm_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="QTM")
+if adloc_dt_exist:
+    ax[0, 0].plot(
+        adloc_dt_catalog["time"], adloc_dt_catalog["longitude"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
+    )
+if adloc_dtcc_exist:
+    ax[1, 0].plot(
+        adloc_dtcc_catalog["time"],
+        adloc_dtcc_catalog["LON"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="AdLoc (CC)",
+    )
+if hypodd_ct_exist:
+    ax[0, 0].plot(
+        catalog_ct_hypodd["time"], catalog_ct_hypodd["LON"], "o", markersize=2, alpha=0.5, label="HypoDD (CT)"
+    )
+if hypodd_cc_exist:
+    ax[1, 0].plot(
+        catalog_cc_hypodd["time"], catalog_cc_hypodd["LON"], "o", markersize=2, alpha=0.5, label="HypoDD (CC)"
+    )
+if growclust_ct_exist:
+    ax[0, 0].plot(
+        growclust_ct_catalog["time"],
+        growclust_ct_catalog["lonR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CT)",
+    )
+if growclust_cc_exist:
+    ax[1, 0].plot(
+        growclust_cc_catalog["time"],
+        growclust_cc_catalog["lonR"],
+        "o",
+        markersize=2,
+        alpha=0.5,
+        label="GrowClust (CC)",
+    )
+ax[0, 0].legend()
+ax[1, 0].legend()
+plt.savefig(f"{root_path}/{figure_path}/catalogs_longitude_time.png", dpi=300)
+plt.show()
+
 # %%
 fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(10, 10))
 if gamma_exist:
