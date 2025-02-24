@@ -265,16 +265,16 @@ def plotting_ransac(stations, figure_path, config, picks, events_init, events, s
     plt.savefig(os.path.join(figure_path, f"error{suffix}.png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    # xmin, xmax = config["xlim_km"]
-    # ymin, ymax = config["ylim_km"]
-    # zmin, zmax = config["zlim_km"]
-    # vmin, vmax = config["zlim_km"]
-    xmin = events["x_km"].min()
-    xmax = events["x_km"].max()
-    ymin = events["y_km"].min()
-    ymax = events["y_km"].max()
-    zmin = events["z_km"].min()
-    zmax = events["z_km"].max()
+    xmin, xmax = config["xlim_km"]
+    ymin, ymax = config["ylim_km"]
+    zmin, zmax = config["zlim_km"]
+    vmin, vmax = config["zlim_km"]
+    # xmin = events["x_km"].min()
+    # xmax = events["x_km"].max()
+    # ymin = events["y_km"].min()
+    # ymax = events["y_km"].max()
+    # zmin = events["z_km"].min()
+    # zmax = events["z_km"].max()
     vmin, vmax = zmin, zmax
     events = events.sort_values("time", ascending=True)
     s = max(0.1, min(10, 5000 / len(events)))

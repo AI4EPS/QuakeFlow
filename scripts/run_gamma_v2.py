@@ -49,6 +49,10 @@ def run_gamma(
         gamma_events_csv = f"{result_path}/{year:04d}.{jday:03d}.events.csv"
         gamma_picks_csv = f"{result_path}/{year:04d}.{jday:03d}.picks.csv"
 
+        if os.path.exists(f"{root_path}/{gamma_events_csv}") and os.path.exists(f"{root_path}/{gamma_picks_csv}"):
+            print(f"Skipping {year}.{jday:03d} because {gamma_events_csv} and {gamma_picks_csv} exist")
+            continue
+
         # %%
         ## read picks
         try:

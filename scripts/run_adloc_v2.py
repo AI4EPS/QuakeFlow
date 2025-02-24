@@ -48,7 +48,7 @@ def run_adloc(
         result_path = f"{region}/adloc/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
-        figure_path = f"{root_path}/{region}/adloc/figures/"
+        figure_path = f"{root_path}/{region}/adloc/figures/{year:04d}"
         if not os.path.exists(figure_path):
             os.makedirs(figure_path)
 
@@ -56,19 +56,26 @@ def run_adloc(
         if iter == 0:
             # station_json = f"{region}/obspy/stations.csv"
             stations_csv = f"{region}/obspy/stations.csv"
-            picks_csv = f"{data_path}/{year:04d}.{jday:03d}.picks.csv"
-            events_csv = f"{data_path}/{year:04d}.{jday:03d}.events.csv"
+            # picks_csv = f"{data_path}/{year:04d}.{jday:03d}.picks.csv"
+            # events_csv = f"{data_path}/{year:04d}.{jday:03d}.events.csv"
         else:
             # station_json = f"{result_path}/stations_sst_{iter-1}.csv"
             # stations_csv = f"{result_path}/{year:04d}.{jday:03d}.stations_sst_{iter-1}.csv"
             stations_csv = f"{region}/adloc/adloc_stations_sst_{iter-1}.csv"
-            picks_csv = f"{result_path}/{year:04d}.{jday:03d}.picks_sst_{iter-1}.csv"
-            events_csv = f"{result_path}/{year:04d}.{jday:03d}.events_sst_{iter-1}.csv"
+            # picks_csv = f"{result_path}/{year:04d}.{jday:03d}.picks_sst_{iter-1}.csv"
+            # events_csv = f"{result_path}/{year:04d}.{jday:03d}.events_sst_{iter-1}.csv"
+
+        picks_csv = f"{data_path}/{year:04d}.{jday:03d}.picks.csv"
+        events_csv = f"{data_path}/{year:04d}.{jday:03d}.events.csv"
 
         adloc_events_csv = f"{result_path}/{year:04d}.{jday:03d}.events_sst_{iter}.csv"
         adloc_picks_csv = f"{result_path}/{year:04d}.{jday:03d}.picks_sst_{iter}.csv"
         # stations_csv = f"{result_path}/stations_sst_{iter}.csv"
         station_term_csv = f"{result_path}/{year:04d}.{jday:03d}.stations_sst_{iter}.csv"
+
+        if os.path.exists(f"{root_path}/{adloc_events_csv}") and os.path.exists(f"{root_path}/{adloc_picks_csv}"):
+            print(f"Skipping {year}.{jday:03d} because {adloc_events_csv} and {adloc_picks_csv} exist")
+            continue
 
         try:
             if protocol == "file":
@@ -252,6 +259,12 @@ def run_adloc(
                 picks, stations, config, estimator, events_init=events_init, iter=f"{year}.{jday}"
             )
 
+            if picks is None or events is None:
+                print(f"No events located for {jday}")
+                os.system(f"touch {root_path}/{adloc_events_csv}")
+                os.system(f"touch {root_path}/{adloc_picks_csv}")
+                continue
+
             # %%
             station_num_picks = (
                 picks[picks["mask"] == 1.0].groupby(["idx_sta", "phase_type"]).size().reset_index(name="num_picks")
@@ -303,7 +316,9 @@ def run_adloc(
             )
 
         # %%
-        plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_debug_sst_{iter}")
+        plotting_ransac(
+            stations, figure_path, config, picks, events_init, events, suffix=f"_{year}.{jday:03d}_sst_{iter}"
+        )
 
         # %%
         if "event_index" not in events.columns:
@@ -374,20 +389,35 @@ if __name__ == "__main__":
 
     # %%
     print(f"{jdays[node_rank] = }")
-    if num_nodes == 1:
-        max_iter = 10
-    else:
-        max_iter = 1
 
-    for i in range(max_iter):
+    if iter > 1:
         run_adloc(
             root_path=root_path,
             region=region,
             config=config,
             jdays=jdays[node_rank],
-            iter=i,
-            protocol=protocol,
-            token=token,
-            bucket=bucket,
+            iter=iter,
         )
-        os.system(f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {i}")
+        os.system(
+            f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {iter}"
+        )
+
+    else:
+        if num_nodes == 1:
+            max_iter = 10
+        else:
+            max_iter = 1
+        for i in range(max_iter):
+            run_adloc(
+                root_path=root_path,
+                region=region,
+                config=config,
+                jdays=jdays[node_rank],
+                iter=i,
+                protocol=protocol,
+                token=token,
+                bucket=bucket,
+            )
+            os.system(
+                f"python merge_adloc_picks.py --region {region} --root_path {root_path} --bucket {bucket} --iter {i}"
+            )
