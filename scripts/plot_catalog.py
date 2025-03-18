@@ -955,7 +955,7 @@ if adloc_dt_exist:
 if adloc_dtcc_exist:
     ax[1, 0].plot(
         adloc_dtcc_catalog["time"],
-        adloc_dtcc_catalog["DEPTH"],
+        adloc_dtcc_catalog["depth_km"],
         "o",
         markersize=2,
         alpha=0.5,
@@ -1017,7 +1017,7 @@ if adloc_dt_exist:
 if adloc_dtcc_exist:
     ax[1, 0].plot(
         adloc_dtcc_catalog["time"],
-        adloc_dtcc_catalog["LAT"],
+        adloc_dtcc_catalog["latitude"],
         "o",
         markersize=2,
         alpha=0.5,
@@ -1079,7 +1079,7 @@ if adloc_dt_exist:
 if adloc_dtcc_exist:
     ax[1, 0].plot(
         adloc_dtcc_catalog["time"],
-        adloc_dtcc_catalog["LON"],
+        adloc_dtcc_catalog["longitude"],
         "o",
         markersize=2,
         alpha=0.5,
