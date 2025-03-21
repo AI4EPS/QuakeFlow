@@ -148,7 +148,12 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
     while retry < max_retry:
         try:
             stream = client.get_waveforms_bulk(bulk)
-            stream.merge(fill_value="latest")
+            try:
+                stream.merge(fill_value="latest")
+            except Exception as e:
+                print(f"Error merging traces: {mseed_dir}")
+                print([(tr.id, tr.stats.sampling_rate) for tr in stream])
+            stream.sort()
             for tr in stream:
                 tr.data = tr.data.astype(np.float32)
                 tr.write(f"{root_path}/{mseed_dir}/{tr.id}.mseed", format="MSEED")
@@ -167,7 +172,7 @@ def download(client, starttime, stations, root_path, waveform_dir, deltatime="1H
                 print(f"{message2} from {client.base_url}: {starttime.isoformat()} - {endtime.isoformat()}")
                 break
             else:
-                print(f"Error occurred from {client.base_url}:{err}. Retrying...")
+                print(f"Error occurred from {client.base_url}: {err}. Retrying...")
             retry += 1
             time.sleep(30)
             continue
