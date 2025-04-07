@@ -103,7 +103,7 @@ def run_gamma(
             config["longitude0"] = (config["minlongitude"] + config["maxlongitude"]) / 2
         if "latitude0" not in config:
             config["latitude0"] = (config["minlatitude"] + config["maxlatitude"]) / 2
-        proj = Proj(f"+proj=sterea +lon_0={config['longitude0']} +lat_0={config['latitude0']} +units=km")
+        proj = Proj(f"+proj=aeqd +lon_0={config['longitude0']} +lat_0={config['latitude0']} +units=km")
         stations[["x(km)", "y(km)"]] = stations.apply(
             lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
         )
@@ -332,7 +332,7 @@ if __name__ == "__main__":
     jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
     # jdays = [['2018.032', '2018.064', '2018.096', '2018.128', '2018.160', '2018.192', '2018.224', '2018.256', '2018.288', '2018.320', '2018.352']]
-    jdays = [[f'{year}.366']]  # for leap year
+    jdays = [[f"{year}.366"]]  # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:

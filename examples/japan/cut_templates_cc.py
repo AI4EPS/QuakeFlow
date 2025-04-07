@@ -359,7 +359,7 @@ def cut_templates(root_path, region, config):
     # %%
     lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
     lat0 = (config["minlatitude"] + config["maxlatitude"]) / 2
-    proj = Proj(f"+proj=sterea +lon_0={lon0} +lat_0={lat0}  +units=km")
+    proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0}  +units=km")
 
     # %%
     stations[["x_km", "y_km"]] = stations.apply(

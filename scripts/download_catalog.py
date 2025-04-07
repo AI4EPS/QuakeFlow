@@ -34,7 +34,7 @@ def download_catalog(
     print(json.dumps(config, indent=4))
 
     proj = pyproj.Proj(
-        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
+        f"+proj=aeqd +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
     )
 
     # %%
@@ -184,7 +184,6 @@ if __name__ == "__main__":
     protocol = args.protocol
     bucket = args.bucket
     token = args.token
-
 
     with open(f"{root_path}/{region}/config.json", "r") as fp:
         config = json.load(fp)

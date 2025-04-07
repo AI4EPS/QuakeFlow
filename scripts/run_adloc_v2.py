@@ -129,7 +129,7 @@ def run_adloc(
         # lat0 = stations["latitude"].median()
         lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
         lat0 = (config["minlatitude"] + config["maxlatitude"]) / 2
-        proj = Proj(f"+proj=sterea +lon_0={lon0} +lat_0={lat0}  +units=km")
+        proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0}  +units=km")
 
         # %%
         stations["depth_km"] = -stations["elevation_m"] / 1000

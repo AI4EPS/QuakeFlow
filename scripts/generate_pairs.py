@@ -112,7 +112,7 @@ if __name__ == "__main__":
     # %%
     lon0 = stations["longitude"].median()
     lat0 = stations["latitude"].median()
-    proj = Proj(f"+proj=sterea +lon_0={lon0} +lat_0={lat0}  +units=km")
+    proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0}  +units=km")
 
     stations[["x_km", "y_km"]] = stations.apply(
         lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1

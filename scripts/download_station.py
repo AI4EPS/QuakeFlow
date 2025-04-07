@@ -36,7 +36,7 @@ def download_station(
     print(json.dumps(config, indent=4))
 
     proj = pyproj.Proj(
-        f"+proj=sterea +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
+        f"+proj=aeqd +lon_0={(config['minlongitude'] + config['maxlongitude'])/2} +lat_0={(config['minlatitude'] + config['maxlatitude'])/2} +units=km"
     )
 
     # %%

@@ -68,7 +68,7 @@ def run_gamma(
         config["longitude0"] = (config["minlongitude"] + config["maxlongitude"]) / 2
     if "latitude0" not in config:
         config["latitude0"] = (config["minlatitude"] + config["maxlatitude"]) / 2
-    proj = Proj(f"+proj=sterea +lon_0={config['longitude0']} +lat_0={config['latitude0']} +units=km")
+    proj = Proj(f"+proj=aeqd +lon_0={config['longitude0']} +lat_0={config['latitude0']} +units=km")
     stations[["x(km)", "y(km)"]] = stations.apply(
         lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
     )

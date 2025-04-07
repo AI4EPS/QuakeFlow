@@ -91,7 +91,7 @@ if __name__ == "__main__":
     # lat0 = stations["latitude"].median()
     lat0 = (config["minlatitude"] + config["maxlatitude"]) / 2
     lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
-    proj = Proj(f"+proj=sterea +lon_0={lon0} +lat_0={lat0} +units=km")
+    proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0} +units=km")
 
     stations["x_km"], stations["y_km"] = proj(stations["longitude"], stations["latitude"])
     stations["z_km"] = stations["depth_km"]

@@ -1,18 +1,19 @@
 # %%
-import pandas as pd
+import json
+import os
+from glob import glob
+
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import json
-from pyproj import Proj
-from adloc.eikonal2d import init_eikonal2d, calc_traveltime
-from glob import glob
 import obspy
-from tqdm import tqdm
-from sklearn.neighbors import NearestNeighbors
-from scipy.signal import find_peaks
+import pandas as pd
+from adloc.eikonal2d import calc_traveltime, init_eikonal2d
 from obspy.signal.cross_correlation import correlate
+from pyproj import Proj
 from scipy.interpolate import interp1d
+from scipy.signal import find_peaks
+from sklearn.neighbors import NearestNeighbors
+from tqdm import tqdm
 
 np.random.seed(42)
 
@@ -193,7 +194,7 @@ min_phase_score = 0.1
 # %%
 lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
 lat0 = (config["minlatitude"] + config["maxlatitude"]) / 2
-proj = Proj(f"+proj=sterea +lon_0={lon0} +lat_0={lat0}  +units=km")
+proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0}  +units=km")
 
 # %%
 stations[["x_km", "y_km"]] = stations.apply(
