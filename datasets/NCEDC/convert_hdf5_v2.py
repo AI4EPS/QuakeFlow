@@ -1,6 +1,5 @@
 # %%
 import logging
-import multiprocessing
 import multiprocessing as mp
 import os
 import threading
@@ -17,11 +16,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
+import obspy.geodetics.base
 from obspy.signal.rotate import rotate2zne
 from tqdm import tqdm
 
+with open("convert_hdf5.log", "w") as f:
+    f.write("")
 logging.basicConfig(
-    filename="convert_hdf5.log", level=logging.INFO, filemode="w", format="%(asctime)s - %(levelname)s - %(message)s"
+    filename="convert_hdf5.log", level=logging.INFO, filemode="a", format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
@@ -48,7 +50,7 @@ if not os.path.exists(result_path):
     os.makedirs(result_path)
 
 sampling_rate = 100
-NT = 12000  # 120 s
+NT = 120*sampling_rate  # 120 s
 
 
 # %%
@@ -73,7 +75,8 @@ def calc_snr(data, index0, noise_window=300, signal_window=300, gap_window=50):
 
 
 # %%
-def extract_pick(picks, begin_time, sampling_rate):
+def extract_pick(picks, begin_time, sampling_rate, main_event_id):
+    # FIXME: check if the arrival time is earlier than the event origin time
     phase_type = []
     phase_index = []
     phase_score = []
@@ -91,16 +94,90 @@ def extract_pick(picks, begin_time, sampling_rate):
         phase_polarity.append(pick.phase_polarity)
         phase_picking_channel.append(pick.instrument + pick.component)
         event_id.append(pick.event_id)
+    
+    phase_type = np.array(phase_type)
+    phase_index = np.array(phase_index)
+    phase_score = np.array(phase_score)
+    phase_time = np.array(phase_time)
+    phase_polarity = np.array(phase_polarity)
+    phase_remark = np.array(phase_remark)
+    phase_picking_channel = np.array(phase_picking_channel)
+    event_id = np.array(event_id)
+    # fix the duplicate picks
+    uniqued_same_phase, idx_same_phase, counts = np.unique(np.array([phase_type, event_id]), axis=1, return_index=True, return_counts=True) # for this case, keep the first one
+    if uniqued_same_phase.shape[1] != len(phase_index):
+        logging.warning(f"{event_id[idx_same_phase[counts>1][0]]}/{picks.iloc[0].name+picks.iloc[0].location+'.'+picks.iloc[0].instrument} has duplicate picks for the same phase in the same event")
+        idxs = np.sort(idx_same_phase)
+        phase_type = phase_type[idxs]
+        phase_index = phase_index[idxs]
+        phase_score = phase_score[idxs]
+        phase_time = phase_time[idxs]
+        phase_remark = phase_remark[idxs]
+        phase_polarity = phase_polarity[idxs]
+        phase_picking_channel = phase_picking_channel[idxs]
+        event_id = event_id[idxs]
+        
+    bad_e_ids = []
+    for event_idxs, ee_id in zip([event_id == e_id for e_id in np.unique(event_id)], np.unique(event_id)):
+        assert len(phase_type[event_idxs]) in [1, 2], f"{event_id}/{picks.iloc[0].name+picks.iloc[0].location+'.'+picks.iloc[0].instrument} has {len(phase_type[event_idxs])} picks, should be 1 or 2"
+        pick_types = phase_type[event_idxs]
+        if len(pick_types) == 1:
+            continue
+        p_index = phase_index[event_idxs][pick_types == "P"]
+        s_index = phase_index[event_idxs][pick_types == "S"]
+        if s_index - p_index <= 5: # if S pick is earlier than P pick
+            bad_e_ids.append(ee_id)
+    if len(bad_e_ids) > 0:
+        logging.warning(f"{picks.iloc[0].name+picks.iloc[0].location+'.'+picks.iloc[0].instrument}/{bad_e_ids} has P pick later than S pick")
+        idxs = np.array([e_id not in bad_e_ids for e_id in event_id])
+        phase_type = phase_type[idxs]
+        phase_index = phase_index[idxs]
+        phase_score = phase_score[idxs]
+        phase_time = phase_time[idxs]
+        phase_remark = phase_remark[idxs]
+        phase_polarity = phase_polarity[idxs]
+        phase_picking_channel = phase_picking_channel[idxs]
+        event_id = event_id[idxs]
+    
+    # detect too close pick indexs between different events, keep the main one or the first one
+    p_indexs = phase_index[phase_type == "P"]
+    bad_e_ids = []
+    ee_ids = event_id[phase_type == "P"]
+    too_close_p_pairs = np.where(np.abs(p_indexs[:, None] - p_indexs) <= 5)
+    # filter the same event
+    too_close_p_pairs = np.unique(np.sort(
+        np.array([too_close_p_pairs[0][too_close_p_pairs[0]!=too_close_p_pairs[1]], too_close_p_pairs[1][too_close_p_pairs[0]!=too_close_p_pairs[1]]]), 
+        axis=0), axis=1).T
+    for idx1, idx2 in too_close_p_pairs:
+        if ee_ids[idx1] == ee_ids[idx2]:
+            assert idx1 != idx2, f"{ee_ids[idx1]} has the same index {idx1} with itself"
+        if ee_ids[idx1] == main_event_id:
+            bad_e_ids.append(ee_ids[idx2])
+        elif ee_ids[idx2] == main_event_id:
+            bad_e_ids.append(ee_ids[idx1])
+        else:
+            bad_e_ids.append(ee_ids[idx2])
+    if len(bad_e_ids) > 0:
+        logging.warning(f"{picks.iloc[0].name+picks.iloc[0].location+'.'+picks.iloc[0].instrument}/{bad_e_ids} has too close P picks")
+        idxs = np.array([e_id not in bad_e_ids for e_id in event_id])
+        phase_type = phase_type[idxs]
+        phase_index = phase_index[idxs]
+        phase_score = phase_score[idxs]
+        phase_time = phase_time[idxs]
+        phase_remark = phase_remark[idxs]
+        phase_polarity = phase_polarity[idxs]
+        phase_picking_channel = phase_picking_channel[idxs]
+        event_id = event_id[idxs]
 
     return (
-        phase_type,
-        phase_index,
-        phase_score,
-        phase_time,
-        phase_remark,
-        phase_polarity,
-        phase_picking_channel,
-        event_id,
+        phase_type.tolist(),
+        phase_index.tolist(),
+        phase_score.tolist(),
+        phase_time.tolist(),
+        phase_remark.tolist(),
+        phase_polarity.tolist(),
+        phase_picking_channel.tolist(),
+        event_id.tolist(),
     )
 
 
@@ -171,7 +248,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
         with fs.open(f"{catalog_path}/{year}.{month}.event.csv", "rb") as f:
         ## SCEDC
         # with fs_.open(f"{catalog_path}/{year}/{year}_{dayofyear}.event.csv", "rb") as f:
-            events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f")
+            events = pd.read_csv(f, parse_dates=["time"], date_format="%Y-%m-%dT%H:%M:%S.%f%z")
         events["time"] = pd.to_datetime(events["time"])
         events.set_index("event_id", inplace=True)
 
@@ -182,7 +259,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
             phases = pd.read_csv(
                     f,
                     parse_dates=["phase_time"],
-                    date_format="%Y-%m-%dT%H:%M:%S.%f",
+                    date_format="%Y-%m-%dT%H:%M:%S.%f%z",
                     dtype={"location": str},
                 )
 
@@ -205,7 +282,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
         for event_id, event_fname in zip(event_ids, event_fnames):
             # pbar.update(1)
 
-            if event_id not in events.index:
+            if event_id not in events.index or event_id not in phases.index:
                 continue
 
             if event_id in fp:
@@ -231,13 +308,14 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
             gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
             gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
             gp.attrs["event_time_index"] = int(
-                    round((events.loc[event_id, "time"] - begin_time).total_seconds() * 100)
+                    round((events.loc[event_id, "time"] - begin_time).total_seconds() * sampling_rate)
                 )
             gp.attrs["sampling_rate"] = sampling_rate
             gp.attrs["nt"] = NT  # default 120s
-            gp.attrs["nx"] = len(mseed_list)
+            #gp.attrs["nx"] = len(mseed_list)
 
             # read mseed
+            num_stations = 0
             has_station = False
             for mseed in mseed_list:
                 # pbar.set_description(f"{year}/{dayofyear}/{event_id}/{mseed.split('/')[-1]}")
@@ -250,6 +328,9 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                     st.resample(sampling_rate)
                 st.sort()
                 components = "".join([tr.stats.channel[-1] for tr in st])
+                if len(st) > 3:
+                    logging.warning(f"{event_id}/{mseed} has {len(st)} components: {components}")
+                    continue
 
                 array = np.zeros((3, NT))
                 for i, t in enumerate(st):
@@ -259,8 +340,8 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                                 * sampling_rate
                             )
                         )
-                    if index0 > 3000:
-                        logging.warning(f"{event_id}/{mseed} has index0 > 3000")
+                    if index0 > 30*sampling_rate:
+                        logging.warning(f"{event_id}/{mseed} has index0 > {30*sampling_rate}")
                         break
 
                     if index0 > 0:
@@ -277,13 +358,13 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                         ll = min(len(t.data), len(array[i, :]))
                     array[i, i_array : i_array + ll] = t.data[i_trace : i_trace + ll] * 1e6  # convert to 1e-6m/s
 
-                if index0 > 3000:
+                if index0 > 30*sampling_rate:
                     continue
 
                 station_channel_id = mseed.split("/")[-1].replace(".mseed", "")
                 network, station, location, instrument = station_channel_id.split(".")
 
-                if not os.path.exists(f"{station_path}/{network}/{network}_{station}.xml"):
+                if not os.path.exists(f"{station_path}/{network}/{network}.{station}.xml"):
                 ## NCEDC
                     if fs_.exists(
                         f"{root_path}/FDSNstationXML/{network}.info/{network}.FDSN.xml/{network}.{station}.xml"
@@ -312,7 +393,7 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                 
                 if f"{network}.{station}" not in inv_dict:
                     try:
-                        inv = obspy.read_inventory(f"{station_path}/{network}/{network}_{station}.xml")
+                        inv = obspy.read_inventory(f"{station_path}/{network}/{network}.{station}.xml")
                         inv_dict[f"{network}.{station}"] = inv
                     except Exception as e:
                         try:
@@ -400,9 +481,16 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                     # logging.info(f"{event_id}/{station_channel_id} has one componet Z")
                     pass
                 else:
-                    znewaveforms = rotate2zne(
-                            array[0, :], azimuth1, dip1, array[1, :], azimuth2, dip2, array[2, :], azimuth3, dip3
-                        )
+                    #FIXME: Error: The given directions are not linearly independent, at least within numerical precision. Determinant of the base change matrix: 0
+                    try:
+                        znewaveforms = rotate2zne(
+                                array[0, :], azimuth1, dip1, array[1, :], azimuth2, dip2, array[2, :], azimuth3, dip3
+                            )
+                    except:
+                        logging.error(
+                                f"{event_id}/{station_channel_id} has invalid channel orientations: ({azimuth1}, {dip1}; {azimuth2}, {dip2}; {azimuth3}, {dip3})"
+                            )
+                        continue
                     array[:] = np.array(znewaveforms)[[2, 1, 0], :]  # ZNE -> ENZ
                     logging.warning(
                             f"{event_id}/{station_channel_id} rotate from {components}:({azimuth1}, {dip1}; {azimuth2}, {dip2}; {azimuth3}, {dip3}) to ENZ: (90, 0; 0, 0; 0, -90)"
@@ -439,7 +527,10 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                     phase_polarity,
                     phase_picking_channel,
                     phase_event_id,
-                ) = extract_pick(picks_, begin_time, sampling_rate)
+                ) = extract_pick(picks_, begin_time, sampling_rate, event_id)
+                if len(phase_type) == 0:
+                    logging.warning(f"{event_id}/{station_id} has no valid phase picks")
+                    continue
 
                 # flip the P polarity if the vertical channel is reversed
                 phase_picking_channel_x = [".".join([station_id, x]) for x in phase_picking_channel]
@@ -463,17 +554,31 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                 ds.attrs["instrument"] = instrument
                 ds.attrs["component"] = components
                 ds.attrs["unit"] = "1e-6m/s" if instrument[-1] != "N" else "1e-6m/s**2"
-                ds.attrs["dt_s"] = 0.01
+                ds.attrs["dt_s"] = 1/sampling_rate
                 # at least one channel is available
                 ds.attrs["longitude"] = orientations[0]["longitude"]
                 ds.attrs["latitude"] = orientations[0]["latitude"]
                 ds.attrs["elevation_m"] = orientations[0]["elevation"]
                 ds.attrs["local_depth_m"] = orientations[0]["local_depth"]
                 ds.attrs["depth_km"] = round(-0.001 * (ds.attrs["elevation_m"] - ds.attrs["local_depth_m"]), 4)
-                if "azimuth" in pick:
-                    ds.attrs["azimuth"] = pick.azimuth
-                if "distance_km" in pick:
-                    ds.attrs["distance_km"] = pick.distance_km
+                dist_azi = obspy.geodetics.base.gps2dist_azimuth(
+                    gp.attrs["latitude"], # event_latitude
+                    gp.attrs["longitude"], # event_longitude
+                    ds.attrs["latitude"], # station_latitude
+                    ds.attrs["longitude"], # station_longitude
+                    #a=6371000.0, f=0.0
+                )
+                ds.attrs["azimuth"] = round(dist_azi[1], 6)
+                ds.attrs["back_azimuth"] = round(dist_azi[2], 6)
+                ds.attrs["distance_km"] = round(dist_azi[0] / 1000, 6)
+                #assert np.abs(pick.azimuth - dist_azi[1]) < 1, f"{pick.azimuth} != {dist_azi[1]}"
+                # the azimuth can be +- 1 degree
+                #assert np.abs(pick.distance_km - dist_azi[0] / 1000) < 5e-1, f"{pick.distance_km} != {dist_azi[0] / 1000}"
+                # the distance can be +- 2 km
+                #if "azimuth" in pick:
+                #    ds.attrs["azimuth"] = pick.azimuth
+                #if "distance_km" in pick:
+                #    ds.attrs["distance_km"] = pick.distance_km
                 if "takeoff_angle" in pick:
                     ds.attrs["takeoff_angle"] = pick.takeoff_angle
                 ds.attrs["snr"] = snr
@@ -485,18 +590,41 @@ def convert_jday(jday, catalog_path, result_path, protocol, token):
                 ds.attrs["phase_polarity"] = phase_polarity
                 ds.attrs["phase_picking_channel"] = phase_picking_channel
                 ds.attrs["event_id"] = phase_event_id
-
-                if (
-                        len(
-                            np.array(phase_type)[(np.array(phase_event_id) == event_id) & (np.array(phase_type) == "S")]
-                        )
-                        > 0
-                    ):
+                main_p_slice = np.logical_and(
+                        np.array(phase_event_id) == event_id, np.array(phase_type) == "P"
+                    )
+                main_s_slice = np.logical_and(
+                        np.array(phase_event_id) == event_id, np.array(phase_type) == "S"
+                    )
+                main_phase_index_p = np.array(phase_index)[main_p_slice]
+                main_phase_index_s = np.array(phase_index)[main_s_slice]
+                assert len(main_phase_index_p) <=1 and len(main_phase_index_s) <= 1
+                if len(main_phase_index_p) == 1 and len(main_phase_index_s) == 1:
                     ds.attrs["phase_status"] = "manual"
+                    has_station = True
                 else:
+                    ##FIXME: keep the stations if it don't have main phase pair but have other pair
+                    #if (len(np.unique(np.array(phase_type)[(np.array(phase_event_id) != event_id)]))>= 2):
+                    #    has_station = True
                     ds.attrs["phase_status"] = "automatic"
-                has_station = True
+                main_p_idx = np.where(main_p_slice)[0][0] if len(main_phase_index_p) == 1 else None
+                main_s_idx = np.where(main_s_slice)[0][0] if len(main_phase_index_s) == 1 else None
+                if main_p_idx is not None:
+                    ds.attrs['p_phase_index'] = main_phase_index_p[0]
+                    ds.attrs['p_phase_score'] = phase_score[main_p_idx]
+                    ds.attrs['p_phase_time'] = phase_time[main_p_idx]
+                    ds.attrs['p_phase_polarity'] = phase_polarity[main_p_idx]
+                    ds.attrs['p_phase_status'] = ds.attrs["phase_status"]
+                if main_s_idx is not None:
+                    ds.attrs['s_phase_index'] = main_phase_index_s[0]
+                    ds.attrs['s_phase_score'] = phase_score[main_s_idx]
+                    ds.attrs['s_phase_time'] = phase_time[main_s_idx]
+                    ds.attrs['s_phase_polarity'] = phase_polarity[main_s_idx]
+                    ds.attrs['s_phase_status'] = "manual"
+                
+                num_stations += 1
 
+            gp.attrs["nx"] = num_stations
             if not has_station:
                 logging.warning(f"{event_id} has no stations")    
                 del fp[event_id]
@@ -530,7 +658,7 @@ if __name__ == "__main__":
                     if out is not None:
                         print(out)
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"{type(e)}: {e}")
             pbar.close()
         
             with h5py.File(f"{result_path}/{year}.h5", "w") as fp:
