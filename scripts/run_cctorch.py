@@ -65,6 +65,7 @@ else:
     device = "cpu"
     num_gpu = 0
 
+
 if num_gpu > 0:
     cmd = f"torchrun --standalone --nproc_per_node {num_gpu} {base_cmd} --device={device}"
 else:
@@ -73,22 +74,29 @@ print(cmd)
 os.system(cmd)
 
 # %%
-for rank in range(num_gpu):
-    if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
-        continue
-    if rank == 0:
-        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
-    else:
-        cmd = (
-            f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
-        )
+if num_gpu == 0:
+    cmd = f"cat {root_path}/{result_path}/CC_000_001.csv > {root_path}/{data_path}/dtcc.csv"
     print(cmd)
     os.system(cmd)
-
-
-cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
-print(cmd)
-os.system(cmd)
+    cmd = f"cat {root_path}/{result_path}/CC_000_001_dt.cc > {root_path}/{data_path}/dt.cc"
+    print(cmd)
+    os.system(cmd)
+else:
+    for rank in range(num_gpu):
+        if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
+            continue
+        if rank == 0:
+            cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
+        else:
+            cmd = (
+                f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
+            )
+        print(cmd)
+        os.system(cmd)
+    
+    cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
+    print(cmd)
+    os.system(cmd)
 
 # # %%
 # os.chdir(f"{root_path}/{region}/cctorch")
