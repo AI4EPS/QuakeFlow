@@ -224,7 +224,7 @@ def extract_template_numpy(
                 traveltime_mask[idx_pick, ic, 0] = True
 
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
+                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data[: config["template_shape"][-1]]
 
         if lock is not None:
             with lock:
@@ -638,10 +638,11 @@ def cut_templates(root_path, region, config):
                 jobs.append(job)
             pool.close()
             pool.join()
-            # for job in jobs:
-            #     out = job.get()
-            #     if out is not None:
-            #         print(out)
+
+            for job in jobs:
+                out = job.get()
+                if out is not None:
+                    print(out)
 
     pbar.close()
 
