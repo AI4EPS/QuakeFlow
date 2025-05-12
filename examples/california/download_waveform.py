@@ -59,9 +59,11 @@ def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
                 stream.sort()
                 for tr in stream:
                     tr.data = tr.data.astype(np.float32)
-                    starttime = tr.stats.starttime + datetime.timedelta(hours=12)
-                    year = starttime.year
-                    jday = starttime.julday
+                    starttime = tr.stats.starttime
+                    endtime = tr.stats.endtime
+                    midtime = starttime + (endtime - starttime) / 2
+                    year = midtime.year
+                    jday = midtime.julday
                     network = tr.stats.network
                     station = tr.stats.station
                     location = tr.stats.location
