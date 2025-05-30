@@ -17,7 +17,7 @@ cp $root_path/$region/cctorch/dt.cc $root_path/$region/hypodd/dt.cc
 cd $root_path/$region/hypodd
 
 if [ ! -d "HypoDD" ]; then
-  git clone git@github.com:zhuwq0/HypoDD.git
+  git clone https://github.com/zhuwq0/HypoDD.git
   export PATH=$PATH:$PWD/HypoDD
   make -C HypoDD/src/
 fi
