@@ -16,7 +16,7 @@ cd $root_path/$region/growclust
 mkdir -p TT OUT
 
 if [ ! -d "GrowClust" ]; then
-  git clone git@github.com:zhuwq0/GrowClust.git
+  git clone https://github.com/zhuwq0/GrowClust.git
   make -C GrowClust/SRC/
 fi
 
