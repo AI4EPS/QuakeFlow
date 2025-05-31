@@ -25,8 +25,9 @@ args = parse_args()
 root_path = args.root_path
 region = args.region
 
-with open(f"{root_path}/{region}/config.json", "r") as fp:
-    config = json.load(fp)
+# with open(f"{root_path}/{region}/config.json", "r") as fp:
+#     config = json.load(fp)
+config = json.load(open("config.json", "r"))
 
 # %%
 data_path = f"{region}/cctorch"

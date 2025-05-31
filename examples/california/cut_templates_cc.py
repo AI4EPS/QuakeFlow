@@ -156,7 +156,7 @@ def extract_template_numpy(
     template_array = np.memmap(template_fname, dtype=np.float32, mode="r+", shape=tuple(config["template_shape"]))
     traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"]))
     traveltime_index_array = np.memmap(
-        traveltime_index_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"])
+        traveltime_index_fname, dtype=np.int32, mode="r+", shape=tuple(config["traveltime_shape"])
     )
     traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="r+", shape=tuple(config["traveltime_shape"]))
 
@@ -198,8 +198,8 @@ def extract_template_numpy(
                             # trace.taper(max_percentage=0.05, type="cosine")
                             trace.filter("bandpass", freqmin=2.0, freqmax=12.0, corners=4, zerophase=True)
                             waveforms_dict[c] = trace
-                    except Exception as e:
-                        print(f"Error: {e}")
+                    except Exception as err:
+                        print(f"Error reading: {err}")
                         continue
                 else:
                     trace = waveforms_dict[c]
@@ -235,7 +235,8 @@ def extract_template_numpy(
                 traveltime_mask[idx_pick, ic, 0] = True
 
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data  # - np.mean(trace_data)
+                # template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data  # - np.mean(trace_data)
+                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data[: config["template_shape"][-1]]
 
         if lock is not None:
             with lock:
@@ -407,8 +408,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         year, jday = jday.split(".")
         year, jday = int(year), int(jday)
 
-        if not os.path.exists(f"{root_path}/{result_path}/{year:04d}"):
-            os.makedirs(f"{root_path}/{result_path}/{year:04d}")
+        if not os.path.exists(f"{root_path}/{result_path}/{year:04d}/{jday:03d}"):
+            os.makedirs(f"{root_path}/{result_path}/{year:04d}/{jday:03d}", exist_ok=True)
 
         # %%
         # stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
@@ -442,7 +443,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
             with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
                 events = pd.read_csv(fp, parse_dates=["time"])
 
-        # ############### DEBUG ###############
+        # # ############### DEBUG ###############
         # events = events[
         #     (events["latitude"] >= minlat)
         #     & (events["latitude"] <= maxlat)
@@ -452,7 +453,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # plt.figure(figsize=(10, 10))
         # plt.scatter(events["longitude"], events["latitude"], s=1)
         # plt.savefig(f"events_{year:04d}_{jday:03d}.png")
-        # ############### DEBUG ###############
+        # # ############### DEBUG ###############
 
         events.rename(columns={"time": "event_time"}, inplace=True)
         events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
@@ -549,13 +550,13 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
         # if not os.path.exists(f"{root_path}/{result_path}/{year:04d}"):
         #     os.makedirs(f"{root_path}/{result_path}/{year:04d}")
-        stations.to_csv(f"{root_path}/{result_path}/{year:04d}/cctorch_stations_{jday:03d}.csv", index=False)
-        events.to_csv(f"{root_path}/{result_path}/{year:04d}/cctorch_events_{jday:03d}.csv", index=False)
+        stations.to_csv(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_stations.csv", index=False)
+        events.to_csv(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_events.csv", index=False)
         # picks.to_csv(f"{root_path}/{result_path}/{year:04d}/cctorch_picks_{jday:03d}.csv", index=False)
 
         # %%
         # pair_fname = f"{root_path}/{result_path}/pairs.txt"
-        pair_fname = f"{root_path}/{result_path}/{year:04d}/pairs_{jday:03d}.txt"
+        pair_fname = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/pairs.txt"
         config["pair_file"] = pair_fname
 
         # %%
@@ -574,10 +575,10 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # traveltime_fname = f"{root_path}/{result_path}/traveltime.dat"
         # traveltime_index_fname = f"{root_path}/{result_path}/traveltime_index.dat"
         # traveltime_mask_fname = f"{root_path}/{result_path}/traveltime_mask.dat"
-        template_fname = f"{root_path}/{result_path}/{year:04d}/template_{jday:03d}.dat"
-        traveltime_fname = f"{root_path}/{result_path}/{year:04d}/traveltime_{jday:03d}.dat"
-        traveltime_index_fname = f"{root_path}/{result_path}/{year:04d}/traveltime_index_{jday:03d}.dat"
-        traveltime_mask_fname = f"{root_path}/{result_path}/{year:04d}/traveltime_mask_{jday:03d}.dat"
+        template_fname = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/template.dat"
+        traveltime_fname = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime.dat"
+        traveltime_index_fname = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime_index.dat"
+        traveltime_mask_fname = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime_mask.dat"
 
         config["template_file"] = template_fname
         config["traveltime_file"] = traveltime_fname
@@ -586,11 +587,11 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
 
         template_array = np.memmap(template_fname, dtype=np.float32, mode="w+", shape=template_shape)
         traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="w+", shape=traveltime_shape)
-        traveltime_index_array = np.memmap(traveltime_index_fname, dtype=np.float32, mode="w+", shape=traveltime_shape)
+        traveltime_index_array = np.memmap(traveltime_index_fname, dtype=np.int32, mode="w+", shape=traveltime_shape)
         traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="w+", shape=traveltime_shape)
 
         # with open(f"{root_path}/{result_path}/config.json", "w") as f:
-        with open(f"{root_path}/{result_path}/{year:04d}/config_{jday:03d}.json", "w") as f:
+        with open(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/config.json", "w") as f:
             json.dump(config, f, indent=4, sort_keys=True)
 
         # %%
@@ -615,7 +616,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         picks["idx_pick"] = np.arange(len(picks))
 
         # picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
-        picks.to_csv(f"{root_path}/{result_path}/{year:04d}/cctorch_picks_{jday:03d}.csv", index=False)
+        picks.to_csv(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
 
         ############################# CLOUD #########################################
         # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
@@ -728,6 +729,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
 
         pbar.close()
 
+        # # ############### DEBUG ###############
         # pairs = generate_pairs(
         #     picks,
         #     events,
@@ -735,30 +737,43 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         #     max_pair_dist=config["max_pair_dist_km"],
         #     fname=config["pair_file"],
         # )
+        # # ############### DEBUG ###############
 
         if protocol == "gs":
             fs.put(
-                f"{root_path}/{result_path}/{year:04d}/cctorch_picks_{jday:03d}.csv",
-                f"{bucket}/{result_path}/{year:04d}/cctorch_picks_{jday:03d}.csv",
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv",
             )
             fs.put(
-                f"{root_path}/{result_path}/{year:04d}/cctorch_events_{jday:03d}.csv",
-                f"{bucket}/{result_path}/{year:04d}/cctorch_events_{jday:03d}.csv",
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_events.csv",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/cctorch_events.csv",
             )
             # fs.put(
             #     f"{root_path}/{result_path}/{year:04d}/cctorch_stations_{jday:03d}.csv",
             #     f"{bucket}/{result_path}/{year:04d}/cctorch_stations_{jday:03d}.csv",
             # )
             fs.put(
-                f"{root_path}/{result_path}/{year:04d}/config_{jday:03d}.json",
-                f"{bucket}/{result_path}/{year:04d}/config_{jday:03d}.json",
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/config.json",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/config.json",
             )
             fs.put(
-                f"{root_path}/{result_path}/{year:04d}/template_{jday:03d}.dat",
-                f"{bucket}/{result_path}/{year:04d}/template_{jday:03d}.dat",
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/template.dat",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/template.dat",
+            )
+            fs.put(
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime.dat",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/traveltime.dat",
+            )
+            fs.put(
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime_index.dat",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/traveltime_index.dat",
+            )
+            fs.put(
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime_mask.dat",
+                f"{bucket}/{result_path}/{year:04d}/{jday:03d}/traveltime_mask.dat",
             )
             print(
-                f"{root_path}/{result_path}/{year:04d}/template_{jday:03d}.npy -> {bucket}/{result_path}/{year:04d}/template_{jday:03d}.npy"
+                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/template.dat -> {bucket}/{result_path}/{year:04d}/{jday:03d}/template.dat"
             )
 
 
@@ -855,6 +870,9 @@ if __name__ == "__main__":
 
     jdays = np.array_split(jdays, num_nodes)[node_rank]
     # jdays = ["2019.185"]
+    # jdays = ["2019.186"]
+    jdays = ["2019.185", "2019.186", "2019.187"]
+    # jdays = ["2019.185", "2019.186", "2019.187"]
     print(f"{node_rank}/{num_nodes}: {jdays[0] = }, {jdays[-1] = }")
 
     cut_templates(jdays, root_path, region, config, bucket, protocol, token)

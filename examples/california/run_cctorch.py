@@ -19,15 +19,19 @@ def parse_args():
 
 args = parse_args()
 
-##
-year = 2019
-jday = 185
+# ########## DEBUG by day ##############
+# year = 2019
+# jday = 185
+# jday = 186
+# jday = 187
+# data_path = f"{region}/cctorch/{year}"
+# #######################################
 
 # %%
 root_path = args.root_path
 region = args.region
 
-data_path = f"{region}/cctorch/{year}"
+data_path = f"{region}/cctorch"
 result_path = f"{region}/cctorch/ccpairs"
 
 # data_path = f"{region}/cctorch_ca"
@@ -46,15 +50,25 @@ batch = 1_024
 block_size1 = 1000_000
 block_size2 = 1000_000
 
+########## DEBUG by day ##############
+# base_cmd = (
+#     f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs_{jday:03d}.txt --data_path1={root_path}/{data_path}/template_{jday:03d}.dat --data_format1=memmap "
+#     f"--data_list1={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv "
+#     f"--events_csv={root_path}/{data_path}/cctorch_events_{jday:03d}.csv --picks_csv={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv --stations_csv={root_path}/{data_path}/cctorch_stations_{jday:03d}.csv "
+#     f"--config={root_path}/{data_path}/config_{jday:03d}.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
+#     f"--result_path={root_path}/{result_path}"
+# )
+#######################################
+
+
 
 base_cmd = (
-    f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs_{jday:03d}.txt --data_path1={root_path}/{data_path}/template_{jday:03d}.dat --data_format1=memmap "
-    f"--data_list1={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv "
-    f"--events_csv={root_path}/{data_path}/cctorch_events_{jday:03d}.csv --picks_csv={root_path}/{data_path}/cctorch_picks_{jday:03d}.csv --stations_csv={root_path}/{data_path}/cctorch_stations_{jday:03d}.csv "
-    f"--config={root_path}/{data_path}/config_{jday:03d}.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
+    f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
+    f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
+    f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
+    f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
     f"--result_path={root_path}/{result_path}"
 )
-
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -71,36 +85,63 @@ if num_gpu > 0:
 else:
     cmd = f"python {base_cmd} --device={device}"
 print(cmd)
-# os.system(cmd)
+os.system(cmd)
+
 
 # %%
-for rank in range(num_gpu):
-    if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
-        continue
-    if rank == 0:
-        cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/../dtcc.csv"
-    else:
-        cmd = f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/../dtcc.csv"
+# ########## DEBUG by day ##############
+# origin = data_path
+# data_path = f"{data_path}/../"
+# #######################################
+
+if num_gpu == 0:
+    cmd = f"cat {root_path}/{result_path}/CC_000_001.csv > {root_path}/{data_path}/dtcc.csv"
+    print(cmd)
+    os.system(cmd)
+    cmd = f"cat {root_path}/{result_path}/CC_000_001_dt.cc > {root_path}/{data_path}/dt.cc"
     print(cmd)
     os.system(cmd)
 
+    cmd = f"cat {root_path}/{result_path}/CC_000_001_dt.cc > {root_path}/{data_path}/dt.cc"
+    print(cmd)
+    os.system(cmd)
+    
+else:
+    for rank in range(num_gpu):
+        if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
+            continue
+        if rank == 0:
+            cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
+        else:
+            cmd = (
+                f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
+            )
+        print(cmd)
+        os.system(cmd)
+    
+    cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
+    print(cmd)
+    os.system(cmd)
 
-cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/../dt.cc"
-print(cmd)
-os.system(cmd)
+# ########## DEBUG by day ##############
+# data_path = origin
+# #######################################
 
-##
-cmd = f"cp {root_path}/{data_path}/cctorch_stations_{jday:03d}.csv {root_path}/{data_path}/../cctorch_stations.csv"
-print(cmd)
-os.system(cmd)
+########## DEBUG by day ##############
+# ##
+# cmd = f"cp {root_path}/{data_path}/cctorch_stations_{jday:03d}.csv {root_path}/{data_path}/../cctorch_stations.csv"
+# print(cmd)
+# os.system(cmd)
 
-cmd = f"cp {root_path}/{data_path}/cctorch_events_{jday:03d}.csv {root_path}/{data_path}/../cctorch_events.csv"
-print(cmd)
-os.system(cmd)
+# cmd = f"cp {root_path}/{data_path}/cctorch_events_{jday:03d}.csv {root_path}/{data_path}/../cctorch_events.csv"
+# print(cmd)
+# os.system(cmd)
 
-cmd = f"cp {root_path}/{data_path}/cctorch_picks_{jday:03d}.csv {root_path}/{data_path}/../cctorch_picks.csv"
-print(cmd)
-os.system(cmd)
+# cmd = f"cp {root_path}/{data_path}/cctorch_picks_{jday:03d}.csv {root_path}/{data_path}/../cctorch_picks.csv"
+# print(cmd)
+# os.system(cmd)
+#######################################
+
 
 # # %%
 # os.chdir(f"{root_path}/{region}/cctorch")
