@@ -56,7 +56,7 @@ task.set_resources(
         region="us-west1",  # GCP
         # region="us-west-2",  # AWS
         accelerators=None,
-        cpus=2,
+        cpus=4,
         disk_tier="low",
         disk_size=10,  # GB
         memory=None,

@@ -40,7 +40,7 @@ def download(client, year, jday, stations, root_path, waveform_dir, lock=None, c
     max_retry = 10
 
     # for key, station_group in stations.groupby(["begin_time"]):
-    batch_size = 100
+    batch_size = 16
     begin_time = datetime.strptime(f"{year:04d}-{jday:03d}", "%Y-%j")
     end_time = begin_time + timedelta(days=1)
     begin_time = obspy.UTCDateTime(begin_time)
@@ -86,8 +86,16 @@ def download(client, year, jday, stations, root_path, waveform_dir, lock=None, c
                         fs.put(f"{root_path}/{mseed_dir}/{fname}", f"{bucket}/{mseed_dir}/{fname}")
                         os.remove(f"{root_path}/{mseed_dir}/{fname}")
 
+                futures = []
                 with ThreadPoolExecutor(max_workers=16) as executor:
-                    executor.map(write_trace, stream)
+                    # executor.map(write_trace, stream)
+                    for tr in stream:
+                        future = executor.submit(write_trace, tr)
+                        futures.append(future)
+                for future in as_completed(futures):
+                    out = future.result()
+                    if out is not None:
+                        print(out)
 
                 break
 
