@@ -104,7 +104,7 @@ if __name__ == "__main__":
     node_rank = args.node_rank
     year = args.year
 
-    data_path = f"{region}/adloc2"
+    data_path = f"{region}/adloc"
     result_path = f"{region}/adloc_dd_2022"
 
     if not os.path.exists(f"{root_path}/{result_path}"):

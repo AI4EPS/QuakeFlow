@@ -15,6 +15,8 @@ from adloc.eikonal2d import calc_traveltime, init_eikonal2d
 from pyproj import Proj
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
+from args import parse_args
+from cut_templates_merge import generate_pairs
 
 np.random.seed(42)
 
@@ -249,46 +251,46 @@ def extract_template_numpy(
 
 
 # %%
-def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="pairs.txt"):
-    ncpu = min(32, mp.cpu_count())
-    neigh = NearestNeighbors(radius=max_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
-    neigh.fit(events[["x_km", "y_km", "z_km"]].values)
+# def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="pairs.txt"):
+#     ncpu = min(32, mp.cpu_count())
+#     neigh = NearestNeighbors(radius=max_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
+#     neigh.fit(events[["x_km", "y_km", "z_km"]].values)
 
-    print(f"Generating pairs with max_pair_dist={max_pair_dist} km, max_neighbors={max_neighbors}")
-    # event_pairs = []
-    # for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
-    #     neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
-    #     event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
+#     print(f"Generating pairs with max_pair_dist={max_pair_dist} km, max_neighbors={max_neighbors}")
+#     # event_pairs = []
+#     # for i, event in tqdm(events.iterrows(), total=len(events), desc="Generating pairs"):
+#     #     neigh_dist, neigh_ind = neigh.radius_neighbors([event[["x_km", "y_km", "z_km"]].values], sort_results=True)
+#     #     event_pairs.extend([[i, j] for j in neigh_ind[0][1:] if i < j])
 
-    event_pairs = set()
-    neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
-    for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating event pairs")):
-        for j in neighs[:max_neighbors]:
-            if i < j:
-                event_pairs.add((i, j))
-            else:
-                event_pairs.add((j, i))
+#     event_pairs = set()
+#     neigh_ind = neigh.radius_neighbors(sort_results=True)[1]
+#     for i, neighs in enumerate(tqdm(neigh_ind, desc="Generating event pairs")):
+#         for j in neighs[:max_neighbors]:
+#             if i < j:
+#                 event_pairs.add((i, j))
+#             else:
+#                 event_pairs.add((j, i))
 
-    event_pairs = list(event_pairs)
+#     event_pairs = list(event_pairs)
 
-    picks = picks.set_index(["idx_eve", "idx_sta", "phase_type"])
-    idx_pick_dict = picks["idx_pick"].to_dict()  ## much faster than using .loc
+#     picks = picks.set_index(["idx_eve", "idx_sta", "phase_type"])
+#     idx_pick_dict = picks["idx_pick"].to_dict()  ## much faster than using .loc
 
-    pairs = []
-    for i, j in tqdm(event_pairs, desc="Generating pick pairs"):
-        for idx_sta in stations.index:
-            for phase_type in ["P", "S"]:
+#     pairs = []
+#     for i, j in tqdm(event_pairs, desc="Generating pick pairs"):
+#         for idx_sta in stations.index:
+#             for phase_type in ["P", "S"]:
 
-                if (i, idx_sta, phase_type) not in idx_pick_dict or (j, idx_sta, phase_type) not in idx_pick_dict:
-                    continue
+#                 if (i, idx_sta, phase_type) not in idx_pick_dict or (j, idx_sta, phase_type) not in idx_pick_dict:
+#                     continue
 
-                idx_pick = idx_pick_dict[(i, idx_sta, phase_type)]
-                jdx_pick = idx_pick_dict[(j, idx_sta, phase_type)]
-                pairs.append([idx_pick, jdx_pick])
+#                 idx_pick = idx_pick_dict[(i, idx_sta, phase_type)]
+#                 jdx_pick = idx_pick_dict[(j, idx_sta, phase_type)]
+#                 pairs.append([idx_pick, jdx_pick])
 
-    np.savetxt(fname, pairs, fmt="%d,%d")
+#     np.savetxt(fname, pairs, fmt="%d,%d")
 
-    return pairs
+#     return pairs
 
 
 # %%
@@ -300,7 +302,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
     # %%
     # data_path = f"{region}/adloc"
     # result_path = f"{region}/cctorch"
-    data_path = f"{region}/adloc2"
+    data_path = f"{region}/adloc"
     result_path = f"{region}/cctorch"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
@@ -423,14 +425,14 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         stations["station_id"] = stations.index
         stations.sort_values(by=["latitude", "longitude"], inplace=True)
 
-        # ############### DEBUG ###############
-        # "minlatitude": 35.205,
-        # "maxlatitude": 36.205,
-        # "minlongitude": -118.004,
-        # "maxlongitude": -117.004,
-        minlat, maxlat = 35.205, 36.205
-        minlon, maxlon = -118.004, -117.004
-        # ############### DEBUG ###############
+        # # ############### DEBUG ###############
+        # # "minlatitude": 35.205,
+        # # "maxlatitude": 36.205,
+        # # "minlongitude": -118.004,
+        # # "maxlongitude": -117.004,
+        # minlat, maxlat = 35.205, 36.205
+        # minlon, maxlon = -118.004, -117.004
+        # # ############### DEBUG ###############
 
         # %%
         # events = pd.read_csv(f"{root_path}/{data_path}/ransac_events.csv", parse_dates=["time"])
@@ -454,13 +456,27 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # plt.scatter(events["longitude"], events["latitude"], s=1)
         # plt.savefig(f"events_{year:04d}_{jday:03d}.png")
         # # ############### DEBUG ###############
+        events = events[
+            (events["latitude"] > config["minlatitude"])
+            & (events["latitude"] < config["maxlatitude"])
+            & (events["longitude"] > config["minlongitude"])
+            & (events["longitude"] < config["maxlongitude"])
+        ]
+        plt.figure()
+        plt.scatter(events["longitude"], events["latitude"], s=1)
+        plt.title(f"Events ({year:04d}-{jday:03d}) : {len(events)}")
+        if not os.path.exists(f"{root_path}/{region}/figures"):
+            os.makedirs(f"{root_path}/{region}/figures", exist_ok=True)
+        plt.savefig(f"{root_path}/{region}/figures/events_{year:04d}_{jday:03d}.png")
+        print(f"Saved figure to {root_path}/{region}/figures/events_{year:04d}_{jday:03d}.png")
+        plt.close()
 
         events.rename(columns={"time": "event_time"}, inplace=True)
         events["event_time"] = pd.to_datetime(events["event_time"], utc=True)
         reference_t0 = events["event_time"].min()
         events["event_timestamp"] = events["event_time"].apply(lambda x: (x - reference_t0).total_seconds())
         print(f"{len(events) = }")
-        print(events.iloc[:5])
+        print(events.iloc[:100])
 
         # %%
         stations[["x_km", "y_km"]] = stations.apply(
@@ -490,6 +506,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # ############### DEBUG ###############
         # picks = picks[(picks["event_index"].isin(events["event_index"]))]
         # ############### DEBUG ###############
+        picks = picks[picks["event_index"].isin(events["event_index"])]
 
         picks = picks[picks["adloc_mask"] == 1]
         picks["phase_time"] = pd.to_datetime(picks["phase_time"], utc=True)
@@ -616,7 +633,11 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         picks["idx_pick"] = np.arange(len(picks))
 
         # picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
-        picks.to_csv(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv", index=False, date_format="%Y-%m-%dT%H:%M:%S.%f")
+        picks.to_csv(
+            f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv",
+            index=False,
+            date_format="%Y-%m-%dT%H:%M:%S.%f",
+        )
 
         ############################# CLOUD #########################################
         # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
@@ -662,6 +683,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         picks["year"] = picks["phase_time"].dt.strftime("%Y")
         picks["jday"] = picks["phase_time"].dt.strftime("%j")
 
+        ## TODO: Check same stations id of SC and NC
         mseeds_df = mseeds_df[(mseeds_df["year"].astype(int) == year) & (mseeds_df["jday"].astype(int) == jday)]
         picks = picks[(picks["year"].astype(int) == year) & (picks["jday"].astype(int) == jday)]
 
@@ -772,20 +794,9 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 f"{root_path}/{result_path}/{year:04d}/{jday:03d}/traveltime_mask.dat",
                 f"{bucket}/{result_path}/{year:04d}/{jday:03d}/traveltime_mask.dat",
             )
-            print(
-                f"{root_path}/{result_path}/{year:04d}/{jday:03d}/template.dat -> {bucket}/{result_path}/{year:04d}/{jday:03d}/template.dat"
-            )
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run Gamma on NCEDC/SCEDC data")
-    parser.add_argument("--num_nodes", type=int, default=1)
-    parser.add_argument("--node_rank", type=int, default=0)
-    parser.add_argument("--year", type=int, default=2023)
-    parser.add_argument("--root_path", type=str, default="local")
-    parser.add_argument("--region", type=str, default="Cal")
-    parser.add_argument("--bucket", type=str, default="quakeflow_catalog")
-    return parser.parse_args()
+            # print(
+            #     f"{root_path}/{result_path}/{year:04d}/{jday:03d}/template.dat -> {bucket}/{result_path}/{year:04d}/{jday:03d}/template.dat"
+            # )
 
 
 # %%
@@ -821,12 +832,12 @@ if __name__ == "__main__":
     # %%
     # with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
     #     config = json.load(fp)
-    with open("config.json", "r") as fp:
+    # with open("config.json", "r") as fp:
+    #     config = json.load(fp)
+    # config["world_size"] = num_nodes
+    with open(args.config, "r") as fp:
         config = json.load(fp)
-    config["world_size"] = num_nodes
     config.update(vars(args))
-
-    # %%
     print(json.dumps(config, indent=4, sort_keys=True))
 
     # cut_templates(root_path, region, config)
@@ -866,13 +877,35 @@ if __name__ == "__main__":
     #     jdays.extend([f"{year}.{i:03d}" for i in range(1, num_jday + 1)])
 
     num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
-    jdays = [f"{year}.{i:03d}" for i in range(1, num_jday + 1)]
+    # jdays = [f"{year}.{i:03d}" for i in range(1, num_jday + 1)]
+    jdays = range(1, num_jday + 1)
 
     jdays = np.array_split(jdays, num_nodes)[node_rank]
     # jdays = ["2019.185"]
     # jdays = ["2019.186"]
-    jdays = ["2019.185", "2019.186", "2019.187"]
     # jdays = ["2019.185", "2019.186", "2019.187"]
+    # jdays = ["2019.185", "2019.186", "2019.187"]
+
+    # check existed year/jday/template.dat
+    # processed = []
+    # for jday in jdays:
+    #     if fs.exists(f"{bucket}/{region}/cctorch/{year:04d}/{jday:03d}/template.dat"):
+    #         processed.append(jday)
+    processed = fs.glob(f"{bucket}/{region}/cctorch/{year:04d}/???/template.dat")
+    processed = [x.split("/")[-2] for x in processed]
+    print(f"Processed days: {len(processed)}")
+
+    jdays = [jday for jday in jdays if f"{jday:03d}" not in processed]
+    print(f"Remaining days: {len(jdays)}")
+
+    if len(jdays) == 0:
+        print("No days to process")
+        exit()
+
+    jdays = [f"{year}.{jday:03d}" for jday in jdays]
+
     print(f"{node_rank}/{num_nodes}: {jdays[0] = }, {jdays[-1] = }")
+
+    # jdays = ["2019.185", "2019.186", "2019.187"]
 
     cut_templates(jdays, root_path, region, config, bucket, protocol, token)

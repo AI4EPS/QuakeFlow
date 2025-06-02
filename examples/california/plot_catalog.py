@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--root_path", type=str, default="local")
     parser.add_argument("--region", type=str, default="Cal")
     parser.add_argument("--bucket", type=str, default="quakeflow_catalog")
+    parser.add_argument("--config", type=str, default="config.json")
     return parser.parse_args()
 
 
@@ -51,8 +52,11 @@ plot_3d = False
 use_pygmt = True
 
 # %%
-with open(f"{root_path}/{region}/config.json", "r") as f:
-    config = json.load(f)
+# with open(f"{root_path}/{region}/config.json", "r") as f:
+#     config = json.load(f)
+with open(args.config, "r") as fp:
+    config = json.load(fp)
+config.update(vars(args))
 print(json.dumps(config, indent=4, sort_keys=True))
 xlim = [config["minlongitude"], config["maxlongitude"]]
 ylim = [config["minlatitude"], config["maxlatitude"]]

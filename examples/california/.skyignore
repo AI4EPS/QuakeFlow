@@ -1,0 +1,10 @@
+__pycache__/
+local/
+tests/
+figures/
+benchmark/
+Cal/
+cctorch_figures/
+cctorch_figures2/
+cctorch2_figures/
+

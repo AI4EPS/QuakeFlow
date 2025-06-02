@@ -61,9 +61,8 @@ block_size2 = 1000_000
 #######################################
 
 
-
 base_cmd = (
-    f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
+    f"/opt/CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
     f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
     f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
     f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
@@ -105,7 +104,7 @@ if num_gpu == 0:
     cmd = f"cat {root_path}/{result_path}/CC_000_001_dt.cc > {root_path}/{data_path}/dt.cc"
     print(cmd)
     os.system(cmd)
-    
+
 else:
     for rank in range(num_gpu):
         if not os.path.exists(f"{root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv"):
@@ -113,12 +112,10 @@ else:
         if rank == 0:
             cmd = f"cat {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv > {root_path}/{data_path}/dtcc.csv"
         else:
-            cmd = (
-                f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
-            )
+            cmd = f"tail -n +2 {root_path}/{result_path}/CC_{rank:03d}_{num_gpu:03d}.csv >> {root_path}/{data_path}/dtcc.csv"
         print(cmd)
         os.system(cmd)
-    
+
     cmd = f"cat {root_path}/{result_path}/CC_*_{num_gpu:03d}_dt.cc > {root_path}/{data_path}/dt.cc"
     print(cmd)
     os.system(cmd)
