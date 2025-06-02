@@ -19,7 +19,7 @@ fs = fsspec.filesystem("gs", token=token)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_nodes", type=int, default=32)
+    parser.add_argument("--num_nodes", type=int, default=16)
     return parser.parse_args()
 
 
@@ -78,6 +78,9 @@ for NODE_RANK in range(NUM_NODES):
     cluster_name = f"download-{NODE_RANK:03d}"
 
     requests_ids.append(sky.jobs.launch(task, name=f"{cluster_name}"))
+
+    print(f"Running download waveform on (rank={NODE_RANK}, num_node={NUM_NODES}) of {cluster_name}")
+
     job_idx += 1
 
 for request_id in requests_ids:

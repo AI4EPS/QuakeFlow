@@ -3,7 +3,7 @@ import json
 import multiprocessing as mp
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from glob import glob
 from typing import Dict, List
 
@@ -18,7 +18,13 @@ from tqdm import tqdm
 
 
 # %%
-def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
+# def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
+def download(client, year, jday, stations, root_path, waveform_dir, lock=None, cloud=None):
+    if isinstance(year, str):
+        year = int(year)
+    if isinstance(jday, str):
+        jday = int(jday)
+
     if cloud is not None:
         protocol = cloud["protocol"]
         token = cloud["token"]
@@ -33,17 +39,23 @@ def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
 
     max_retry = 10
 
-    for key, station_group in stations.groupby(["begin_time"]):
+    # for key, station_group in stations.groupby(["begin_time"]):
+    batch_size = 100
+    begin_time = datetime.strptime(f"{year:04d}-{jday:03d}", "%Y-%j")
+    end_time = begin_time + timedelta(days=1)
+    begin_time = obspy.UTCDateTime(begin_time)
+    end_time = obspy.UTCDateTime(end_time)
+    for i in range(0, len(stations), batch_size):
         bulk = []
-        for _, station in station_group.iterrows():
+        for _, station in stations.iloc[i : i + batch_size].iterrows():
             bulk.append(
                 (
                     station.network,
                     station.station,
                     station.location,
                     station.channel,
-                    obspy.UTCDateTime(station.begin_time),
-                    obspy.UTCDateTime(station.end_time),
+                    begin_time,
+                    end_time,
                 )
             )
 
@@ -57,13 +69,9 @@ def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
                     print(f"Error merging traces: {waveform_dir}")
                     print([(tr.id, tr.stats.sampling_rate) for tr in stream])
                 stream.sort()
-                for tr in stream:
+
+                def write_trace(tr):
                     tr.data = tr.data.astype(np.float32)
-                    starttime = tr.stats.starttime
-                    endtime = tr.stats.endtime
-                    midtime = starttime + (endtime - starttime) / 2
-                    year = midtime.year
-                    jday = midtime.julday
                     network = tr.stats.network
                     station = tr.stats.station
                     location = tr.stats.location
@@ -77,6 +85,10 @@ def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
                         print(f"Uploading {fname} to {bucket}/{mseed_dir}/{fname}")
                         fs.put(f"{root_path}/{mseed_dir}/{fname}", f"{bucket}/{mseed_dir}/{fname}")
                         os.remove(f"{root_path}/{mseed_dir}/{fname}")
+
+                with ThreadPoolExecutor(max_workers=16) as executor:
+                    executor.map(write_trace, stream)
+
                 break
 
             except Exception as err:
@@ -84,7 +96,7 @@ def download(client, stations, root_path, waveform_dir, lock=None, cloud=None):
                 message1 = "No data available for request"
                 message2 = "The current client does not have a dataselect service"
                 if err[: len(message1)] == message1:
-                    print(f"{message1} from {client.base_url}")
+                    # print(f"{message1} from {client.base_url}")
                     break
                 elif err[: len(message2)] == message2:
                     print(f"{message2} from {client.base_url}")
@@ -129,10 +141,10 @@ def download_waveform(
 
     stations = pd.read_csv(f"stations_{node_rank:03d}.csv", dtype=str)
     stations = stations.fillna("")
-    stations = stations.sort_values(by=["begin_time"], ascending=False)
-    stations["begin_time"] = pd.to_datetime(stations["begin_time"])
-    stations["year"] = stations["begin_time"].dt.strftime("%Y")
-    stations["jday"] = stations["begin_time"].dt.strftime("%j")
+    # stations = stations.sort_values(by=["begin_time"], ascending=False)
+    # stations["begin_time"] = pd.to_datetime(stations["begin_time"])
+    # stations["year"] = stations["begin_time"].dt.strftime("%Y")
+    # stations["jday"] = stations["begin_time"].dt.strftime("%j")
     print(f"Total stations: {len(stations)}")
 
     networks = []
@@ -192,13 +204,30 @@ def download_waveform(
     stations = stations[~stations["mseed"].isin(processed)]
     print(f"Stations to download: {len(stations)}")
 
-    MAX_THREADS = 3
-    BATCH_SIZE = 200
+    # MAX_THREADS = 3
+    # BATCH_SIZE = 200
 
-    for i in range(0, len(stations), BATCH_SIZE):
+    # for i in range(0, len(stations), BATCH_SIZE):
+    #     download(
+    #         client,
+    #         stations.iloc[i : i + BATCH_SIZE],
+    #         root_path,
+    #         waveform_dir,
+    #         None,
+    #         cloud_config,
+    #     )
+
+    # iterate stations by group by year and jday
+    stations = stations.groupby(["year", "jday"])
+    pbar = tqdm(total=len(stations), desc="Downloading waveforms")
+    for (year, jday), stations_ in stations:
+        pbar.set_description(f"Downloading {year}/{jday}")
+        pbar.update(1)
         download(
             client,
-            stations.iloc[i : i + BATCH_SIZE],
+            year,
+            jday,
+            stations_,
             root_path,
             waveform_dir,
             None,
@@ -268,19 +297,25 @@ if __name__ == "__main__":
     stations = stations[["network", "station", "location", "instrument", "component", "missed_date"]]
     stations = stations.explode("missed_date")
     stations = stations[stations["missed_date"].str.strip() != ""]
-    stations["missed_date"] = pd.to_datetime(stations["missed_date"], format="%Y-%j")
-    stations = stations.rename(columns={"missed_date": "begin_time"})
-    stations["end_time"] = stations["begin_time"] + pd.Timedelta(days=1)
-    stations["begin_time"] = stations["begin_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
-    stations["end_time"] = stations["end_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
     stations["component"] = stations["component"].apply(lambda x: list(x))
     stations = stations.explode("component")
+    stations["year"] = stations["missed_date"].str.split("-").str[0]
+    stations["jday"] = stations["missed_date"].str.split("-").str[1]
+    # # stations["missed_date"] = pd.to_datetime(stations["missed_date"], format="%Y-%j")
+    # # stations = stations.rename(columns={"missed_date": "begin_time"})
+    # # stations["end_time"] = stations["begin_time"] + pd.Timedelta(days=1)
+    # # stations["begin_time"] = stations["begin_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    # # stations["end_time"] = stations["end_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
     stations["channel"] = stations["instrument"] + stations["component"]
     stations.drop(columns=["instrument", "component"], inplace=True)
-    stations.sort_values(by=["begin_time"], ascending=False, inplace=True)
+    # stations.sort_values(by=["begin_time"], ascending=False, inplace=True)
+    # stations = stations[stations["network"] == "7D"]
+    stations.sort_values(by=["year", "jday"], ascending=False, inplace=True)
     stations.reset_index(drop=True, inplace=True)
+    stations = stations[~stations["network"].isin(["NC", "BK", "CI"])]
 
-    stations = stations.iloc[node_rank::num_nodes]
+    idx = np.array_split(np.arange(len(stations)), num_nodes)[node_rank]
+    stations = stations.iloc[idx]
     stations.to_csv(f"stations_{node_rank:03d}.csv", index=False)
 
     download_waveform(
