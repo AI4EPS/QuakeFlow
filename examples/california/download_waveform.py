@@ -218,21 +218,45 @@ def download_waveform(
     #     )
 
     # iterate stations by group by year and jday
-    stations = stations.groupby(["year", "jday"])
-    pbar = tqdm(total=len(stations), desc="Downloading waveforms")
-    for (year, jday), stations_ in stations:
-        pbar.set_description(f"Downloading {year}/{jday}")
-        pbar.update(1)
-        download(
-            client,
-            year,
-            jday,
-            stations_,
-            root_path,
-            waveform_dir,
-            None,
-            cloud_config,
-        )
+    # stations = stations.groupby(["year", "jday"])
+    # pbar = tqdm(total=len(stations), desc="Downloading waveforms")
+    # for (year, jday), stations_ in stations:
+    #     pbar.set_description(f"Downloading {year}/{jday}")
+    #     pbar.update(1)
+    #     download(
+    #         client,
+    #         year,
+    #         jday,
+    #         stations_,
+    #         root_path,
+    #         waveform_dir,
+    #         None,
+    #         cloud_config,
+    #     )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
+        for (year, jday), stations_ in stations.groupby(["year", "jday"]):
+            future = executor.submit(
+                download,
+                client,
+                year,
+                jday,
+                stations_,
+                root_path,
+                waveform_dir,
+                None,
+                cloud_config,
+            )
+            futures.append(future)
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading waveforms"):
+            try:
+                out = future.result()
+                if out is not None:
+                    print(out)
+            except Exception as e:
+                print(f"Error downloading waveforms: {e}")
 
     # with mp.Manager() as manager:
     #     lock = manager.Lock()
@@ -310,12 +334,13 @@ if __name__ == "__main__":
     stations.drop(columns=["instrument", "component"], inplace=True)
     # stations.sort_values(by=["begin_time"], ascending=False, inplace=True)
     # stations = stations[stations["network"] == "7D"]
-    stations.sort_values(by=["year", "jday"], ascending=False, inplace=True)
     stations.reset_index(drop=True, inplace=True)
     stations = stations[~stations["network"].isin(["NC", "BK", "CI"])]
 
+    stations.sort_values(by=["year", "jday"], ascending=False, inplace=True)
     idx = np.array_split(np.arange(len(stations)), num_nodes)[node_rank]
     stations = stations.iloc[idx]
+    # stations = stations.iloc[node_rank::num_nodes]
     stations.to_csv(f"stations_{node_rank:03d}.csv", index=False)
 
     download_waveform(
