@@ -71,10 +71,10 @@ python run_phasenet.py --model_path PhaseNet --num_node $NUM_NODE --node_rank $N
 )
 task.set_resources(
     sky.Resources(
-        # cloud=sky.GCP(),
-        # region="us-west1",  # GCP
-        cloud=sky.AWS(),
-        region="us-west-1",  # AWS
+        cloud=sky.GCP(),
+        region="us-west1",  # GCP
+        # cloud=sky.AWS(),
+        # region="us-west-1",  # AWS
         accelerators=None,
         cpus=8,
         disk_tier="low",
