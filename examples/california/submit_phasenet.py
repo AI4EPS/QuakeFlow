@@ -25,10 +25,10 @@ fs = fsspec.filesystem("gs", token=token)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_nodes", type=int, default=32)
-    parser.add_argument("--year", type=int, default=2022)
-    parser.add_argument("--region", type=str, default="NC")
-    parser.add_argument("--branch", type=str, default="ncedc")
+    parser.add_argument("--num_nodes", type=int, default=16)
+    parser.add_argument("--year", type=int, default=2015)
+    parser.add_argument("--region", type=str, default="IRIS")
+    parser.add_argument("--branch", type=str, default="iris")
     return parser.parse_args()
 
 
@@ -53,8 +53,6 @@ pip install obspy pyproj
 pip install tensorflow==2.14.0 numpy==1.26.4
 [ ! -d "PhaseNet" ] && git clone https://github.com/AI4EPS/PhaseNet.git
 cd PhaseNet && git checkout $BRANCH && git pull origin $BRANCH && cd ..
-### GaMMA
-# pip install -e /opt/GaMMA
 """,
     run="""
 num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
@@ -73,9 +71,10 @@ python run_phasenet.py --model_path PhaseNet --num_node $NUM_NODE --node_rank $N
 )
 task.set_resources(
     sky.Resources(
-        cloud=sky.GCP(),
-        region="us-west1",  # GCP
-        # region="us-west-2",  # AWS
+        # cloud=sky.GCP(),
+        # region="us-west1",  # GCP
+        cloud=sky.AWS(),
+        region="us-west-2",  # AWS
         accelerators=None,
         cpus=8,
         disk_tier="low",
@@ -86,57 +85,83 @@ task.set_resources(
 )
 # task.set_file_mounts(
 #     {
-#         "run_phasenet.py": "run_phasenet.py",
+#         "PhaseNet": "../../PhaseNet",
 #     },
 # )
 
 jobs = []
 try:
-    sky.status(refresh=True)
+    sky.status(refresh="AUTO")
 except Exception as e:
     print(e)
 
-with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
-    for NODE_RANK in range(NUM_NODES):
 
-        task.update_envs({"NODE_RANK": NODE_RANK})
-        cluster_name = f"phasenet-{REGION}-{YEAR}-{NODE_RANK:03d}"
+# task.update_envs({"NODE_RANK": 0, "NUM_NODES": 1})
+# job_id = sky.launch(task, cluster_name="phasenet", fast=True)
+# # job_id = sky.exec(task, cluster_name="phasenet")
+# status = sky.stream_and_get(job_id)
+# # sky.tail_logs(cluster_name="cctorch8", job_id=job_id, follow=True)
+# print(f"Job ID: {job_id}, status: {status}")
 
-        status = sky.status(cluster_names=[f"{cluster_name}"], refresh=True)
-        if len(status) > 0:
-            if status[0]["status"].value == "INIT":
-                sky.down(f"{cluster_name}")
-            if (not status[0]["to_down"]) and (not status[0]["status"].value == "INIT"):
-                sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
-            print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
-            continue
+# raise
 
-        ###### Hardcoded #######
-        mseed_file = f"gs://quakeflow_catalog/{REGION}/phasenet/mseed_list/{YEAR}_{NODE_RANK:03d}_{NUM_NODES:03d}.txt"
-        if fs.exists(mseed_file):
-            with fs.open(mseed_file, "r") as fp:
-                mseed_list = fp.readlines()
-            print(f"{mseed_file}, {len(mseed_list) = }")
-            if len(mseed_list) == 0:
-                print(f"Skipping {mseed_file}...")
-                continue
-        ###### Hardcoded #######
+job_idx = 1
+requests_ids = []
+for NODE_RANK in range(NUM_NODES):
 
-        status = sky.status(cluster_names=[f"{cluster_name}"])
-        if len(status) == 0:
-            print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
-            jobs.append(
-                executor.submit(
-                    sky.launch,
-                    task,
-                    cluster_name=f"{cluster_name}",
-                    idle_minutes_to_autostop=10,
-                    down=True,
-                    detach_setup=True,
-                    detach_run=True,
-                )
-            )
-            time.sleep(10)
+    task.update_envs({"NODE_RANK": NODE_RANK})
+    cluster_name = f"phasenet-{REGION}-{YEAR}-{NODE_RANK:03d}"
 
-for job in jobs:
-    print(job.result())
+    requests_ids.append(sky.jobs.launch(task, name=f"{cluster_name}"))
+
+    print(f"Running phasenet on (rank={NODE_RANK}, num_node={NUM_NODES}) of {cluster_name}")
+
+    job_idx += 1
+
+for request_id in requests_ids:
+    print(sky.get(request_id))
+
+# with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
+#     for NODE_RANK in range(NUM_NODES):
+
+#         task.update_envs({"NODE_RANK": NODE_RANK})
+#         cluster_name = f"phasenet-{REGION}-{YEAR}-{NODE_RANK:03d}"
+
+#         status = sky.status(cluster_names=[f"{cluster_name}"], refresh=True)
+#         if len(status) > 0:
+#             if status[0]["status"].value == "INIT":
+#                 sky.down(f"{cluster_name}")
+#             if (not status[0]["to_down"]) and (not status[0]["status"].value == "INIT"):
+#                 sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
+#             print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
+#             continue
+
+#         ###### Hardcoded #######
+#         mseed_file = f"gs://quakeflow_catalog/{REGION}/phasenet/mseed_list/{YEAR}_{NODE_RANK:03d}_{NUM_NODES:03d}.txt"
+#         if fs.exists(mseed_file):
+#             with fs.open(mseed_file, "r") as fp:
+#                 mseed_list = fp.readlines()
+#             print(f"{mseed_file}, {len(mseed_list) = }")
+#             if len(mseed_list) == 0:
+#                 print(f"Skipping {mseed_file}...")
+#                 continue
+#         ###### Hardcoded #######
+
+#         status = sky.status(cluster_names=[f"{cluster_name}"])
+#         if len(status) == 0:
+#             print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
+#             jobs.append(
+#                 executor.submit(
+#                     sky.launch,
+#                     task,
+#                     cluster_name=f"{cluster_name}",
+#                     idle_minutes_to_autostop=10,
+#                     down=True,
+#                     detach_setup=True,
+#                     detach_run=True,
+#                 )
+#             )
+#             time.sleep(10)
+
+# for job in jobs:
+#     print(job.result())

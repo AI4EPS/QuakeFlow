@@ -34,6 +34,17 @@ def parse_fname(mseed, region):
         assert fname[4] == "D"
         year = fname[5]
         jday = fname[6]
+    elif region == "IRIS":
+        fname = mseed.split("/")
+        year = fname[-3]
+        jday = fname[-2]
+        tmp = fname[-1].split(".")
+        network = tmp[0]
+        station = tmp[1]
+        location = tmp[2]
+        channel = tmp[3]
+        instrument = channel[:2]
+        component = channel[2]
 
     station_id = f"{station}.{network}.{location}.{instrument}"
 
@@ -243,14 +254,28 @@ def collect_mseeds(
         bucket = "scedc-pds"
         folder = "continuous_waveforms"
         maxdepth = 2
+        config = {
+            "anon": True,
+        }
     elif region == "NC":
         protocol = "s3"
         bucket = "ncedc-pds"
         folder = "continuous_waveforms"
         maxdepth = 3
+        config = {
+            "anon": True,
+        }
+    elif region == "IRIS":
+        protocol = "gs"
+        bucket = "quakeflow_catalog/IRIS"
+        folder = "waveforms"
+        maxdepth = 3
+        config = {
+            "token": "application_default_credentials.json",
+        }
     else:
         raise ValueError(f"Invalid region: {region}")
-    fs_data = fsspec.filesystem(protocol=protocol, anon=True)
+    fs_data = fsspec.filesystem(protocol=protocol, **config)
 
     # %%
     valid_instruments = ["BH", "HH", "EH", "HN", "DP", "SH", "EP"]
@@ -266,6 +291,15 @@ def collect_mseeds(
         for network in networks:
             print(f"{network}/{year}/{year}.???")
             jdays.extend(fs_data.glob(f"{network}/{year}/{year}.???"))
+    elif region == "IRIS":
+        networks = fs_data.ls(f"{bucket}/{folder}")
+        for network in networks:
+            if year is None:
+                print(f"{network}/????/???")
+                jdays.extend(fs_data.glob(f"{network}/????/???"))
+            else:
+                print(f"{network}/{year}/???")
+                jdays.extend(fs_data.glob(f"{network}/{year}/???"))
 
     def scan_mseed(path):
         if region == "SC":
@@ -274,6 +308,8 @@ def collect_mseeds(
         elif region == "NC":
             year, jday = path.split("/")[-1].split(".")
             mseeds = fs_data.glob(f"{path}/*.D.{year}.{jday}")
+        elif region == "IRIS":
+            mseeds = fs_data.glob(f"{path}/*.mseed")
         mseeds = [f"{protocol}://{mseed}" for mseed in mseeds]
         return mseeds
 
@@ -364,18 +400,26 @@ def split_mseed_list(
         for network in networks:
             print(network)
             processed.extend(fs.glob(f"{network}/{year}/{year}.???/*.csv"))
+    elif region == "IRIS":
+        print(f"{bucket}/{folder}/*/????/???/*.csv")
+        processed = fs.glob(f"{bucket}/{folder}/*/????/???/*.csv")
     else:
         raise ValueError(f"Invalid region: {region}")
 
     print(f"Processed mseed: {len(processed)}")
+
     # processed = filter_empty_files(processed, fs)
     processed = set(processed)
 
     mseed_csv_set = set()
     mapping_dit = {}
     for mseed in tqdm(mseed_list, desc="Filter processed"):
-        tmp = mseed.split(",")[0].replace("s3://", "").split("/")
-        subdir = "/".join(tmp[2:-1])  # e.g., phasenet/BG/2023/2023.001/
+        if region == "IRIS":
+            tmp = mseed.split(",")[0].replace("gs://", "").split("/")
+            subdir = "/".join(tmp[3:-1])  # e.g., phasenet/IRIS/waveforms/2023/2023.001/
+        else:
+            tmp = mseed.split(",")[0].replace("s3://", "").split("/")
+            subdir = "/".join(tmp[2:-1])  # e.g., phasenet/BG/2023/2023.001/
         fname = tmp[-1].rstrip(".mseed").rstrip(".ms") + ".csv"
         tmp_name = f"{bucket}/{folder}/{subdir}/{fname}"
         mseed_csv_set.add(tmp_name)
@@ -449,7 +493,7 @@ def parse_args():
     parser.add_argument("--year", type=int, default=2023, help="Year to process")
     parser.add_argument("--model_path", type=str, default="../../PhaseNet/", help="Model path")
     parser.add_argument("--root_path", type=str, default="./", help="Root path")
-    parser.add_argument("--region", type=str, default="SC", help="Region to process")
+    parser.add_argument("--region", type=str, default="IRIS", help="Region to process")
     parser.add_argument("--bucket", type=str, default="quakeflow_catalog", help="Bucket")
     args = parser.parse_args()
     return args
