@@ -74,7 +74,7 @@ task.set_resources(
         # cloud=sky.GCP(),
         # region="us-west1",  # GCP
         cloud=sky.AWS(),
-        region="us-west-2",  # AWS
+        region="us-west-1",  # AWS
         accelerators=None,
         cpus=8,
         disk_tier="low",
