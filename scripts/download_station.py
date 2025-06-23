@@ -41,56 +41,61 @@ def download_station(
 
     # %%
     if ("provider" in config) and (config["provider"] is not None):
-        print("Downloading station response...")
+        # print("Downloading station response...")
         inventory = obspy.Inventory()
         for provider in config["provider"]:
-            if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml"):
-                print(f"Loading existing {root_path}/{result_dir}/inventory_{provider.lower()}.xml")
-                inventory += obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml")
-                continue
+            print(f"Connecting to client {provider}")
             client = obspy.clients.fdsn.Client(provider, timeout=1200)
+            print(f"Connected to client {provider}")
             max_retry = 10
             retry = 0
             stations = None
-            while retry < max_retry:
-                try:
-                    stations = client.get_stations(
-                        network=config["network"] if "network" in config else None,
-                        station=config["station"] if "station" in config else None,
-                        starttime=config["starttime"],
-                        endtime=config["endtime"],
-                        minlatitude=config["minlatitude"],
-                        maxlatitude=config["maxlatitude"],
-                        minlongitude=config["minlongitude"],
-                        maxlongitude=config["maxlongitude"],
-                        channel=config["channel"] if "channel" in config else None,
-                        level=config["level"] if "level" in config else "response",
-                    )
-                    break
-                except Exception as e:
-                    message = "The current client does not have a station service."
-                    if str(e)[: len(message)] == message:
-                        print(f"{provider} failed: {e}")
-                        break
-                    print(e)
-                    retry += 1
-                    time.sleep(10)
+            for network in config["network"].split(","):
+                print(f"Downloading station response from {provider} for network {network}")
+                if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml"):
+                    print(f"Loading existing {root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml")
+                    inventory += obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml")
                     continue
-            if retry == max_retry:
-                print(f"Failed to download {provider} after {max_retry} retries.")
-                continue
+                while retry < max_retry:
+                    try:
+                        stations = client.get_stations(
+                            # network=config["network"] if "network" in config else None,
+                            network=network if "network" in config else None,
+                            station=config["station"] if "station" in config else None,
+                            starttime=config["starttime"],
+                            endtime=config["endtime"],
+                            minlatitude=config["minlatitude"],
+                            maxlatitude=config["maxlatitude"],
+                            minlongitude=config["minlongitude"],
+                            maxlongitude=config["maxlongitude"],
+                            channel=config["channel"] if "channel" in config else None,
+                            level=config["level"] if "level" in config else "response",
+                        )
+                        break
+                    except Exception as e:
+                        message = "The current client does not have a station service."
+                        if str(e)[: len(message)] == message:
+                            print(f"{provider} failed: {e}")
+                            break
+                        print(e)
+                        retry += 1
+                        time.sleep(10)
+                        continue
+                if retry == max_retry:
+                    print(f"Failed to download {provider} after {max_retry} retries.")
+                    continue
 
-            if stations is not None:
-                print(
-                    f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
-                )
-                stations.write(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml", format="STATIONXML")
-                if protocol != "file":
-                    fs.put(
-                        f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml",
-                        f"{bucket}/{result_dir}/inventory_{provider.lower()}.xml",
+                if stations is not None:
+                    print(
+                        f"Dowloaded {len([chn for net in stations for sta in net for chn in sta])} stations from {provider.lower()}"
                     )
-                inventory += stations
+                    stations.write(f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml", format="STATIONXML")
+                    if protocol != "file":
+                        fs.put(
+                            f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml",
+                            f"{bucket}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml",
+                        )
+                    inventory += stations
 
         inventory.write(f"{root_path}/{result_dir}/inventory.xml", format="STATIONXML")
 
@@ -212,41 +217,43 @@ def download_station(
         return channel_list
 
     for provider in config["provider"]:
-        if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml"):
-            inventory = obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}.xml")
-        stations = parse_inventory_csv(inventory)
-        stations[["x_km", "y_km"]] = stations.apply(
-            lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1
-        )
-        stations["z_km"] = stations["depth_km"]
-        stations[["latitude", "longitude"]] = stations[["latitude", "longitude"]].round(4)
-        stations["depth_km"] = stations["depth_km"].round(2)
-        stations[["x_km", "y_km", "z_km"]] = stations[["x_km", "y_km", "z_km"]].round(2)
-        stations = stations.sort_values(by=["network", "station", "location", "channel"])
-        stations = stations.groupby(["network", "station", "location", "channel"]).first().reset_index()
-        stations.to_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}.csv", index=False)
-        if protocol != "file":
-            fs.put(
-                f"{root_path}/{result_dir}/stations_{provider.lower()}.csv",
-                f"{bucket}/{result_dir}/stations_{provider.lower()}.csv",
+        for network in config["network"].split(","):
+            if os.path.exists(f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml"):
+                inventory = obspy.read_inventory(f"{root_path}/{result_dir}/inventory_{provider.lower()}_{network.lower()}.xml")
+            stations = parse_inventory_csv(inventory)
+            stations[["x_km", "y_km"]] = stations.apply(
+                lambda row: pd.Series(proj(row["longitude"], row["latitude"])), axis=1
             )
-
-        stations = parse_inventory_json(inventory)
-        if len(stations) > 0:
-            with open(f"{root_path}/{result_dir}/stations_{provider.lower()}.json", "w") as f:
-                json.dump(stations, f, indent=4)
+            stations["z_km"] = stations["depth_km"]
+            stations[["latitude", "longitude"]] = stations[["latitude", "longitude"]].round(4)
+            stations["depth_km"] = stations["depth_km"].round(2)
+            stations[["x_km", "y_km", "z_km"]] = stations[["x_km", "y_km", "z_km"]].round(2)
+            stations = stations.sort_values(by=["network", "station", "location", "channel"])
+            stations = stations.groupby(["network", "station", "location", "channel"]).first().reset_index()
+            stations.to_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.csv", index=False)
             if protocol != "file":
                 fs.put(
-                    f"{root_path}/{result_dir}/stations_{provider.lower()}.json",
-                    f"{bucket}/{result_dir}/stations_{provider.lower()}.json",
+                    f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.csv",
+                    f"{bucket}/{result_dir}/stations_{provider.lower()}_{network.lower()}.csv",
                 )
+
+            stations = parse_inventory_json(inventory)
+            if len(stations) > 0:
+                with open(f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.json", "w") as f:
+                    json.dump(stations, f, indent=4)
+                if protocol != "file":
+                    fs.put(
+                        f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.json",
+                        f"{bucket}/{result_dir}/stations_{provider.lower()}_{network.lower()}.json",
+                    )
 
     # %% merge stations
     stations = []
     for provider in config["provider"]:
-        tmp = pd.read_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}.csv", dtype={"location": str})
-        tmp["provider"] = provider
-        stations.append(tmp)
+        for network in config["network"].split(","):
+            tmp = pd.read_csv(f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.csv", dtype={"location": str})
+            tmp["provider"] = provider
+            stations.append(tmp)
     stations = pd.concat(stations)
     # stations = stations.groupby(["network", "station", "location", "channel"], dropna=False).first().reset_index()
     stations = stations.sort_values(by=["station_id", "channel"])
@@ -258,12 +265,13 @@ def download_station(
 
     stations = {}
     for provider in config["provider"]:
-        with open(f"{root_path}/{result_dir}/stations_{provider.lower()}.json") as f:
-            tmp = json.load(f)
-        for key, value in tmp.items():
-            if key not in stations:
-                stations[key] = value
-                stations[key]["provider"] = provider
+        for network in config["network"].split(","):
+            with open(f"{root_path}/{result_dir}/stations_{provider.lower()}_{network.lower()}.json") as f:
+                tmp = json.load(f)
+            for key, value in tmp.items():
+                if key not in stations:
+                    stations[key] = value
+                    stations[key]["provider"] = provider
     if len(stations) > 0:
         print(f"Merged {len(stations)} stations")
         with open(f"{root_path}/{result_dir}/stations.json", "w") as f:
