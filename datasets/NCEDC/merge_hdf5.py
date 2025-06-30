@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # %%
-h5_dir = "waveform_ps_h5"
-h5_out = "waveform_ps.h5"
-h5_train = "waveform_ps_train.h5"
-h5_test = "waveform_ps_test.h5"
+h5_dir = "waveform_h5"
+h5_out = "waveform.h5"
+h5_train = "waveform_train.h5"
+h5_test = "waveform_test.h5"
 
 # # %%
 # h5_dir = "waveform_h5"
