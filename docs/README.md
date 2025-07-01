@@ -19,10 +19,18 @@ With auto-scaling enabled on Kubernetes, our system can balance computational lo
 - [DeepDenoiser](https://ai4eps.github.io/DeepDenoiser/): [(paper)](https://arxiv.org/abs/1811.02695) [(example)](https://ai4eps.github.io/DeepDenoiser/example_interactive/)
 - [PhaseNet](https://ai4eps.github.io/PhaseNet/): [(paper)](https://arxiv.org/abs/1803.03211) [(example)](https://ai4eps.github.io/PhaseNet/example_interactive/)
 - [GaMMA](https://ai4eps.github.io/GaMMA/): [(paper)](https://arxiv.org/abs/2109.09008) [(example)](https://ai4eps.github.io/GaMMA/example_interactive/)
+- [ADLoc](https://ai4eps.github.io/ADLoc/): [(paper)](https://arxiv.org/abs/2502.10933v1)
 - [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html) [(paper)](https://pubs.geoscienceworld.org/ssa/bssa/article-abstract/90/6/1353/120565/A-Double-Difference-Earthquake-Location-Algorithm?redirectedFrom=fulltext) [(example)](https://github.com/ai4eps/QuakeFlow/blob/master/HypoDD/gamma2hypodd.py)
 - More models to be added. Contributions are highly welcomed!
   
-### Data stream
+### Earthquake Deep Catalog
+
+- [Notebook](https://ai4eps.github.io/Earthquake_Catalog_Workshop/notebooks/quakeflow/)
+- [Slides](https://ai4eps.github.io/Earthquake_Catalog_Workshop/machine_learning/)
+- [Workshop](https://ai4eps.github.io/Earthquake_Catalog_Workshop/)
+
+
+<!-- ### Data stream
 - [Plotly](https://dash.gallery/Portal/): [ui.quakeflow.com](http://ui.quakeflow.com)
 - [Kafka](https://www.confluent.io/what-is-apache-kafka/) 
 - [Spark Streaming](https://spark.apache.org/docs/latest/streaming-programming-guide.html)
@@ -38,7 +46,7 @@ With auto-scaling enabled on Kubernetes, our system can balance computational lo
 QuakeFlow can be deployed on any cloud platforms with Kubernetes service.
 
 - For google cloud platform (GCP), check out the [GCP README](gcp_readme.md).
-- For on-premise servers, check out the [Kubernetes README](k8s_readme.md).
+- For on-premise servers, check out the [Kubernetes README](k8s_readme.md). -->
 
 <!-- ## User-Facing Platform
 
