@@ -31,8 +31,18 @@ def process(i, folder, mode):
 
     events_df = pd.DataFrame(events_df)
     picks_df = pd.DataFrame(picks_df)
-    events_df.to_csv(f"{folder}/events{mode}.csv", index=False)
-    picks_df.to_csv(f"{folder}/picks{mode}.csv", index=False)
+    for col in events_df.columns:
+        try:
+            events_df[col] = events_df[col].apply(lambda x: x.__str__().replace("\n", " ").replace("\t", " ").replace("\r", " ")) # prevent csv from breaking # replace('nan', '')
+        except:
+            pass
+    for col in picks_df.columns:
+        try:
+            picks_df[col] = picks_df[col].apply(lambda x: x.__str__().replace("\n", " ").replace("\t", " ").replace("\r", " ")) # prevent csv from breaking
+        except:
+            pass
+    events_df.to_csv(f"{folder}/events{mode}.csv", index=False, na_rep='')
+    picks_df.to_csv(f"{folder}/picks{mode}.csv", index=False, na_rep='')
 
 
 # %%

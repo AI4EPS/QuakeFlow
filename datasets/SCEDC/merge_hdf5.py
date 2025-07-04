@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # %%
-h5_dir = "waveform_ps_h5"
-h5_out = "waveform_ps.h5"
-h5_train = "waveform_ps_train.h5"
-h5_test = "waveform_ps_test.h5"
+h5_dir = "waveform_h5"
+h5_out = "waveform.h5"
+h5_train = "waveform_train.h5"
+h5_test = "waveform_test.h5"
 
 # # %%
 # h5_dir = "waveform_h5"
@@ -18,7 +18,7 @@ h5_test = "waveform_ps_test.h5"
 # h5_test = "waveform_test.h5"
 
 h5_files = sorted(os.listdir(h5_dir))
-h5_files = [x for x in h5_files if (x not in ["2019.h5", "2020.h5"])]
+#h5_files = [x for x in h5_files if (x not in ["2019.h5", "2020.h5"])]
 train_files = h5_files[:-1]
 test_files = h5_files[-1:]
 # train_files = h5_files
