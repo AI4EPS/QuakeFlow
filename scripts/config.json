@@ -187,15 +187,15 @@
         },
         "Santorini": {
             "starttime": "2025-01-01T00:00:00",
-            "endtime": "2025-02-24T00:00:00",
+            "endtime": "2025-06-22T00:00:00",
             "minlatitude": 36,
             "maxlatitude": 37.2,
             "minlongitude": 25,
             "maxlongitude": 26.5,
             "mindepth": 0,
             "maxdepth": 60,
-            "network": "HL",
-            "channel": "*",
+            "network": "HT,HL,HA,HC",
+            "channel": "HH*,BH*,EH*,HN*",
             "provider": [
                 "NOA"
             ]
