@@ -73,8 +73,9 @@ def download_station(
                         )
                         break
                     except Exception as e:
-                        message = "The current client does not have a station service."
-                        if str(e)[: len(message)] == message:
+                        message1 = "The current client does not have a station service."
+                        message2 = "No data available for request"
+                        if str(e)[: len(message1)] == message1 or str(e)[: len(message2)] == message2:
                             print(f"{provider} failed: {e}")
                             break
                         print(e)
