@@ -310,7 +310,7 @@ def cut_templates(root_path, region, config):
 
     time_window = max((time_before_p + time_after_p), (time_before_s + time_after_s))
     nt = int(round(time_window * sampling_rate))
-    max_epicenter_dist = 200.0
+    max_epicenter_dist = 500.0
     max_pair_dist = 10
     max_neighbors = 50
     min_cc_score = 0.5
