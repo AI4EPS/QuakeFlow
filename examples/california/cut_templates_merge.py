@@ -437,14 +437,14 @@ if __name__ == "__main__":
         fs.put(f"{root_path}/{result_path}/config.json", f"{bucket}/{folder}/config.json")
         print(f"{root_path}/{result_path}/pairs.txt -> {bucket}/{folder}/pairs.txt")
         fs.put(f"{root_path}/{result_path}/pairs.txt", f"{bucket}/{folder}/pairs.txt")
-        print(f"{root_path}/{result_path}/template.dat -> {bucket}/{folder}/template.dat")
-        fs.put(f"{root_path}/{result_path}/template.dat", f"{bucket}/{folder}/template.dat")
-        print(f"{root_path}/{result_path}/traveltime.dat -> {bucket}/{folder}/traveltime.dat")
-        fs.put(f"{root_path}/{result_path}/traveltime.dat", f"{bucket}/{folder}/traveltime.dat")
-        print(f"{root_path}/{result_path}/traveltime_index.dat -> {bucket}/{folder}/traveltime_index.dat")
-        fs.put(f"{root_path}/{result_path}/traveltime_index.dat", f"{bucket}/{folder}/traveltime_index.dat")
-        print(f"{root_path}/{result_path}/traveltime_mask.dat -> {bucket}/{folder}/traveltime_mask.dat")
-        fs.put(f"{root_path}/{result_path}/traveltime_mask.dat", f"{bucket}/{folder}/traveltime_mask.dat")
+        # print(f"{root_path}/{result_path}/template.dat -> {bucket}/{folder}/template.dat")
+        # fs.put(f"{root_path}/{result_path}/template.dat", f"{bucket}/{folder}/template.dat")
+        # print(f"{root_path}/{result_path}/traveltime.dat -> {bucket}/{folder}/traveltime.dat")
+        # fs.put(f"{root_path}/{result_path}/traveltime.dat", f"{bucket}/{folder}/traveltime.dat")
+        # print(f"{root_path}/{result_path}/traveltime_index.dat -> {bucket}/{folder}/traveltime_index.dat")
+        # fs.put(f"{root_path}/{result_path}/traveltime_index.dat", f"{bucket}/{folder}/traveltime_index.dat")
+        # print(f"{root_path}/{result_path}/traveltime_mask.dat -> {bucket}/{folder}/traveltime_mask.dat")
+        # fs.put(f"{root_path}/{result_path}/traveltime_mask.dat", f"{bucket}/{folder}/traveltime_mask.dat")
         
 
 # %%

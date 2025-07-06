@@ -70,8 +70,8 @@ block_size2 = 1000_000
 
 
 base_cmd = (
-    # f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
-    f"/opt/CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
+    f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
+    # f"/opt/CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
     f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
     f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
     f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
@@ -164,7 +164,6 @@ else:
 # if os.path.lexists(target_file):
 #     os.remove(target_file)
 # os.symlink(source_file, target_file)
-
 
 if protocol == "gs":
     print(f"{root_path}/{data_path}/dt.cc -> {bucket}/{data_path}/dt.cc")
