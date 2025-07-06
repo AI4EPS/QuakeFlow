@@ -414,16 +414,28 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
             os.makedirs(f"{root_path}/{result_path}/{year:04d}/{jday:03d}", exist_ok=True)
 
         # %%
-        # stations = pd.read_csv(f"{root_path}/{data_path}/ransac_stations.csv")
-        # stations = pd.read_csv("adloc_stations.csv")
-        station_json = f"{region}/network/stations.json"
+        # station_json = f"{region}/network/stations.json"
+        # if protocol == "file":
+        #     stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+        # else:
+        #     with fs.open(f"{bucket}/{station_json}", "r") as fp:
+        #         stations = pd.read_json(fp, orient="index")
+        # stations["station_id"] = stations.index
+        # stations.sort_values(by=["latitude", "longitude"], inplace=True)
+
+        # station_csv = f"{data_path}/adloc_stations.csv"
+        station_csv = f"{data_path}/ransac_stations.csv"
         if protocol == "file":
-            stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+            stations = pd.read_csv(station_csv)
         else:
-            with fs.open(f"{bucket}/{station_json}", "r") as fp:
-                stations = pd.read_json(fp, orient="index")
-        stations["station_id"] = stations.index
+            with fs.open(f"{bucket}/{station_csv}", "r") as fp:
+                stations = pd.read_csv(fp)
         stations.sort_values(by=["latitude", "longitude"], inplace=True)
+
+
+        # stations = stations[stations["network"] == "7D"]
+        print(f"{len(stations) = }")
+        print(stations.head())
 
         # # ############### DEBUG ###############
         # # "minlatitude": 35.205,
@@ -439,10 +451,12 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # events = pd.read_csv("adloc_events.csv", parse_dates=["time"])
         if protocol == "file":
             events = pd.read_csv(
-                f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
+                # f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
+                f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", parse_dates=["time"]
             )
         else:
-            with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
+            # with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
+            with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", "r") as fp:
                 events = pd.read_csv(fp, parse_dates=["time"])
 
         # # ############### DEBUG ###############
@@ -498,9 +512,11 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # picks = pd.read_csv(f"{root_path}/{data_path}/ransac_picks.csv")
         # picks = pd.read_csv("adloc_picks.csv")
         if protocol == "file":
-            picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv")
+            # picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv")
+            picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv")
         else:
-            with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv", "r") as fp:
+            # with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv", "r") as fp:
+            with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv", "r") as fp:
                 picks = pd.read_csv(fp)
 
         # ############### DEBUG ###############
@@ -643,16 +659,19 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # dirs = sorted(glob(f"{root_path}/{region}/waveforms/????/???/??"), reverse=True)
         protocol = "gs"
         bucket = "quakeflow_catalog"
-        folder = "SC"
         token_json = "application_default_credentials.json"
         with open(token_json, "r") as fp:
             token = json.load(fp)
         fs = fsspec.filesystem(protocol=protocol, token=token)
         # year = 2019
         mseeds_df = []
-        for folder in ["SC", "NC"]:
-            with fs.open(f"{bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
-                mseeds = f.readlines()
+        for folder in ["SC", "NC", "IRIS"]:
+            try:
+                with fs.open(f"{bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
+                    mseeds = f.readlines()
+            except Exception as e:
+                print(f"Not found {bucket}/{folder}/mseed_list/{year}_3c.txt")
+                continue
             mseeds = [x.strip("\n") for x in mseeds]
             mseeds = pd.DataFrame(mseeds, columns=["ENZ"])
             if folder == "SC":
@@ -663,7 +682,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
-            if folder == "NC":
+            elif folder == "NC":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[0])
@@ -671,6 +690,16 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
+            elif folder == "IRIS":
+                mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+                mseeds["jday"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-2])
+                mseeds["year"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-3])
+                mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[0])
+                mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
+                mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[2])
+                mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[3][:2])
+            else:
+                raise ValueError(f"Unknown folder: {folder}")
             mseeds_df.append(mseeds)
         mseeds_df = pd.concat(mseeds_df)
         print(mseeds_df.head())
@@ -694,6 +723,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
             print(f"No picks found for {year:04d}/{jday:03d}")
             continue
 
+
+
         # ####
         # out = picks.drop(columns=["ENZ"])
         # out.to_csv(f"{root_path}/{result_path}/{year:04d}/cctorch_picks_{jday:03d}.csv", index=False)
@@ -714,7 +745,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         print(f"Using {ncpu} cores")
 
         pbar = tqdm(total=nsplit, desc="Cutting templates")
-        ctx = mp.get_context("spawn")
+        ctx = mp.get_context("fork")
 
         with ctx.Manager() as manager:
             lock = manager.Lock()
@@ -830,13 +861,10 @@ if __name__ == "__main__":
     year = args.year
 
     # %%
-    # with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
-    #     config = json.load(fp)
-    # with open("config.json", "r") as fp:
-    #     config = json.load(fp)
-    # config["world_size"] = num_nodes
-    with open(args.config, "r") as fp:
+    with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
         config = json.load(fp)
+    # with open(args.config, "r") as fp:
+    #     config = json.load(fp)
     config.update(vars(args))
     print(json.dumps(config, indent=4, sort_keys=True))
 
@@ -876,9 +904,14 @@ if __name__ == "__main__":
     #     num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
     #     jdays.extend([f"{year}.{i:03d}" for i in range(1, num_jday + 1)])
 
+
     num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
     # jdays = [f"{year}.{i:03d}" for i in range(1, num_jday + 1)]
     jdays = range(1, num_jday + 1)
+
+    # jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/adloc_events_???.csv")
+    jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/ransac_events_???.csv")
+    jdays = [int(x.split("/")[-1].split(".")[0].split("_")[-1]) for x in jdays]
 
     jdays = np.array_split(jdays, num_nodes)[node_rank]
     # jdays = ["2019.185"]

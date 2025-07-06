@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import fsspec
 
 # from args import parse_args
 
@@ -35,9 +36,21 @@ def parse_args():
     return parser.parse_args()
 
 
+# %%
+protocol = "gs"
+token_json = f"application_default_credentials.json"
+with open(token_json, "r") as fp:
+    token = json.load(fp)
+
+fs = fsspec.filesystem(protocol, token=token)
+
 args = parse_args()
 region = args.region
 root_path = args.root_path
+bucket = args.bucket
+num_nodes = args.num_nodes
+node_rank = args.node_rank
+year = args.year
 
 # %%
 
@@ -54,8 +67,14 @@ use_pygmt = True
 # %%
 # with open(f"{root_path}/{region}/config.json", "r") as f:
 #     config = json.load(f)
-with open(args.config, "r") as fp:
-    config = json.load(fp)
+# with open(args.config, "r") as fp:
+#     config = json.load(fp)
+if protocol == "file":
+    with open(f"{root_path}/{region}/config.json", "r") as fp:
+        config = json.load(fp)
+else:
+    with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
+        config = json.load(fp)
 config.update(vars(args))
 print(json.dumps(config, indent=4, sort_keys=True))
 xlim = [config["minlongitude"], config["maxlongitude"]]
@@ -63,65 +82,88 @@ ylim = [config["minlatitude"], config["maxlatitude"]]
 
 # %%
 # %%
-routine_catalog = f"{root_path}/{region}/obspy/catalog.csv"
+if protocol == "file":
+    routine_catalog = f"{root_path}/{region}/obspy/catalog.csv"
+else:
+    routine_catalog = f"{protocol}://{bucket}/{region}/obspy/catalog.csv"
 routine_exist = False
-if os.path.exists(routine_catalog):
+try:
+    routine_catalog = pd.read_csv(routine_catalog, parse_dates=["time"])
     print(f"Reading {routine_catalog}")
     routine_exist = True
-    routine_catalog = pd.read_csv(routine_catalog, parse_dates=["time"])
-
+except Exception as e:
+    print(f"No routine catalog found")
 
 # # %%
-gamma_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+if protocol == "file":
+    gamma_file = f"{root_path}/{region}/gamma/gamma_events.csv"
+else:
+    gamma_file = f"{protocol}://{bucket}/{region}/gamma/gamma_events.csv"
 gamma_exist = False
-if os.path.exists(gamma_file):
+try:
+    gamma_catalog = pd.read_csv(gamma_file, parse_dates=["time"])
     print(f"Reading {gamma_file}")
     gamma_exist = True
-    gamma_catalog = pd.read_csv(gamma_file, parse_dates=["time"])
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
+except Exception as e:
+    print(f"No gamma catalog found")
+# %%
+# gamma_exist = True
+# gamma_catalog = pd.read_csv(f"local/Cal/cctorch/cctorch_events.csv", parse_dates=["event_time"])
+# gamma_catalog["time"] = gamma_catalog["event_time"]
+# print(gamma_catalog.iloc[:5])
 
 # %%
-gamma_exist = True
-gamma_catalog = pd.read_csv(f"local/Cal/cctorch/cctorch_events.csv", parse_dates=["event_time"])
-gamma_catalog["time"] = gamma_catalog["event_time"]
-print(gamma_catalog.iloc[:5])
-
-# %%
-adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
+if protocol == "file":
+    adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
+else:
+    adloc_file = f"{protocol}://{bucket}/{region}/adloc/ransac_events.csv"
 adloc_exist = False
-if os.path.exists(adloc_file):
+try:
+    adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
     print(f"Reading {adloc_file}")
     adloc_exist = True
-    adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])
     # adloc_catalog["magnitude"] = 0.0
     # gamma_catalog["depth_km"] = gamma_catalog["depth(m)"] / 1e3
+except Exception as e:
+    print(f"No adloc catalog found")
+
 
 # %%
-adloc_exist = True
-adloc_catalog = gamma_catalog
 
-# %%
-adloc_dt_file = f"{root_path}/{region}/adloc_dd/adloc_dt_events.csv"
+if protocol == "file":
+    adloc_dt_file = f"{root_path}/{region}/adloc_dd/adloc_dt_events.csv"
+else:
+    adloc_dt_file = f"{protocol}://{bucket}/{region}/adloc_dd/adloc_dt_events.csv"
 adloc_dt_exist = False
-if os.path.exists(adloc_dt_file):
+try:
+    adloc_dt_catalog = pd.read_csv(adloc_dt_file, parse_dates=["time"])
     print(f"Reading {adloc_dt_file}")
     adloc_dt_exist = True
-    adloc_dt_catalog = pd.read_csv(adloc_dt_file, parse_dates=["time"])
+except Exception as e:
+    print(f"No adloc_dt catalog found")
 
 # %%
-adloc_dtcc_file = f"{root_path}/{region}/adloc_dd/adloc_dtcc_events.csv"
+if protocol == "file":
+    adloc_dtcc_file = f"{root_path}/{region}/adloc_dd/adloc_dtcc_events.csv"
+else:
+    adloc_dtcc_file = f"{protocol}://{bucket}/{region}/adloc_dd/adloc_dtcc_events.csv"
 adloc_dtcc_exist = False
-if os.path.exists(adloc_dtcc_file):
+try:
+    adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["time"])
     print(f"Reading {adloc_dtcc_file}")
     adloc_dtcc_exist = True
-    adloc_dtcc_catalog = pd.read_csv(adloc_dtcc_file, parse_dates=["time"])
+except Exception as e:
+    print(f"No adloc_dtcc catalog found")
 
 # %%
-hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
+
+if protocol == "file":
+    hypodd_file = f"{root_path}/{region}/hypodd/hypodd_ct.reloc"
+else:
+    hypodd_file = f"{protocol}://{bucket}/{region}/hypodd/hypodd_ct.reloc"
 hypodd_ct_exist = False
-if os.path.exists(hypodd_file):
-    print(f"Reading {hypodd_file}")
-    hypodd_ct_exist = True
+try:
     columns = [
         "ID",
         "LAT",
@@ -164,16 +206,21 @@ if os.path.exists(hypodd_file):
 
     catalog_ct_hypodd.to_csv(f"{root_path}/{region}/hypodd/hypodd_ct.csv", index=False)
 
-    plt.figure()
-    plt.scatter(catalog_ct_hypodd["LON"], catalog_ct_hypodd["LAT"], s=2)
-    plt.show()
+    # plt.figure()
+    # plt.scatter(catalog_ct_hypodd["LON"], catalog_ct_hypodd["LAT"], s=2)
+    # plt.show()
 
-# %%
-hypodd_file = f"{root_path}/{region}/hypodd/hypodd_cc.reloc"
-hypodd_cc_exist = False
-if os.path.exists(hypodd_file):
     print(f"Reading {hypodd_file}")
-    hypodd_cc_exist = True
+    hypodd_ct_exist = True
+except Exception as e:
+    print(f"No hypodd_ct catalog found")
+# %%
+if protocol == "file":
+    hypodd_file = f"{root_path}/{region}/hypodd/hypodd_cc.reloc"
+else:
+    hypodd_file = f"{protocol}://{bucket}/{region}/hypodd/hypodd_cc.reloc"
+hypodd_cc_exist = False
+try:
     columns = [
         "ID",
         "LAT",
@@ -216,16 +263,21 @@ if os.path.exists(hypodd_file):
 
     catalog_cc_hypodd.to_csv(f"{root_path}/{region}/hypodd/hypodd_cc.csv", index=False)
 
-    plt.figure()
-    plt.scatter(catalog_cc_hypodd["LON"], catalog_cc_hypodd["LAT"], s=2)
-    plt.show()
+    # plt.figure()
+    # plt.scatter(catalog_cc_hypodd["LON"], catalog_cc_hypodd["LAT"], s=2)
+    # plt.show()
 
+    print(f"Reading {hypodd_file}")
+    hypodd_cc_exist = True
+except Exception as e:
+    print(f"No hypodd_cc catalog found")
 # %%
-growclust_file = f"{root_path}/{region}/growclust/growclust_ct_catalog.txt"
+if protocol == "file":
+    growclust_file = f"{root_path}/{region}/growclust/growclust_ct.txt"
+else:
+    growclust_file = f"{protocol}://{bucket}/{region}/growclust/growclust_ct.txt"
 growclust_ct_exist = False
-if os.path.exists(growclust_file):
-    print(f"Reading {growclust_file}")
-    growclust_ct_exist = True
+try:
     columns = [
         "yr",
         "mon",
@@ -265,12 +317,18 @@ if os.path.exists(growclust_file):
 
     growclust_ct_catalog.to_csv(f"{root_path}/{region}/growclust/growclust_ct.csv", index=False)
 
-# %%
-growclust_file = f"{root_path}/{region}/growclust/growclust_cc_catalog.txt"
-growclust_cc_exist = False
-if os.path.exists(growclust_file):
     print(f"Reading {growclust_file}")
-    growclust_cc_exist = True
+    growclust_ct_exist = True
+except Exception as e:
+    print(f"No growclust_ct catalog found")
+
+# %%
+if protocol == "file":
+    growclust_file = f"{root_path}/{region}/growclust/growclust_cc.txt"
+else:
+    growclust_file = f"{protocol}://{bucket}/{region}/growclust/growclust_cc.txt"
+growclust_cc_exist = False
+try:
     columns = [
         "yr",
         "mon",
@@ -309,6 +367,11 @@ if os.path.exists(growclust_file):
     growclust_cc_catalog = growclust_cc_catalog[growclust_cc_catalog["nbranch"] > 1]
 
     growclust_cc_catalog.to_csv(f"{root_path}/{region}/growclust/growclust_cc.csv", index=False)
+
+    print(f"Reading {growclust_file}")
+    growclust_cc_exist = True
+except Exception as e:
+    print(f"No growclust_cc catalog found")
 
 
 # %% Debug
@@ -414,10 +477,10 @@ if adloc_exist and (len(adloc_catalog) > 0):
         s=min(2, size_factor / len(adloc_catalog)),
         alpha=1.0,
         linewidth=0,
-        label=f"AdLoc: {len(adloc_catalog)}",
+        label=f"ADLoc: {len(adloc_catalog)}",
     )
     # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
+    ax[0, 1].set_title(f"ADLoc: {len(adloc_catalog)}")
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -426,10 +489,10 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         s=min(2, size_factor / len(adloc_dt_catalog)),
         alpha=1.0,
         linewidth=0,
-        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
+        label=f"ADLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
+    ax[1, 0].set_title(f"ADLoc (CT): {len(adloc_dt_catalog)}")
 
 if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
@@ -438,10 +501,10 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         s=min(2, size_factor / len(adloc_dtcc_catalog)),
         alpha=1.0,
         linewidth=0,
-        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
+        label=f"ADLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
+    ax[1, 1].set_title(f"ADLoc (CC): {len(adloc_dtcc_catalog)}")
 
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
@@ -498,6 +561,8 @@ cmax = 10
 for i in range(4):
     for j in range(2):
         ax[i, j].grid()
+xlim = None
+ylim = None
 
 if routine_exist and (len(routine_catalog) > 0):
     ax[0, 0].scatter(
@@ -513,12 +578,9 @@ if routine_exist and (len(routine_catalog) > 0):
         label=f"Routine: {len(routine_catalog)}",
     )
     ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
-    # ax[0, 0].invert_yaxis()
+    ax[0, 0].invert_yaxis()
     xlim = ax[0, 0].get_xlim()
     ylim = ax[0, 0].get_ylim()
-else:
-    xlim = None
-    ylim = None
 
 if gamma_exist and (len(gamma_catalog) > 0):
     ax[0, 1].scatter(
@@ -534,12 +596,13 @@ if gamma_exist and (len(gamma_catalog) > 0):
         label=f"GaMMA: {len(gamma_catalog)}",
     )
     ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
-    ax[0, 1].invert_yaxis()
-    xlim = ax[0, 1].get_xlim()
-    ylim = ax[0, 1].get_ylim()
-else:
-    xlim = None
-    ylim = None
+    if xlim is None and ylim is None:
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
 
 if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 1].scatter(
@@ -552,12 +615,17 @@ if adloc_exist and (len(adloc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc: {len(adloc_catalog)}",
+        label=f"ADLoc: {len(adloc_catalog)}",
     )
     # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 1].set_xlim(xlim)
-    ax[0, 1].set_ylim(ylim)
+    ax[0, 1].set_title(f"ADLoc: {len(adloc_catalog)}")
+    if xlim is None and ylim is None:
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -570,12 +638,17 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
+        label=f"ADLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
-    ax[1, 0].set_xlim(xlim)
-    ax[1, 0].set_ylim(ylim)
+    ax[1, 0].set_title(f"ADLoc (CT): {len(adloc_dt_catalog)}")
+    if xlim is None and ylim is None:
+        ax[1, 0].invert_yaxis()
+        xlim = ax[1, 0].get_xlim()
+        ylim = ax[1, 0].get_ylim()
+    else:
+        ax[1, 0].set_xlim(xlim)
+        ax[1, 0].set_ylim(ylim)
 
 if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
@@ -588,12 +661,17 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
+        label=f"ADLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
-    ax[1, 1].set_xlim(xlim)
-    ax[1, 1].set_ylim(ylim)
+    ax[1, 1].set_title(f"ADLoc (CC): {len(adloc_dtcc_catalog)}")
+    if xlim is None and ylim is None:
+        ax[1, 1].invert_yaxis()
+        xlim = ax[1, 1].get_xlim()
+        ylim = ax[1, 1].get_ylim()
+    else:
+        ax[1, 1].set_xlim(xlim)
+        ax[1, 1].set_ylim(ylim)
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[2, 0].scatter(
@@ -608,8 +686,13 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
         cmap="viridis_r",
     )
     ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
-    ax[2, 0].set_xlim(xlim)
-    ax[2, 0].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[2, 0].invert_yaxis()
+        xlim = ax[2, 0].get_xlim()
+        ylim = ax[2, 0].get_ylim()
+    else:
+        ax[2, 0].set_xlim(xlim)
+        ax[2, 0].set_ylim(ylim)
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[2, 1].scatter(
         catalog_cc_hypodd["LON"],
@@ -623,8 +706,13 @@ if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
         cmap="viridis_r",
     )
     ax[2, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
-    ax[2, 1].set_xlim(xlim)
-    ax[2, 1].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[2, 1].invert_yaxis()
+        xlim = ax[2, 1].get_xlim()
+        ylim = ax[2, 1].get_ylim()
+    else:
+        ax[2, 1].set_xlim(xlim)
+        ax[2, 1].set_ylim(ylim)
 
 if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
     ax[3, 0].scatter(
@@ -639,8 +727,13 @@ if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
         cmap="viridis_r",
     )
     ax[3, 0].set_title(f"GrowClust (CT): {len(growclust_ct_catalog)}")
-    ax[3, 0].set_xlim(xlim)
-    ax[3, 0].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[3, 0].invert_yaxis()
+        xlim = ax[3, 0].get_xlim()
+        ylim = ax[3, 0].get_ylim()
+    else:
+        ax[3, 0].set_xlim(xlim)
+        ax[3, 0].set_ylim(ylim)
 if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
     ax[3, 1].scatter(
         growclust_cc_catalog["lonR"],
@@ -654,8 +747,13 @@ if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
         cmap="viridis_r",
     )
     ax[3, 1].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
-    ax[3, 1].set_xlim(xlim)
-    ax[3, 1].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[3, 1].invert_yaxis()
+        xlim = ax[3, 1].get_xlim()
+        ylim = ax[3, 1].get_ylim()
+    else:
+        ax[3, 1].set_xlim(xlim)
+        ax[3, 1].set_ylim(ylim)
 
 
 plt.savefig(f"{root_path}/{figure_path}/catalogs_longitude_depth.png", dpi=300)
@@ -669,6 +767,9 @@ cmax = 10
 for i in range(4):
     for j in range(2):
         ax[i, j].grid()
+
+xlim = None
+ylim = None
 
 if routine_exist and (len(routine_catalog) > 0):
     ax[0, 0].scatter(
@@ -684,12 +785,13 @@ if routine_exist and (len(routine_catalog) > 0):
         label=f"Routine: {len(routine_catalog)}",
     )
     ax[0, 0].set_title(f"Routine: {len(routine_catalog)}")
-    # ax[0, 0].invert_yaxis()
-    xlim = ax[0, 0].get_xlim()
-    ylim = ax[0, 0].get_ylim()
-else:
-    xlim = None
-    ylim = None
+    if xlim is None and ylim is None:
+        ax[0, 0].invert_yaxis()
+        xlim = ax[0, 0].get_xlim()
+        ylim = ax[0, 0].get_ylim()
+    else:
+        ax[0, 0].set_xlim(xlim)
+        ax[0, 0].set_ylim(ylim)
 
 if gamma_exist and (len(gamma_catalog) > 0):
     ax[0, 1].scatter(
@@ -705,12 +807,13 @@ if gamma_exist and (len(gamma_catalog) > 0):
         label=f"GaMMA: {len(gamma_catalog)}",
     )
     ax[0, 1].set_title(f"GaMMA: {len(gamma_catalog)}")
-    ax[0, 1].invert_yaxis()
-    xlim = ax[0, 1].get_xlim()
-    ylim = ax[0, 1].get_ylim()
-else:
-    xlim = None
-    ylim = None
+    if xlim is None and ylim is None:
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
 
 if adloc_exist and (len(adloc_catalog) > 0):
     ax[0, 1].scatter(
@@ -723,12 +826,17 @@ if adloc_exist and (len(adloc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc: {len(adloc_catalog)}",
+        label=f"ADLoc: {len(adloc_catalog)}",
     )
     # ax[0, 1].legend()
-    ax[0, 1].set_title(f"AdLoc: {len(adloc_catalog)}")
-    ax[0, 1].set_xlim(xlim)
-    ax[0, 1].set_ylim(ylim)
+    ax[0, 1].set_title(f"ADLoc: {len(adloc_catalog)}")
+    if xlim is None and ylim is None:
+        ax[0, 1].invert_yaxis()
+        xlim = ax[0, 1].get_xlim()
+        ylim = ax[0, 1].get_ylim()
+    else:
+        ax[0, 1].set_xlim(xlim)
+        ax[0, 1].set_ylim(ylim)
 
 if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
     ax[1, 0].scatter(
@@ -741,12 +849,17 @@ if adloc_dt_exist and (len(adloc_dt_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc (CT): {len(adloc_dt_catalog)}",
+        label=f"ADLoc (CT): {len(adloc_dt_catalog)}",
     )
     # ax[1, 0].legend()
-    ax[1, 0].set_title(f"AdLoc (CT): {len(adloc_dt_catalog)}")
-    ax[1, 0].set_xlim(xlim)
-    ax[1, 0].set_ylim(ylim)
+    ax[1, 0].set_title(f"ADLoc (CT): {len(adloc_dt_catalog)}")
+    if xlim is None and ylim is None:
+        ax[1, 0].invert_yaxis()
+        xlim = ax[1, 0].get_xlim()
+        ylim = ax[1, 0].get_ylim()
+    else:
+        ax[1, 0].set_xlim(xlim)
+        ax[1, 0].set_ylim(ylim)
 
 if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
     ax[1, 1].scatter(
@@ -759,12 +872,17 @@ if adloc_dtcc_exist and (len(adloc_dtcc_catalog) > 0):
         vmin=cmin,
         vmax=cmax,
         cmap="viridis_r",
-        label=f"AdLoc (CC): {len(adloc_dtcc_catalog)}",
+        label=f"ADLoc (CC): {len(adloc_dtcc_catalog)}",
     )
     # ax[1, 1].legend()
-    ax[1, 1].set_title(f"AdLoc (CC): {len(adloc_dtcc_catalog)}")
-    ax[1, 1].set_xlim(xlim)
-    ax[1, 1].set_ylim(ylim)
+    ax[1, 1].set_title(f"ADLoc (CC): {len(adloc_dtcc_catalog)}")
+    if xlim is None and ylim is None:
+        ax[1, 1].invert_yaxis()
+        xlim = ax[1, 1].get_xlim()
+        ylim = ax[1, 1].get_ylim()
+    else:
+        ax[1, 1].set_xlim(xlim)
+        ax[1, 1].set_ylim(ylim)
 
 if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
     ax[2, 0].scatter(
@@ -779,8 +897,13 @@ if hypodd_ct_exist and (len(catalog_ct_hypodd) > 0):
         cmap="viridis_r",
     )
     ax[2, 0].set_title(f"HypoDD (CT): {len(catalog_ct_hypodd)}")
-    ax[2, 0].set_xlim(xlim)
-    ax[2, 0].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[2, 0].invert_yaxis()
+        xlim = ax[2, 0].get_xlim()
+        ylim = ax[2, 0].get_ylim()
+    else:
+        ax[2, 0].set_xlim(xlim)
+        ax[2, 0].set_ylim(ylim)
 
 if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
     ax[2, 1].scatter(
@@ -795,8 +918,13 @@ if hypodd_cc_exist and (len(catalog_cc_hypodd) > 0):
         cmap="viridis_r",
     )
     ax[2, 1].set_title(f"HypoDD (CC): {len(catalog_cc_hypodd)}")
-    ax[2, 1].set_xlim(xlim)
-    ax[2, 1].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[2, 1].invert_yaxis()
+        xlim = ax[2, 1].get_xlim()
+        ylim = ax[2, 1].get_ylim()
+    else:
+        ax[2, 1].set_xlim(xlim)
+        ax[2, 1].set_ylim(ylim)
 
 if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
     ax[3, 0].scatter(
@@ -811,8 +939,13 @@ if growclust_ct_exist and (len(growclust_ct_catalog) > 0):
         cmap="viridis_r",
     )
     ax[3, 0].set_title(f"GrowClust (CT): {len(growclust_ct_catalog)}")
-    ax[3, 0].set_xlim(xlim)
-    ax[3, 0].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[3, 0].invert_yaxis()
+        xlim = ax[3, 0].get_xlim()
+        ylim = ax[3, 0].get_ylim()
+    else:
+        ax[3, 0].set_xlim(xlim)
+        ax[3, 0].set_ylim(ylim)
 if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
     ax[3, 1].scatter(
         growclust_cc_catalog["latR"],
@@ -826,8 +959,13 @@ if growclust_cc_exist and (len(growclust_cc_catalog) > 0):
         cmap="viridis_r",
     )
     ax[3, 1].set_title(f"GrowClust (CC): {len(growclust_cc_catalog)}")
-    ax[3, 1].set_xlim(xlim)
-    ax[3, 1].set_ylim(ylim)
+    if xlim is None and ylim is None:
+        ax[3, 1].invert_yaxis()
+        xlim = ax[3, 1].get_xlim()
+        ylim = ax[3, 1].get_ylim()
+    else:
+        ax[3, 1].set_xlim(xlim)
+        ax[3, 1].set_ylim(ylim)
 
 
 plt.savefig(f"{root_path}/{figure_path}/catalogs_latitude_depth.png", dpi=300)
@@ -846,11 +984,11 @@ if gamma_exist:
     ax[0, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
     ax[1, 0].plot(gamma_catalog["time"], gamma_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="GaMMA")
 if adloc_exist:
-    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
-    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc")
+    ax[0, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="ADLoc")
+    ax[1, 0].plot(adloc_catalog["time"], adloc_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="ADLoc")
 if adloc_dt_exist:
     ax[0, 0].plot(
-        adloc_dt_catalog["time"], adloc_dt_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="AdLoc (CT)"
+        adloc_dt_catalog["time"], adloc_dt_catalog["magnitude"], "o", markersize=2, alpha=0.5, label="ADLoc (CT)"
     )
 if adloc_dtcc_exist:
     ax[1, 0].plot(
@@ -859,7 +997,7 @@ if adloc_dtcc_exist:
         "o",
         markersize=2,
         alpha=0.5,
-        label="AdLoc (CC)",
+        label="ADLoc (CC)",
     )
 if hypodd_ct_exist:
     ax[0, 0].plot(
@@ -884,7 +1022,8 @@ plt.show()
 
 # %%
 fig, ax = plt.subplots(2, 1, squeeze=False, figsize=(10, 10))
-xlim = [int(np.floor(gamma_catalog["magnitude"].min())), int(np.ceil(gamma_catalog["magnitude"].max()))]
+# xlim = [int(np.floor(gamma_catalog["magnitude"].min())), int(np.ceil(gamma_catalog["magnitude"].max()))]
+xlim = [-1, 7]
 bins = np.arange(xlim[0], xlim[1] + 1, 0.2)
 if routine_exist:
     ax[0, 0].hist(routine_catalog["magnitude"], bins=bins, alpha=0.5, label="Routine")
@@ -893,12 +1032,12 @@ if gamma_exist:
     ax[0, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
     ax[1, 0].hist(gamma_catalog["magnitude"], bins=bins, alpha=0.5, label="GaMMA")
 if adloc_exist:
-    ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
-    ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc")
+    ax[0, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="ADLoc")
+    ax[1, 0].hist(adloc_catalog["magnitude"], bins=bins, alpha=0.5, label="ADLoc")
 if adloc_dt_exist:
-    ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc (CT)")
+    ax[0, 0].hist(adloc_dt_catalog["magnitude"], bins=bins, alpha=0.5, label="ADLoc (CT)")
 if adloc_dtcc_exist:
-    ax[1, 0].hist(adloc_dtcc_catalog["magnitude"], bins=bins, alpha=0.5, label="AdLoc (CC)")
+    ax[1, 0].hist(adloc_dtcc_catalog["magnitude"], bins=bins, alpha=0.5, label="ADLoc (CC)")
 if hypodd_ct_exist:
     ax[0, 0].hist(catalog_ct_hypodd["MAG"], bins=bins, alpha=0.5, label="HypoDD (CT)")
 if hypodd_cc_exist:

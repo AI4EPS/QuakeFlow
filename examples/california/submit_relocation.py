@@ -39,8 +39,10 @@ if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
     ls -al ./
     cat config.json
 fi
-python cut_templates_merge.py --region $REGION
-python run_cctorch.py --region $REGION
+python run_hypodd_cc.py --region $REGION &
+python run_growclust_cc.py --region $REGION &
+wait
+python plot_catalog.py --region $REGION
 """,
     workdir=".",
     num_nodes=1,
@@ -49,7 +51,7 @@ python run_cctorch.py --region $REGION
 
 task.set_file_mounts(
     {
-        "/opt/CCTorch": "../../CCTorch",
+        # "/opt/CCTorch": "../../CCTorch",
         # "config.json": "local/Cal/config.json",
         # "config.json": "local/Mendocino/config.json",
         # "config.json": "local/Ridgecrest/config.json",
@@ -64,8 +66,8 @@ task.set_resources(
         cloud=sky.GCP(),
         region="us-west1",  # GCP
         # region="us-west-2",  # AWS
-        accelerators="V100:1",
-        # cpus=16,
+        # accelerators="V100:1",
+        cpus=16,
         disk_tier="medium",
         disk_size=50,  # GB
         memory="32+",

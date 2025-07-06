@@ -64,17 +64,33 @@ def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, 
 if __name__ == "__main__":
 
     # %%
-    args = parse_args()
+    protocol = "gs"
+    token_json = f"application_default_credentials.json"
+    with open(token_json, "r") as fp:
+        token = json.load(fp)
+
+    fs = fsspec.filesystem(protocol, token=token)
 
     # %%
-    region = "Cal"
+    args = parse_args()
+    region = args.region
+    root_path = args.root_path
+    bucket = args.bucket
+    num_nodes = args.num_nodes
+    node_rank = args.node_rank
+    year = args.year
+
+    # %%
     result_path = f"{region}/cctorch"
+    folder = result_path
     # if not os.path.exists(result_path):
     #     os.makedirs(result_path)
 
     # %%
-    with open(args.config, "r") as fp:
+    with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
         config = json.load(fp)
+    # with open(args.config, "r") as fp:
+    #     config = json.load(fp)
     config.update(vars(args))
     print(json.dumps(config, indent=4, sort_keys=True))
 
@@ -89,16 +105,6 @@ if __name__ == "__main__":
     # config["max_epicenter_dist_km"] = 200.0
 
     # %%
-    protocol = "gs"
-    bucket = "quakeflow_catalog"
-    folder = result_path
-    token_json = f"application_default_credentials.json"
-    with open(token_json, "r") as fp:
-        token = json.load(fp)
-
-    fs = fsspec.filesystem(protocol, token=token)
-
-    # %%
     def plot_templates(templates, events, picks):
         templates = templates - np.nanmean(templates, axis=(-1), keepdims=True)
         std = np.std(templates, axis=(-1), keepdims=True)
@@ -111,18 +117,21 @@ if __name__ == "__main__":
         plt.show()
 
     # %%
+    # station_json = f"{region}/network/stations.json"
+    # if protocol == "file":
+    #     stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+    # else:
+    #     with fs.open(f"{bucket}/{station_json}", "r") as fp:
+    #         stations = pd.read_json(fp, orient="index")
+    # stations["station_id"] = stations.index
 
-    region = "Cal"
-    root_path = "local"
-    protocol = "gs"
-    bucket = "quakeflow_catalog"
-    station_json = f"{region}/network/stations.json"
+    station_csv = f"{region}/adloc/ransac_stations.csv"
+    # station_csv = f"{region}/adloc/adloc_stations.csv"
     if protocol == "file":
-        stations = pd.read_json(f"{root_path}/{station_json}", orient="index")
+        stations = pd.read_csv(f"{root_path}/{station_csv}")
     else:
-        with fs.open(f"{bucket}/{station_json}", "r") as fp:
-            stations = pd.read_json(fp, orient="index")
-    stations["station_id"] = stations.index
+        with fs.open(f"{bucket}/{station_csv}", "r") as fp:
+            stations = pd.read_csv(fp)
     stations.sort_values(by=["latitude", "longitude"], inplace=True)
     print(f"stations: {len(stations):,} ")
     print(stations.iloc[:5])
@@ -152,12 +161,12 @@ if __name__ == "__main__":
     # exit_jdays.append((year, jday))
     # selected_years = [2019]
     # selected_jdays = [185, 186, 187]
-    selected_years = [2020, 2021, 2022, 2023]
+    # selected_years = [2020, 2021, 2022, 2023]
     year_jday = [
         (year, jday)
         for tmp in exit_jdays
         for (year, jday) in [tmp.split("/")[-3:-1]]
-        if (int(year) in selected_years)
+        # if (int(year) in selected_years)
         # if (int(year) in selected_years and int(jday) in selected_jdays)
     ]
     print(f"Selected jdays: {len(year_jday)}")
@@ -416,5 +425,26 @@ if __name__ == "__main__":
     # plot_templates(templates, events, picks)
 
     # break
+
+    if protocol == "gs":
+        print(f"{root_path}/{result_path}/cctorch_picks.csv -> {bucket}/{folder}/cctorch_picks.csv")
+        fs.put(f"{root_path}/{result_path}/cctorch_picks.csv", f"{bucket}/{folder}/cctorch_picks.csv")
+        print(f"{root_path}/{result_path}/cctorch_events.csv -> {bucket}/{folder}/cctorch_events.csv")
+        fs.put(f"{root_path}/{result_path}/cctorch_events.csv", f"{bucket}/{folder}/cctorch_events.csv")
+        print(f"{root_path}/{result_path}/cctorch_stations.csv -> {bucket}/{folder}/cctorch_stations.csv")
+        fs.put(f"{root_path}/{result_path}/cctorch_stations.csv", f"{bucket}/{folder}/cctorch_stations.csv")
+        print(f"{root_path}/{result_path}/config.json -> {bucket}/{folder}/config.json")
+        fs.put(f"{root_path}/{result_path}/config.json", f"{bucket}/{folder}/config.json")
+        print(f"{root_path}/{result_path}/pairs.txt -> {bucket}/{folder}/pairs.txt")
+        fs.put(f"{root_path}/{result_path}/pairs.txt", f"{bucket}/{folder}/pairs.txt")
+        print(f"{root_path}/{result_path}/template.dat -> {bucket}/{folder}/template.dat")
+        fs.put(f"{root_path}/{result_path}/template.dat", f"{bucket}/{folder}/template.dat")
+        print(f"{root_path}/{result_path}/traveltime.dat -> {bucket}/{folder}/traveltime.dat")
+        fs.put(f"{root_path}/{result_path}/traveltime.dat", f"{bucket}/{folder}/traveltime.dat")
+        print(f"{root_path}/{result_path}/traveltime_index.dat -> {bucket}/{folder}/traveltime_index.dat")
+        fs.put(f"{root_path}/{result_path}/traveltime_index.dat", f"{bucket}/{folder}/traveltime_index.dat")
+        print(f"{root_path}/{result_path}/traveltime_mask.dat -> {bucket}/{folder}/traveltime_mask.dat")
+        fs.put(f"{root_path}/{result_path}/traveltime_mask.dat", f"{bucket}/{folder}/traveltime_mask.dat")
+        
 
 # %%

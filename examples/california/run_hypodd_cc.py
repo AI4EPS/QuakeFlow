@@ -7,7 +7,7 @@ import os
 
 import numpy as np
 import pandas as pd
-
+import fsspec
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Gamma on NCEDC/SCEDC data")
@@ -19,15 +19,28 @@ def parse_args():
     parser.add_argument("--bucket", type=str, default="quakeflow_catalog")
     return parser.parse_args()
 
+# %%
+protocol = "gs"
+token_json = f"application_default_credentials.json"
+with open(token_json, "r") as fp:
+    token = json.load(fp)
+
+fs = fsspec.filesystem(protocol, token=token)
 
 # %%
 args = parse_args()
-root_path = args.root_path
 region = args.region
+root_path = args.root_path
+bucket = args.bucket
+num_nodes = args.num_nodes
+node_rank = args.node_rank
+year = args.year
 
 # with open(f"{root_path}/{region}/config.json", "r") as fp:
 #     config = json.load(fp)
-config = json.load(open("config.json", "r"))
+# config = json.load(open("config.json", "r"))
+with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
+    config = json.load(fp)
 
 # %%
 data_path = f"{region}/cctorch"
@@ -82,3 +95,18 @@ with open(f"{root_path}/{result_path}/events.dat", "w") as f:
 
 # %%
 os.system(f"bash run_hypodd_cc.sh {root_path} {region}")
+
+# %%
+if protocol == "gs":
+    print(f"{root_path}/{result_path}/events.dat -> {bucket}/{result_path}/events.dat")
+    fs.put(f"{root_path}/{result_path}/events.dat", f"{bucket}/{result_path}/events.dat")
+    print(f"{root_path}/{result_path}/stations.dat -> {bucket}/{result_path}/stations.dat")
+    fs.put(f"{root_path}/{result_path}/stations.dat", f"{bucket}/{result_path}/stations.dat")
+    print(f"{root_path}/{result_path}/hypodd_cc.loc -> {bucket}/{result_path}/hypodd_cc.loc")
+    fs.put(f"{root_path}/{result_path}/hypodd_cc.loc", f"{bucket}/{result_path}/hypodd_cc.loc")
+    print(f"{root_path}/{result_path}/hypodd_cc.reloc -> {bucket}/{result_path}/hypodd_cc.reloc")
+    fs.put(f"{root_path}/{result_path}/hypodd_cc.reloc", f"{bucket}/{result_path}/hypodd_cc.reloc")
+    print(f"{root_path}/{result_path}/hypoDD.log -> {bucket}/{result_path}/hypoDD.log")
+    fs.put(f"{root_path}/{result_path}/hypoDD.log", f"{bucket}/{result_path}/hypoDD.log")
+
+# %%

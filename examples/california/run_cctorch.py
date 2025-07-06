@@ -3,6 +3,8 @@ import argparse
 import os
 
 import torch
+import json
+import fsspec
 
 
 ##
@@ -26,11 +28,17 @@ args = parse_args()
 # jday = 187
 # data_path = f"{region}/cctorch/{year}"
 # #######################################
+protocol = "gs"
+token_json = f"application_default_credentials.json"
+with open(token_json, "r") as fp:
+    token = json.load(fp)
+
+fs = fsspec.filesystem(protocol, token=token)
 
 # %%
 root_path = args.root_path
 region = args.region
-
+bucket = args.bucket
 data_path = f"{region}/cctorch"
 result_path = f"{region}/cctorch/ccpairs"
 
@@ -62,6 +70,7 @@ block_size2 = 1000_000
 
 
 base_cmd = (
+    # f"../../CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
     f"/opt/CCTorch/run.py --pair_list={root_path}/{data_path}/pairs.txt --data_path1={root_path}/{data_path}/template.dat --data_format1=memmap "
     f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
     f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
@@ -155,3 +164,10 @@ else:
 # if os.path.lexists(target_file):
 #     os.remove(target_file)
 # os.symlink(source_file, target_file)
+
+
+if protocol == "gs":
+    print(f"{root_path}/{data_path}/dt.cc -> {bucket}/{data_path}/dt.cc")
+    fs.put(f"{root_path}/{data_path}/dt.cc", f"{bucket}/{data_path}/dt.cc")
+    print(f"{root_path}/{data_path}/dtcc.csv -> {bucket}/{data_path}/dtcc.csv")
+    fs.put(f"{root_path}/{data_path}/dtcc.csv", f"{bucket}/{data_path}/dtcc.csv")

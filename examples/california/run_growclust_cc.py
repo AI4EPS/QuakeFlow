@@ -5,6 +5,8 @@ from datetime import datetime
 
 import pandas as pd
 from tqdm import tqdm
+import fsspec
+import json
 
 
 def parse_args():
@@ -19,9 +21,21 @@ def parse_args():
 
 
 # %%
+protocol = "gs"
+token_json = f"application_default_credentials.json"
+with open(token_json, "r") as fp:
+    token = json.load(fp)
+
+fs = fsspec.filesystem(protocol, token=token)
+
+# %%
 args = parse_args()
-root_path = args.root_path
 region = args.region
+root_path = args.root_path
+bucket = args.bucket
+num_nodes = args.num_nodes
+node_rank = args.node_rank
+year = args.year
 
 # %%
 result_path = f"{region}/growclust"
@@ -78,3 +92,12 @@ with open(f"{root_path}/{result_path}/evlist.txt", "w") as fp:
 
 # %%
 os.system(f"bash run_growclust_cc.sh {root_path} {region}")
+
+
+if protocol == "gs":
+    print(f"{root_path}/{result_path}/evlist.txt -> {bucket}/{result_path}/evlist.txt")
+    fs.put(f"{root_path}/{result_path}/evlist.txt", f"{bucket}/{result_path}/evlist.txt")
+    print(f"{root_path}/{result_path}/stlist.txt -> {bucket}/{result_path}/stlist.txt")
+    fs.put(f"{root_path}/{result_path}/stlist.txt", f"{bucket}/{result_path}/stlist.txt")
+    print(f"{root_path}/{result_path}/growclust_cc.txt -> {bucket}/{result_path}/growclust_cc.txt")
+    fs.put(f"{root_path}/{result_path}/growclust_cc.txt", f"{bucket}/{result_path}/growclust_cc.txt")

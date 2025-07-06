@@ -27,7 +27,8 @@ echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
 pip install -U h5py tqdm wandb pandas scipy scikit-learn numpy==1.26.4
 pip install -U fsspec gcsfs s3fs                                                   
 pip install -U obspy pyproj
-pip install -e /opt/ADLoc
+# pip install -e /opt/ADLoc
+pip install ADLoc
 """,
     run="""
 num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
@@ -38,17 +39,17 @@ if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
     ls -al ./
     cat config.json
 fi
-python cut_templates_cc.py --num_node $NUM_NODES --node_rank $NODE_RANK --year $YEAR --config config.json
+python cut_templates_cc.py --num_node $NUM_NODES --node_rank $NODE_RANK --year $YEAR --region $REGION
 """,
     workdir=".",
     num_nodes=1,
-    envs={"NUM_NODES": NUM_NODES, "NODE_RANK": 0, "YEAR": YEAR},
+    envs={"NUM_NODES": NUM_NODES, "NODE_RANK": 0, "YEAR": YEAR, "REGION": REGION},
 )
 
 task.set_file_mounts(
     {
-        "/opt/ADLoc": "../../ADLoc",
-        "config.json": "local/Mendocino/config.json",
+        # "/opt/ADLoc": "../../ADLoc",
+        # "config.json": "local/Mendocino/config.json",
         # "config.json": "local/Cal/config.json",
     },
 )

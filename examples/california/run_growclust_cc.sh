@@ -115,5 +115,5 @@ cat <<EOF > vzmodel.txt
 EOF
 
 ./GrowClust/SRC/growclust  growclust.inp
-cp OUT/out.growclust_cc_cat growclust_cc_catalog.txt
+cp OUT/out.growclust_cc_cat growclust_cc.txt
 cd $WORKING_DIR
