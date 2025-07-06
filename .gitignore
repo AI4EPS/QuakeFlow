@@ -172,3 +172,4 @@ slurm/*/results/
 slurm/*/*.xml
 .history/
 *.npy
+examples/california/cctorch_figures*/

@@ -227,6 +227,8 @@ def extract_template_numpy(
                     if config["no_overlapping"]:
                         end_time = min(end_time, s_begin_time)
 
+                begin_time_index = int(round(begin_time * config["sampling_rate"]))
+                end_time_index = int(round(end_time * config["sampling_rate"]))
 
                 if begin_time_index < 0:
                     print(f"Warning: {begin_time = } < 0, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_before_{phase_type.lower()}'] = }")
@@ -235,8 +237,8 @@ def extract_template_numpy(
                     print(f"Warning: {end_time = } > {len(trace.data)}, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_after_{phase_type.lower()}'] = }")
                     continue
 
-                begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
-                end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
+                # begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
+                # end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
 
                 ## define traveltime at the exact data point of event origin time
                 traveltime_array[idx_pick, ic, 0] = begin_time_index / config["sampling_rate"] - (
@@ -247,6 +249,9 @@ def extract_template_numpy(
                     * config["sampling_rate"]
                 )
                 traveltime_mask[idx_pick, ic, 0] = True
+
+                begin_time_index = max(0, begin_time_index)
+                end_time_index = max(0, end_time_index)
 
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
                 # template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data  # - np.mean(trace_data)

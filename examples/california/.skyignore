@@ -4,7 +4,9 @@ tests/
 figures/
 benchmark/
 Cal/
+IRIS/
 cctorch_figures/
-cctorch_figures2/
+cctorch_figures*/
 cctorch2_figures/
+cctorch2_figures*/
 
