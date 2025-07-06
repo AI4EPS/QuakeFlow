@@ -65,7 +65,11 @@ def fillin_missing_picks(picks, events, stations, config):
     picks.set_index(["event_index", "station_id", "phase_type"], inplace=True)
     picks_ps.set_index(["event_index", "station_id", "phase_type"], inplace=True)
     picks_ps.update(picks)
+    picks.reset_index(inplace=True)
     picks_ps.reset_index(inplace=True)
+
+    ## add provider
+    picks_ps = picks_ps.merge(picks[["event_index", "station_id", "provider"]].drop_duplicates(), on=["event_index", "station_id"])
 
     print(f"Original picks: {len(picks)}, Filled picks: {len(picks_ps)}")
     print(picks_ps.iloc[:10])
@@ -222,6 +226,14 @@ def extract_template_numpy(
                     )
                     if config["no_overlapping"]:
                         end_time = min(end_time, s_begin_time)
+
+
+                if begin_time_index < 0:
+                    print(f"Warning: {begin_time = } < 0, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_before_{phase_type.lower()}'] = }")
+                    continue
+                if end_time_index > len(trace.data):
+                    print(f"Warning: {end_time = } > {len(trace.data)}, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_after_{phase_type.lower()}'] = }")
+                    continue
 
                 begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
                 end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
@@ -641,6 +653,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 "phase_timestamp",
                 "phase_source",
                 "station_id",
+                "provider",
             ]
         ]
         events.set_index("idx_eve", inplace=True)
@@ -682,6 +695,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
+                mseeds["provider"] = "SC"
             elif folder == "NC":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
@@ -690,6 +704,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
+                mseeds["provider"] = "NC"
             elif folder == "IRIS":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["jday"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-2])
@@ -698,6 +713,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[2])
                 mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[3][:2])
+                mseeds["provider"] = "IRIS"
             else:
                 raise ValueError(f"Unknown folder: {folder}")
             mseeds_df.append(mseeds)
@@ -716,7 +732,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         mseeds_df = mseeds_df[(mseeds_df["year"].astype(int) == year) & (mseeds_df["jday"].astype(int) == jday)]
         picks = picks[(picks["year"].astype(int) == year) & (picks["jday"].astype(int) == jday)]
 
-        picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday"])
+        picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday", "provider"])
         picks.drop(columns=["fname", "station_id", "network", "location", "instrument", "year", "jday"], inplace=True)
 
         if len(picks) == 0:
@@ -936,6 +952,7 @@ if __name__ == "__main__":
         exit()
 
     jdays = [f"{year}.{jday:03d}" for jday in jdays]
+    # jdays = [f"2015.247"]
 
     print(f"{node_rank}/{num_nodes}: {jdays[0] = }, {jdays[-1] = }")
 

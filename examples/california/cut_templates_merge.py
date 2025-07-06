@@ -159,7 +159,7 @@ if __name__ == "__main__":
     # for exit_jday in exit_jdays:
     #     year, jday = exit_jday.split("/")[-3:-1]
     # exit_jdays.append((year, jday))
-    # selected_years = [2019]
+    # selected_years = [2015]
     # selected_jdays = [185, 186, 187]
     # selected_years = [2020, 2021, 2022, 2023]
     year_jday = [
