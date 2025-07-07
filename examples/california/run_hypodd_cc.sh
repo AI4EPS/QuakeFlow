@@ -18,9 +18,9 @@ cd $root_path/$region/hypodd
 
 if [ ! -d "HypoDD" ]; then
   git clone https://github.com/zhuwq0/HypoDD.git
-  export PATH=$PATH:$PWD/HypoDD
-  make -C HypoDD/src/
 fi
+export PATH=$PATH:$PWD/HypoDD
+make -C HypoDD/src/
 
 cat <<EOF > cc.inp
 * RELOC.INP:
@@ -54,7 +54,7 @@ hypodd.src
 * IPHA: 1= P; 2= S; 3= P&S
 * DIST:max dist [km] between cluster centroid and station 
 * IDAT   IPHA   DIST
-    1     3     120
+    1     3     500
 *
 *--- event clustering:
 * OBSCC:    min # of obs/pair for crosstime data (0= no clustering)

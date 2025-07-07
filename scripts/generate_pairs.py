@@ -66,7 +66,7 @@ if __name__ == "__main__":
     station_file = os.path.join(data_path, "ransac_stations.csv")
 
     # %%
-    MAX_PAIR_DIST = 10  # km
+    MAX_PAIR_DIST = 15  # km
     MAX_NEIGHBORS = 50
     MIN_NEIGHBORS = 8
     MIN_OBS = 8

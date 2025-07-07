@@ -18,7 +18,7 @@ import datetime
 
 
 # %%
-def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="pairs.txt"):
+def generate_pairs(picks, events, stations, max_pair_dist=15, max_neighbors=50, fname="pairs.txt"):
     ncpu = min(32, mp.cpu_count())
     neigh = NearestNeighbors(radius=max_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
     neigh.fit(events[["x_km", "y_km", "z_km"]].values)
@@ -92,17 +92,18 @@ if __name__ == "__main__":
     # with open(args.config, "r") as fp:
     #     config = json.load(fp)
     config.update(vars(args))
-    print(json.dumps(config, indent=4, sort_keys=True))
 
     # %% CCTorch
-    # config["max_pair_dist_km"] = 10
-    # config["max_neighbors"] = 50
-    # config["max_obs"] = 100
-    # config["min_obs"] = 8
+    config["max_pair_dist_km"] = 15
+    config["max_neighbors"] = 50
+    config["max_obs"] = 100
+    config["min_obs"] = 8
     # config["nt"] = 400
     # config["maxdepth"] = 60
     # config["mindepth"] = 0
     # config["max_epicenter_dist_km"] = 200.0
+
+    print(json.dumps(config, indent=4, sort_keys=True))
 
     # %%
     def plot_templates(templates, events, picks):

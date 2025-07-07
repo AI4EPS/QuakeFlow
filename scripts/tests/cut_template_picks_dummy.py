@@ -136,8 +136,8 @@ if not os.path.exists(f"{root_path}/{region}/{result_path}"):
 
 # %%
 # MAX_EPICENTER_DIST = 50
-MAX_EPICENTER_DIST = 200
-MAX_PAIR_DIST = 10
+MAX_EPICENTER_DIST = 500
+MAX_PAIR_DIST = 15
 MAX_NEIGHBORS = 50
 MIN_WEIGHT = 0.0
 MIN_OBS = 8  # based on pick counts

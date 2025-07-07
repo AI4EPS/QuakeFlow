@@ -55,8 +55,8 @@ if not os.path.exists(f"{root_path}/{result_path}"):
 ## based on GPU memory
 
 batch = 1_024
-block_size1 = 1000_000
-block_size2 = 1000_000
+block_size1 = 2_000_000
+block_size2 = 2_000_000
 
 ########## DEBUG by day ##############
 # base_cmd = (

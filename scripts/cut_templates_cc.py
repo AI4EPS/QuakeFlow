@@ -237,7 +237,7 @@ def extract_template_numpy(
 
 
 # %%
-def generate_pairs(picks, events, stations, max_pair_dist=10, max_neighbors=50, fname="pairs.txt"):
+def generate_pairs(picks, events, stations, max_pair_dist=15, max_neighbors=50, fname="pairs.txt"):
     ncpu = min(32, mp.cpu_count())
     neigh = NearestNeighbors(radius=max_pair_dist, n_neighbors=max_neighbors, n_jobs=ncpu)
     neigh.fit(events[["x_km", "y_km", "z_km"]].values)
@@ -311,7 +311,7 @@ def cut_templates(root_path, region, config):
     time_window = max((time_before_p + time_after_p), (time_before_s + time_after_s))
     nt = int(round(time_window * sampling_rate))
     max_epicenter_dist = 500.0
-    max_pair_dist = 10
+    max_pair_dist = 15
     max_neighbors = 50
     min_cc_score = 0.5
     min_obs = 8

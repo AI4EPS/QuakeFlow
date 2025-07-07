@@ -182,7 +182,7 @@ if __name__ == "__main__":
     # picks = pd.read_csv(f"{root_path}/{result_path}/picks.csv", parse_dates=["phase_time"])
 
     # %%
-    MAX_PAIR_DIST = 10  # km
+    MAX_PAIR_DIST = 15  # km
     MAX_NEIGHBORS = 50
     MIN_NEIGHBORS = 8
     MIN_OBS = 8
