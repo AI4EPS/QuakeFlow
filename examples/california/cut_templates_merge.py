@@ -126,8 +126,8 @@ if __name__ == "__main__":
     #         stations = pd.read_json(fp, orient="index")
     # stations["station_id"] = stations.index
 
-    station_csv = f"{region}/adloc/ransac_stations.csv"
-    # station_csv = f"{region}/adloc/adloc_stations.csv"
+    # station_csv = f"{region}/adloc/ransac_stations.csv"
+    station_csv = f"{region}/adloc/adloc_stations.csv"
     if protocol == "file":
         stations = pd.read_csv(f"{root_path}/{station_csv}")
     else:

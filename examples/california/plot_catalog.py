@@ -115,9 +115,11 @@ except Exception as e:
 
 # %%
 if protocol == "file":
-    adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
+    # adloc_file = f"{root_path}/{region}/adloc/ransac_events.csv"
+    adloc_file = f"{root_path}/{region}/adloc/adloc_events.csv"
 else:
-    adloc_file = f"{protocol}://{bucket}/{region}/adloc/ransac_events.csv"
+    # adloc_file = f"{protocol}://{bucket}/{region}/adloc/ransac_events.csv"
+    adloc_file = f"{protocol}://{bucket}/{region}/adloc/adloc_events.csv"
 adloc_exist = False
 try:
     adloc_catalog = pd.read_csv(adloc_file, parse_dates=["time"])

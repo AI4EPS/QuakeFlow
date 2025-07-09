@@ -69,7 +69,10 @@ def fillin_missing_picks(picks, events, stations, config):
     picks_ps.reset_index(inplace=True)
 
     ## add provider
-    picks_ps = picks_ps.merge(picks[["event_index", "station_id", "provider"]].drop_duplicates(), on=["event_index", "station_id"])
+    if "provider" in picks.columns:
+        picks_ps = picks_ps.merge(picks[["event_index", "station_id", "provider"]].drop_duplicates(), on=["event_index", "station_id"])
+    else:
+        picks_ps = picks_ps.merge(picks[["event_index", "station_id"]].drop_duplicates(), on=["event_index", "station_id"])
 
     print(f"Original picks: {len(picks)}, Filled picks: {len(picks_ps)}")
     print(picks_ps.iloc[:10])
@@ -440,8 +443,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # stations["station_id"] = stations.index
         # stations.sort_values(by=["latitude", "longitude"], inplace=True)
 
-        # station_csv = f"{data_path}/adloc_stations.csv"
-        station_csv = f"{data_path}/ransac_stations.csv"
+        station_csv = f"{data_path}/adloc_stations.csv"
+        # station_csv = f"{data_path}/ransac_stations.csv"
         if protocol == "file":
             stations = pd.read_csv(station_csv)
         else:
@@ -468,12 +471,12 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # events = pd.read_csv("adloc_events.csv", parse_dates=["time"])
         if protocol == "file":
             events = pd.read_csv(
-                # f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
-                f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", parse_dates=["time"]
+                f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
+                # f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", parse_dates=["time"]
             )
         else:
-            # with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
-            with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", "r") as fp:
+            with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
+            # with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", "r") as fp:
                 events = pd.read_csv(fp, parse_dates=["time"])
 
         # # ############### DEBUG ###############
@@ -529,12 +532,16 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # picks = pd.read_csv(f"{root_path}/{data_path}/ransac_picks.csv")
         # picks = pd.read_csv("adloc_picks.csv")
         if protocol == "file":
-            # picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv")
-            picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv")
+            picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv")
+            # picks = pd.read_csv(f"{root_path}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv")
         else:
-            # with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv", "r") as fp:
-            with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv", "r") as fp:
+            with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_picks_{jday:03d}.csv", "r") as fp:
+            # with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_picks_{jday:03d}.csv", "r") as fp:
                 picks = pd.read_csv(fp)
+
+        # if "provider" not in picks.columns:
+        #     picks["provider"] = "adloc"
+        #     print(f"No provider in picks; set to adloc as default")
 
         # ############### DEBUG ###############
         # picks = picks[(picks["event_index"].isin(events["event_index"]))]
@@ -648,19 +655,10 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         config["reference_t0"] = reference_t0.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         events = events[["idx_eve", "x_km", "y_km", "z_km", "event_index", "event_time", "event_timestamp"]]
         stations = stations[["idx_sta", "x_km", "y_km", "z_km", "station_id", "component", "network", "station"]]
-        picks = picks[
-            [
-                "idx_eve",
-                "idx_sta",
-                "phase_type",
-                "phase_score",
-                "phase_time",
-                "phase_timestamp",
-                "phase_source",
-                "station_id",
-                "provider",
-            ]
-        ]
+        columns = ["idx_eve", "idx_sta", "phase_type", "phase_score", "phase_time", "phase_timestamp", "phase_source", "station_id"]
+        if "provider" in picks.columns:
+            columns.append("provider")
+        picks = picks[columns]
         events.set_index("idx_eve", inplace=True)
         stations.set_index("idx_sta", inplace=True)
         picks.sort_values(by=["idx_eve", "idx_sta", "phase_type"], inplace=True)
@@ -700,7 +698,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
-                mseeds["provider"] = "SC"
+                if "provider" not in picks.columns:
+                    mseeds["provider"] = "SC"
             elif folder == "NC":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
@@ -709,7 +708,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
-                mseeds["provider"] = "NC"
+                if "provider" not in picks.columns: 
+                    mseeds["provider"] = "NC"
             elif folder == "IRIS":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["jday"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-2])
@@ -718,7 +718,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[2])
                 mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[3][:2])
-                mseeds["provider"] = "IRIS"
+                if "provider" not in picks.columns: 
+                    mseeds["provider"] = "IRIS"
             else:
                 raise ValueError(f"Unknown folder: {folder}")
             mseeds_df.append(mseeds)
@@ -737,7 +738,10 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         mseeds_df = mseeds_df[(mseeds_df["year"].astype(int) == year) & (mseeds_df["jday"].astype(int) == jday)]
         picks = picks[(picks["year"].astype(int) == year) & (picks["jday"].astype(int) == jday)]
 
-        picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday", "provider"])
+        if "provider" in picks.columns:
+            picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday", "provider"])
+        else:
+            picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday"])
         picks.drop(columns=["fname", "station_id", "network", "location", "instrument", "year", "jday"], inplace=True)
 
         if len(picks) == 0:
@@ -930,11 +934,12 @@ if __name__ == "__main__":
     # jdays = [f"{year}.{i:03d}" for i in range(1, num_jday + 1)]
     jdays = range(1, num_jday + 1)
 
-    # jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/adloc_events_???.csv")
-    jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/ransac_events_???.csv")
+    jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/adloc_events_???.csv")
+    # jdays = fs.glob(f"{bucket}/{region}/adloc/{year:04d}/ransac_events_???.csv")
     jdays = [int(x.split("/")[-1].split(".")[0].split("_")[-1]) for x in jdays]
 
     jdays = np.array_split(jdays, num_nodes)[node_rank]
+
     # jdays = ["2019.185"]
     # jdays = ["2019.186"]
     # jdays = ["2019.185", "2019.186", "2019.187"]
@@ -949,7 +954,7 @@ if __name__ == "__main__":
     processed = [x.split("/")[-2] for x in processed]
     print(f"Processed days: {len(processed)}")
 
-    jdays = [jday for jday in jdays if f"{jday:03d}" not in processed]
+    # jdays = [jday for jday in jdays if f"{jday:03d}" not in processed]
     print(f"Remaining days: {len(jdays)}")
 
     if len(jdays) == 0:

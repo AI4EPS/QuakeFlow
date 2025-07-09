@@ -32,7 +32,7 @@ def run_gamma(
         jday = int(jday.split(".")[1])
 
         # %%
-        result_path = f"{region}/gamma_bo3/{year:04d}"
+        result_path = f"{region}/gamma/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
 
@@ -109,14 +109,18 @@ def run_gamma(
         )
         stations["z(km)"] = stations["elevation_m"].apply(lambda x: -x / 1e3)
 
+        # ## select domain
+        # stations = stations[(stations["latitude"] > config["minlatitude"]) & (stations["latitude"] < config["maxlatitude"]) & (stations["longitude"] > config["minlongitude"]) & (stations["longitude"] < config["maxlongitude"])]
+
         ### setting GMMA configs
         config["use_dbscan"] = True
         config["use_amplitude"] = True
         config["method"] = "BGMM"
         if config["method"] == "BGMM":  ## BayesianGaussianMixture
-            config["oversample_factor"] = 2
+            # config["oversample_factor"] = 5
+            config["oversample_factor"] = 8
         if config["method"] == "GMM":  ## GaussianMixture
-            config["oversample_factor"] = 1
+            config["oversample_factor"] = 2
 
         ## earthquake location
         config["vel"] = {"p": 6.0, "s": 6.0 / 1.75}
@@ -125,7 +129,7 @@ def run_gamma(
         xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
         config["x(km)"] = (xmin, xmax)
         config["y(km)"] = (ymin, ymax)
-        if "gamma" not in config:
+        if "gamma" not in config or "zmin_km" not in config["gamma"]:
             config["z(km)"] = (0, 60)
         else:
             config["z(km)"] = [config["gamma"]["zmin_km"], config["gamma"]["zmax_km"]]
@@ -164,8 +168,12 @@ def run_gamma(
             2001: 14.0,
             2000: 15.0,
         }
-        config["dbscan_eps"] = eps_year[year]
-        config["dbscan_min_samples"] = 6
+        config["dbscan_eps"] = eps_year[year] * 2.0
+        config["dbscan_min_samples"] = 3
+        config["dbscan_min_cluster_size"] = 500
+        # config["dbscan_max_time_space_ratio"] = 5
+        config["dbscan_max_time_space_ratio"] = 3
+
 
         ## Eikonal for 1D velocity model
         # Southern California
@@ -328,11 +336,15 @@ if __name__ == "__main__":
     year = args.year
 
     # %%
-    calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
-    jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
+    exist_jdays = fs.glob(f"{bucket}/{region}/phasenet/{year:04d}/????.???.csv")
+
+    # calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
+    # jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
+    jdays = [jday.split("/")[-1].replace(".csv", "") for jday in exist_jdays]
+
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
     # jdays = [['2018.032', '2018.064', '2018.096', '2018.128', '2018.160', '2018.192', '2018.224', '2018.256', '2018.288', '2018.320', '2018.352']]
-    jdays = [[f"{year}.366"]]  # for leap year
+    # jdays = [[f"{year}.366"]]  # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:

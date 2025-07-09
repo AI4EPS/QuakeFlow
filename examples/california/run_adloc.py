@@ -40,13 +40,16 @@ def run_adloc(
         jday = int(jday.split(".")[1])
 
         # %%
-        data_path = f"{region}/gamma_bo/{year:04d}"
+        data_path = f"{region}/gamma/{year:04d}"
         result_path = f"{region}/adloc/{year:04d}"
         if not os.path.exists(f"{root_path}/{result_path}"):
             os.makedirs(f"{root_path}/{result_path}")
-        figure_path = f"{region}/figures/{year:04d}"
-        if not os.path.exists(f"{root_path}/{figure_path}"):
-            os.makedirs(f"{root_path}/{figure_path}")
+        # figure_path = f"{region}/figures/{year:04d}"
+        # if not os.path.exists(f"{root_path}/{figure_path}"):
+        #     os.makedirs(f"{root_path}/{figure_path}")
+        figure_path = f"{root_path}/{region}/adloc/figures"
+        os.makedirs(f"{root_path}/{result_path}", exist_ok=True)
+        os.makedirs(f"{figure_path}", exist_ok=True)
 
         # %%
         station_json = f"{region}/network/stations.json"
@@ -95,6 +98,10 @@ def run_adloc(
         stations["station_id"] = stations.index
         stations.reset_index(drop=True, inplace=True)
 
+        ## select domain
+        stations = stations[(stations["longitude"] > config["minlongitude"]) & (stations["longitude"] < config["maxlongitude"]) & (stations["latitude"] > config["minlatitude"]) & (stations["latitude"] < config["maxlatitude"])]
+        print(f"Number of stations: {len(stations)}")
+
         # %%
         config["mindepth"] = 0.0
         config["maxdepth"] = 60.0
@@ -125,7 +132,7 @@ def run_adloc(
             events[["x_km", "y_km"]] = events.apply(
                 lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
             )
-            events["z_km"] = events["depth_km"]
+            events["z_km"] = events["depth_km"] if "depth_km" in events.columns else 60.0
 
         ## set up the config; you can also specify the region manually
         if ("xlim_km" not in config) or ("ylim_km" not in config) or ("zlim_km" not in config):
@@ -173,8 +180,8 @@ def run_adloc(
         config["max_residual_time"] = 1.0
         config["max_residual_amplitude"] = 1.0
         config["min_score"] = 0.5
-        config["min_p_picks"] = 0  # for filtering
-        config["min_s_picks"] = 0  # for filtering
+        config["min_p_picks"] = 1.5  # for filtering
+        config["min_s_picks"] = 1.5  # for filtering
 
         config["bfgs_bounds"] = (
             (config["xlim_km"][0] - 1, config["xlim_km"][1] + 1),  # x
@@ -215,12 +222,16 @@ def run_adloc(
         picks = picks.merge(events[["event_index", "idx_eve"]], on="event_index")
         picks = picks.merge(stations[["station_id", "idx_sta"]], on="station_id")
 
+        print(f"Number of picks: {len(picks)}")
+        print(f"Number of events: {len(events)}")
+
         # %%
         estimator = ADLoc(config, stations=stations[["x_km", "y_km", "z_km"]].values, eikonal=config["eikonal"])
 
         # %%
-        NCPU = mp.cpu_count()
-        MAX_SST_ITER = 2
+        # NCPU = min(32, mp.cpu_count())
+        config["ncpu"] = 32
+        MAX_SST_ITER = 1
         # MIN_SST_S = 0.01
         events_init = events.copy()
 
@@ -245,33 +256,35 @@ def run_adloc(
         # )
 
         for iter in range(MAX_SST_ITER):
-            if iter == 0:
-                config["min_picks"] = 6  # for sampling not for filtering
-                config["min_picks_ratio"] = 0.5  # for sampling
-                config["max_residual_time"] = 3.0
-                config["max_residual_amplitude"] = 3.0
-                config["min_score"] = -0.5
-                config["min_p_picks"] = 0  # for filtering
-                config["min_s_picks"] = 0  # for filtering
-            else:
-                config["min_picks"] = 6  # for sampling not for filtering
-                config["min_picks_ratio"] = 0.5  # for sampling
-                config["max_residual_time"] = 1.0
-                config["max_residual_amplitude"] = 1.0
-                config["min_score"] = 0.5
-                config["min_p_picks"] = 0  # for filtering
-                config["min_s_picks"] = 0  # for filtering
-            stations["station_term_time_p"] = 0.0  # no station term
-            stations["station_term_time_s"] = 0.0  # no station term
+            # if iter == 0:
+            #     config["min_picks"] = 6  # for sampling not for filtering
+            #     config["min_picks_ratio"] = 0.5  # for sampling
+            #     config["max_residual_time"] = 3.0
+            #     config["max_residual_amplitude"] = 3.0
+            #     config["min_score"] = -0.5
+            #     config["min_p_picks"] = 0  # for filtering
+            #     config["min_s_picks"] = 0  # for filtering
+            # else:
+            #     config["min_picks"] = 6  # for sampling not for filtering
+            #     config["min_picks_ratio"] = 0.5  # for sampling
+            #     config["max_residual_time"] = 1.0
+            #     config["max_residual_amplitude"] = 1.0
+            #     config["min_score"] = 0.5
+            #     config["min_p_picks"] = 0  # for filtering
+            #     config["min_s_picks"] = 0  # for filtering
+            # stations["station_term_time_p"] = 0.0  # no station term
+            # stations["station_term_time_s"] = 0.0  # no station term
+            # if iter == 0:
+            #     picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+            # else:
+            #     # picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
+            #     picks, events = invert_location(
+            #         picks[picks["mask"] == 1], stations, config, estimator, events_init=events_init, iter=iter
+            #     )
             # picks, events = invert_location_iter(picks, stations, config, estimator, events_init=events_init, iter=iter)
-            if iter == 0:
-                picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
-            else:
-                # picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
-                picks, events = invert_location(
-                    picks[picks["mask"] == 1], stations, config, estimator, events_init=events_init, iter=iter
-                )
+            picks, events = invert_location(picks, stations, config, estimator, events_init=events_init, iter=iter)
             # station_term = picks[picks["mask"] == 1.0].groupby("idx_sta").agg({"residual_time": "mean"}).reset_index()
+
             station_term_time = (
                 picks[picks["mask"] == 1.0]
                 .groupby(["idx_sta", "phase_type"])
@@ -296,15 +309,21 @@ def run_adloc(
                 stations["idx_sta"].map(station_term_amp.set_index("idx_sta")["residual_amplitude"]).fillna(0)
             )
 
-            # plotting_ransac(
-            #     stations,
-            #     f"{root_path}/{figure_path}",
-            #     config,
-            #     picks,
-            #     events_init,
-            #     events,
-            #     suffix=f"_ransac_sst_{iter}_{config['min_picks']}_s{config['min_score']}_r{config['min_picks_ratio']}_p{config['min_p_picks']}_s{config['min_s_picks']}",
-            # )
+            plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_adloc_sst_{iter}")
+
+            if "event_index" not in events.columns:
+                events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
+            events[["longitude", "latitude"]] = events.apply(
+                lambda x: pd.Series(proj(x["x_km"], x["y_km"], inverse=True)), axis=1
+            )
+            events["depth_km"] = events["z_km"]
+
+            picks["adloc_mask"] = picks["mask"]
+            picks["adloc_residual_time"] = picks["residual_time"]
+            picks["adloc_residual_amplitude"] = picks["residual_amplitude"]
+            # picks.to_csv(os.path.join(result_path, f"adloc_picks_sst_{iter}.csv"), index=False)
+            # events.to_csv(os.path.join(result_path, f"adloc_events_sst_{iter}.csv"), index=False)
+            # stations.to_csv(os.path.join(result_path, f"adloc_stations_sst_{iter}.csv"), index=False)
 
             if iter == 0:
                 MIN_SST_S = (
@@ -316,11 +335,10 @@ def run_adloc(
                 # break
             iter += 1
 
-        # plotting_ransac(
-        #     stations, f"{root_path}/{figure_path}", config, picks, events_init, events, suffix=f"_ransac_sst"
-        # )
 
         # %%
+        plotting_ransac(stations, figure_path, config, picks, events_init, events, suffix=f"_adloc")
+
         if "event_index" not in events.columns:
             events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
         events[["longitude", "latitude"]] = events.apply(
@@ -330,14 +348,19 @@ def run_adloc(
         events.drop(["idx_eve", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
         events.sort_values(["time"], inplace=True)
 
-        picks.rename({"mask": "adloc_mask", "residual_time": "adloc_residual_time"}, axis=1, inplace=True)
-        if "residual_amplitude" in picks.columns:
-            picks.rename({"residual_amplitude": "adloc_residual_amplitude"}, axis=1, inplace=True)
+        # picks.rename({"mask": "adloc_mask", "residual_time": "adloc_residual_time"}, axis=1, inplace=True)
+        # if "residual_amplitude" in picks.columns:
+        #     picks.rename({"residual_amplitude": "adloc_residual_amplitude"}, axis=1, inplace=True)
         picks["phase_type"] = picks["phase_type"].map({0: "P", 1: "S"})
         picks.drop(["idx_eve", "idx_sta"], axis=1, inplace=True, errors="ignore")
         picks.sort_values(["phase_time"], inplace=True)
+        picks.drop(
+            ["idx_eve", "idx_sta", "mask", "residual_time", "residual_amplitude"], axis=1, inplace=True, errors="ignore"
+        )
+        picks.sort_values(["phase_time"], inplace=True)
 
-        # stations.drop(["idx_sta", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
+
+        stations.drop(["idx_sta", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
         # stations.rename({"station_term": "adloc_station_term_s"}, axis=1, inplace=True)
 
         # picks.to_csv(os.path.join(result_path, "ransac_picks.csv"), index=False)
@@ -384,11 +407,16 @@ if __name__ == "__main__":
     year = args.year
 
     # %%
-    calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
-    jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
+    exist_jdays = fs.glob(f"{bucket}/{region}/gamma/{year:04d}/gamma_picks_???.csv")
+    jdays = [jday.split("/")[-1].replace(".csv", "") for jday in exist_jdays]
+
+    # calc_jdays = lambda year: 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
+    # jdays = [f"{year}.{i:03d}" for i in range(1, calc_jdays(year) + 1)]
+    jdays = [f"{year}."+jday.split("/")[-1].split("_")[-1].replace(".csv", "") for jday in exist_jdays]
+
     jdays = [jdays[i::num_nodes] for i in range(num_nodes)]
     # jdays = [[f'2023.{i:03d}' for i in range(41, 51)]]
-    jdays = [[f"{year}.366"]]  # for leap year
+    # jdays = [[f"{year}.366"]]  # for leap year
 
     # %%
     with fs.open(f"{bucket}/{region}/config.json", "r") as fp:
