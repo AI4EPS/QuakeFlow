@@ -11,19 +11,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
-from adloc.eikonal2d import calc_traveltime, init_eikonal2d
+from args import parse_args
+from cut_templates_merge import generate_pairs
 from pyproj import Proj
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
-from args import parse_args
-from cut_templates_merge import generate_pairs
+
+from adloc.eikonal2d import calc_traveltime, init_eikonal2d
 
 np.random.seed(42)
 
 
 # %%
 def fillin_missing_picks(picks, events, stations, config):
-
     # reference_t0 = config["reference_t0"]
     reference_t0 = pd.Timestamp(config["reference_t0"])
     vp_vs_ratio = config["vp_vs_ratio"]
@@ -70,9 +70,13 @@ def fillin_missing_picks(picks, events, stations, config):
 
     ## add provider
     if "provider" in picks.columns:
-        picks_ps = picks_ps.merge(picks[["event_index", "station_id", "provider"]].drop_duplicates(), on=["event_index", "station_id"])
+        picks_ps = picks_ps.merge(
+            picks[["event_index", "station_id", "provider"]].drop_duplicates(), on=["event_index", "station_id"]
+        )
     else:
-        picks_ps = picks_ps.merge(picks[["event_index", "station_id"]].drop_duplicates(), on=["event_index", "station_id"])
+        picks_ps = picks_ps.merge(
+            picks[["event_index", "station_id"]].drop_duplicates(), on=["event_index", "station_id"]
+        )
 
     print(f"Original picks: {len(picks)}, Filled picks: {len(picks_ps)}")
     print(picks_ps.iloc[:10])
@@ -83,7 +87,6 @@ def fillin_missing_picks(picks, events, stations, config):
 
 # %%
 def predict_full_picks(picks, events, stations, config):
-
     vp_vs_ratio = config["vp_vs_ratio"]
     # reference_t0 = config["reference_t0"]
     reference_t0 = pd.Timestamp(config["reference_t0"])
@@ -158,12 +161,13 @@ def extract_template_numpy(
     config,
     lock,
 ):
-
     # reference_t0 = config["reference_t0"]
     reference_t0 = pd.Timestamp(config["reference_t0"])
 
     template_array = np.memmap(template_fname, dtype=np.float32, mode="r+", shape=tuple(config["template_shape"]))
-    traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"]))
+    traveltime_array = np.memmap(
+        traveltime_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"])
+    )
     traveltime_index_array = np.memmap(
         traveltime_index_fname, dtype=np.int32, mode="r+", shape=tuple(config["traveltime_shape"])
     )
@@ -175,14 +179,12 @@ def extract_template_numpy(
     # traveltime_mask = np.zeros(tuple(config["traveltime_shape"]), dtype=bool)
 
     for picks in picks_group:
-
         waveforms_dict = {}
         picks = picks.set_index(["idx_eve", "idx_sta", "phase_type"])
         picks_index = list(picks.index.unique())
 
         ## Cut templates
         for (idx_eve, idx_sta, phase_type), pick in picks.iterrows():
-
             idx_pick = pick["idx_pick"]
             phase_timestamp = pick["phase_timestamp"]
 
@@ -223,9 +225,10 @@ def extract_template_numpy(
                 end_time = phase_timestamp - trace_starttime + config[f"time_after_{phase_type.lower()}"]
 
                 if phase_type == "P" and ((idx_eve, idx_sta, "S") in picks_index):
-
                     s_begin_time = (
-                        picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"] - trace_starttime - config[f"time_before_s"]
+                        picks.loc[idx_eve, idx_sta, "S"]["phase_timestamp"]
+                        - trace_starttime
+                        - config[f"time_before_s"]
                     )
                     if config["no_overlapping"]:
                         end_time = min(end_time, s_begin_time)
@@ -234,10 +237,14 @@ def extract_template_numpy(
                 end_time_index = int(round(end_time * config["sampling_rate"]))
 
                 if begin_time_index < 0:
-                    print(f"Warning: {begin_time = } < 0, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_before_{phase_type.lower()}'] = }")
+                    print(
+                        f"Warning: {begin_time = } < 0, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_before_{phase_type.lower()}'] = }"
+                    )
                     continue
                 if end_time_index > len(trace.data):
-                    print(f"Warning: {end_time = } > {len(trace.data)}, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_after_{phase_type.lower()}'] = }")
+                    print(
+                        f"Warning: {end_time = } > {len(trace.data)}, {trace_starttime = }, {event['event_timestamp'] = }, {config[f'time_after_{phase_type.lower()}'] = }"
+                    )
                     continue
 
                 # begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
@@ -315,7 +322,6 @@ def extract_template_numpy(
 
 # %%
 def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
-
     # %%
     fs = fsspec.filesystem(protocol, token=token)
 
@@ -452,7 +458,6 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 stations = pd.read_csv(fp)
         stations.sort_values(by=["latitude", "longitude"], inplace=True)
 
-
         # stations = stations[stations["network"] == "7D"]
         print(f"{len(stations) = }")
         print(stations.head())
@@ -472,7 +477,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         if protocol == "file":
             events = pd.read_csv(
                 f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
-                # f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", parse_dates=["time"]
+                # f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv",
+                parse_dates=["time"],
             )
         else:
             with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
@@ -572,7 +578,9 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         )
         if "dist_km" not in picks:
             picks = picks.merge(stations[["station_id", "x_km", "y_km", "z_km"]], on="station_id")
-            picks.rename(columns={"x_km": "station_x_km", "y_km": "station_y_km", "z_km": "station_z_km"}, inplace=True)
+            picks.rename(
+                columns={"x_km": "station_x_km", "y_km": "station_y_km", "z_km": "station_z_km"}, inplace=True
+            )
             picks = picks.merge(events[["event_index", "x_km", "y_km", "z_km"]], on="event_index")
             picks.rename(columns={"x_km": "event_x_km", "y_km": "event_y_km", "z_km": "event_z_km"}, inplace=True)
             picks["dist_km"] = np.linalg.norm(
@@ -655,7 +663,16 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         config["reference_t0"] = reference_t0.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         events = events[["idx_eve", "x_km", "y_km", "z_km", "event_index", "event_time", "event_timestamp"]]
         stations = stations[["idx_sta", "x_km", "y_km", "z_km", "station_id", "component", "network", "station"]]
-        columns = ["idx_eve", "idx_sta", "phase_type", "phase_score", "phase_time", "phase_timestamp", "phase_source", "station_id"]
+        columns = [
+            "idx_eve",
+            "idx_sta",
+            "phase_type",
+            "phase_score",
+            "phase_time",
+            "phase_timestamp",
+            "phase_source",
+            "station_id"
+        ]
         if "provider" in picks.columns:
             columns.append("provider")
         picks = picks[columns]
@@ -698,8 +715,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
-                if "provider" not in picks.columns:
-                    mseeds["provider"] = "SC"
+                mseeds["provider"] = "SC"
             elif folder == "NC":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
@@ -708,8 +724,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
-                if "provider" not in picks.columns: 
-                    mseeds["provider"] = "NC"
+                mseeds["provider"] = "NC"
             elif folder == "IRIS":
                 mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
                 mseeds["jday"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-2])
@@ -718,8 +733,7 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
                 mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[2])
                 mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[3][:2])
-                if "provider" not in picks.columns: 
-                    mseeds["provider"] = "IRIS"
+                mseeds["provider"] = "IRIS"
             else:
                 raise ValueError(f"Unknown folder: {folder}")
             mseeds_df.append(mseeds)
@@ -739,7 +753,9 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         picks = picks[(picks["year"].astype(int) == year) & (picks["jday"].astype(int) == jday)]
 
         if "provider" in picks.columns:
-            picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday", "provider"])
+            picks = picks.merge(
+                mseeds_df, on=["network", "station", "location", "instrument", "year", "jday", "provider"]
+            )
         else:
             picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday"])
         picks.drop(columns=["fname", "station_id", "network", "location", "instrument", "year", "jday"], inplace=True)
@@ -747,8 +763,6 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         if len(picks) == 0:
             print(f"No picks found for {year:04d}/{jday:03d}")
             continue
-
-
 
         # ####
         # out = picks.drop(columns=["ENZ"])
@@ -770,7 +784,8 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         print(f"Using {ncpu} cores")
 
         pbar = tqdm(total=nsplit, desc="Cutting templates")
-        ctx = mp.get_context("fork")
+        # ctx = mp.get_context("fork")
+        ctx = mp.get_context("spawn")
 
         with ctx.Manager() as manager:
             lock = manager.Lock()
@@ -781,7 +796,6 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
                 picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
 
                 for picks_group in picks_group_chunk:
-
                     job = pool.apply_async(
                         extract_template_numpy,
                         (
@@ -857,7 +871,6 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
 
 # %%
 if __name__ == "__main__":
-
     # %%
     protocol = "gs"
     token_json = f"application_default_credentials.json"
@@ -928,7 +941,6 @@ if __name__ == "__main__":
     # for year in years:
     #     num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
     #     jdays.extend([f"{year}.{i:03d}" for i in range(1, num_jday + 1)])
-
 
     num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
     # jdays = [f"{year}.{i:03d}" for i in range(1, num_jday + 1)]
