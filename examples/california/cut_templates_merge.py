@@ -247,12 +247,31 @@ if __name__ == "__main__":
 
         events_["latitude"] = events_["latitude"].astype(float)
         events_["longitude"] = events_["longitude"].astype(float)
-        events_ = events_[
-            (events_["latitude"] > config["minlatitude"])
-            & (events_["latitude"] < config["maxlatitude"])
-            & (events_["longitude"] > config["minlongitude"])
-            & (events_["longitude"] < config["maxlongitude"])
-        ]
+        
+        # the following filter cannot effectively remove the horizontal boundary events
+        # events_ = events_[
+        #     (events_["latitude"] > config["minlatitude"])
+        #     & (events_["latitude"] < config["maxlatitude"])
+        #     & (events_["longitude"] > config["minlongitude"])
+        #     & (events_["longitude"] < config["maxlongitude"])
+        # ]
+        
+        # remove horizontal boundary events
+        # filtering by x_km and y_km is better than by latitude and longitude
+        lon0 = (config["minlongitude"] + config["maxlongitude"]) / 2
+        lat0 = (config["minlatitude"] + config["maxlatitude"]) / 2
+        proj = Proj(f"+proj=aeqd +lon_0={lon0} +lat_0={lat0}  +units=km")
+        events_[["x_km", "y_km"]] = events_.apply(
+            lambda x: pd.Series(proj(longitude=x.longitude, latitude=x.latitude)), axis=1
+        )
+        xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
+        xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
+        zmin, zmax = config["mindepth"], config["maxdepth"]
+        idx = (events_["y_km"] > ymin)
+        idx &= (events_["y_km"] < ymax)
+        idx &= (events_["x_km"] > xmin)
+        idx &= (events_["x_km"] < xmax)
+        events_ = events_[idx]
 
         picks_["year"] = year
         picks_["jday"] = jday
@@ -318,6 +337,9 @@ if __name__ == "__main__":
         + picks["idx_eve"].astype(str).str.zfill(6)
     )
     events["idx_eve"] = np.arange(len(events))
+    # keep the original event index and new idx_eve
+    # important for tracking the events
+    events[["event_index", "idx_eve"]].to_csv(f"{root_path}/{result_path}/events_index_pair.csv", index=False)
     events["event_index"] = np.arange(len(events))
     print(f"events: {len(events):,} ")
     print(events.iloc[:5])
@@ -438,6 +460,9 @@ if __name__ == "__main__":
         fs.put(f"{root_path}/{result_path}/config.json", f"{bucket}/{folder}/config.json")
         print(f"{root_path}/{result_path}/pairs.txt -> {bucket}/{folder}/pairs.txt")
         fs.put(f"{root_path}/{result_path}/pairs.txt", f"{bucket}/{folder}/pairs.txt")
+        # upload the event index pair file
+        print(f"{root_path}/{result_path}/events_index_pair.csv -> {bucket}/{folder}/events_index_pair.csv")
+        fs.put(f"{root_path}/{result_path}/events_index_pair.csv", f"{bucket}/{folder}/events_index_pair.csv")
         # print(f"{root_path}/{result_path}/template.dat -> {bucket}/{folder}/template.dat")
         # fs.put(f"{root_path}/{result_path}/template.dat", f"{bucket}/{folder}/template.dat")
         # print(f"{root_path}/{result_path}/traveltime.dat -> {bucket}/{folder}/traveltime.dat")
