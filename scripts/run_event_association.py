@@ -408,11 +408,13 @@ def associate(
                 "latitude": "median",
                 "longitude": "median",
                 "magnitude": "median",
+                "station_id": lambda x: ','.join(x)
             }
         )
         .reset_index()
     )
     events_catalog.rename(columns={"event_time": "time"}, inplace=True)
+    events_catalog["timestamp"] = events_catalog["time"].apply(lambda x: (x - timestamp0).total_seconds())
     # drop event index -1
     events_catalog = events_catalog[events_catalog['event_index'] != -1]
     events_catalog = events_catalog[events_catalog['event_score'] >= MIN_STATION//2]
