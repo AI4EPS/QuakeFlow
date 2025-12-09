@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import fsspec
 import pandas as pd
 from tqdm import tqdm
+import sys
 
 # %%
 input_protocol = "s3"
@@ -158,7 +159,7 @@ phase_decimal_number = {
     "s_weight_actually_used": 100,
 }
 
-phase_score_mappling = {"0": 1.0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.0, "9": 0.0}
+phase_score_maping = {"0": 1.0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.0, "9": 0.0}
 
 
 def parse_event_line(line):
@@ -226,8 +227,10 @@ def parse_phase_line(line):
             tmp += timedelta(seconds=p_phase["second_of_p_arrival"])
             p_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
         p_phase["phase_polarity"] = p_phase["p_polarity"]
-        p_phase["phase_remark"] = p_phase["p_remark"].strip()[0].lower()
-        p_phase["phase_score"] = phase_score_mappling[p_phase["p_weight_code"].strip()]
+        p_remark_stripped = p_phase["p_remark"].strip()
+        p_phase["phase_remark"] = p_remark_stripped[0].lower() if p_remark_stripped else ""
+        p_weight_code = p_phase["p_weight_code"].strip()
+        p_phase["phase_score"] = phase_score_maping.get(p_weight_code, 0.0) if p_weight_code else 0.0
         p_phase["phase_type"] = "P"
         p_phase["time_residual"] = p_phase["p_travel_time_residual"]
         p_phase["phase_weight"] = p_phase["normalized_p_weight_actually_used"]
@@ -254,8 +257,10 @@ def parse_phase_line(line):
             )
             tmp += timedelta(seconds=s_phase["second_of_s_arrival"])
             s_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        s_phase["phase_remark"] = s_phase["s_remark"].strip()[0].lower()
-        s_phase["phase_score"] = phase_score_mappling[s_phase["s_weight_code"].strip()]
+        s_remark_stripped = s_phase["s_remark"].strip()
+        s_phase["phase_remark"] = s_remark_stripped[0].lower() if s_remark_stripped else ""
+        s_weight_code = s_phase["s_weight_code"].strip()
+        s_phase["phase_score"] = phase_score_maping.get(s_weight_code, 0.0) if s_weight_code else 0.0
         s_phase["phase_type"] = "S"
         s_phase["time_residual"] = s_phase["s_travel_time_residual"]
         s_phase["phase_weight"] = s_phase["s_weight_actually_used"]
@@ -359,6 +364,9 @@ def process(file):
     phases["azimuth"] = phases["azimuth"].str.strip()
     phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
     phases = phases[phases["distance_km"] != ""]
+    # Convert time_residual and phase_weight to numeric, handling empty strings
+    phases["time_residual"] = pd.to_numeric(phases["time_residual"], errors="coerce")
+    phases["phase_weight"] = pd.to_numeric(phases["phase_weight"], errors="coerce")
     phases = phases[phases["time_residual"].abs() < 9.99]
     phases = phases[~((phases["phase_weight"] == 0) & (phases["time_residual"] == 0))]
     phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
@@ -426,8 +434,10 @@ if __name__ == "__main__":
         if year.split("/")[-1] <= "2024":
             break
 
-    # for file in tqdm(file_list):
-    #     process(file)
+    for file in tqdm(file_list):
+        print(f"Processing: {file}")
+        process(file)
+        sys.exit(0)
 
     ncpu = mp.cpu_count() - 1
     with ProcessPoolExecutor(max_workers=ncpu) as executor:

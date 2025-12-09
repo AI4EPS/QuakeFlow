@@ -8,6 +8,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import fsspec
 import pandas as pd
 from tqdm import tqdm
+import sys
 
 # %%
 input_protocol = "s3"
@@ -222,8 +223,10 @@ if __name__ == "__main__":
         if year.split("/")[-1] <= "2024":
             break
 
-    # for jday in file_list:
-    #     process(jday)
+    for jday in file_list:
+        print(f"Processing {jday}")
+        process(jday)
+        sys.exit(0)
 
     ncpu = mp.cpu_count() - 1
     with ProcessPoolExecutor(max_workers=ncpu) as executor:

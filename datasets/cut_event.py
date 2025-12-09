@@ -20,6 +20,74 @@ np.random.seed(42)
 
 
 # %%
+def calc_snr(data, index0, noise_window=300, signal_window=300, gap_window=50):
+    """Calculate signal-to-noise ratio for each channel.
+
+    Args:
+        data: Array of shape (3, nt) with waveform data
+        index0: Sample index of the first arrival
+        noise_window: Number of samples for noise window
+        signal_window: Number of samples for signal window
+        gap_window: Gap between noise and signal windows
+
+    Returns:
+        List of SNR values for each channel
+    """
+    snr = []
+    for i in range(data.shape[0]):
+        j = index0
+        noise_start = max(0, j - noise_window)
+        noise_end = max(0, j - gap_window)
+        signal_start = min(data.shape[1], j + gap_window)
+        signal_end = min(data.shape[1], j + signal_window)
+
+        if noise_end <= noise_start or signal_end <= signal_start:
+            snr.append(0)
+            continue
+
+        noise = np.std(data[i, noise_start:noise_end])
+        signal = np.std(data[i, signal_start:signal_end])
+
+        if noise > 0 and signal > 0:
+            snr.append(signal / noise)
+        else:
+            snr.append(0)
+
+    return snr
+
+
+def flip_polarity(phase_polarity, channel_dip):
+    """Flip polarity based on channel dip angle.
+
+    Args:
+        phase_polarity: List of polarity values ('U', 'D', '+', '-', etc.)
+        channel_dip: List of dip angles for each pick
+
+    Returns:
+        List of corrected polarity values
+    """
+    pol_out = []
+    for pol, dip in zip(phase_polarity, channel_dip):
+        if pol == "U" or pol == "+":
+            if dip == -90:
+                pol_out.append("U")
+            elif dip == 90:
+                pol_out.append("D")
+            else:
+                pol_out.append("N")
+        elif pol == "D" or pol == "-":
+            if dip == -90:
+                pol_out.append("D")
+            elif dip == 90:
+                pol_out.append("U")
+            else:
+                pol_out.append("N")
+        else:
+            pol_out.append("N")
+    return pol_out
+
+
+# %%
 def extract_template_numpy(
     picks_group,
     events,
@@ -121,6 +189,14 @@ def extract_template_numpy(
                     component.append(ch)
                     template[i, : len(trace[0].data)] = trace[0].data[: config["nt"]] * 1e6  # to micro m/s
 
+            # Calculate SNR based on first arrival
+            first_arrival_index = pick["phase_index"]
+            snr = calc_snr(template, first_arrival_index)
+
+            # Skip if all channels have zero SNR
+            if max(snr) == 0:
+                continue
+
             with lock:
                 if f"{event_id}" not in fp:
                     gp = fp.create_group(f"{event_id}")
@@ -160,6 +236,7 @@ def extract_template_numpy(
 
                 ds.attrs["unit"] = "micro m/s"
                 ds.attrs["component"] = component
+                ds.attrs["snr"] = snr
 
                 picks_in_window = picks[(picks["phase_time"] >= begin_time) & (picks["phase_time"] <= end_time)].copy()
                 picks_in_window.sort_values(by="phase_time", inplace=True)
@@ -244,16 +321,15 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         events.set_index("event_id", inplace=True)
 
         ############################# CLOUD #########################################
-        protocol = "gs"
-        bucket = "quakeflow_catalog"
-        token_json = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
-        with open(token_json, "r") as fp:
-            token = json.load(fp)
-        fs = fsspec.filesystem(protocol=protocol, token=token)
+        # Use separate filesystem for quakeflow_catalog bucket (contains mseed_list and station XML)
+        catalog_bucket = "quakeflow_catalog"
+        catalog_token_json = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+        with open(catalog_token_json, "r") as fp:
+            catalog_token = json.load(fp)
+        catalog_fs = fsspec.filesystem(protocol="gs", token=catalog_token)
         mseeds_df = []
-        # for folder in ["SC", "NC"]:
-        for folder in [args.region]:
-            with fs.open(f"{bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
+        for folder in [region]:
+            with catalog_fs.open(f"{catalog_bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
                 mseeds = f.readlines()
             mseeds = [x.strip("\n") for x in mseeds]
             mseeds = pd.DataFrame(mseeds, columns=["ENZ"])
@@ -318,7 +394,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
         picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
 
-        lock = multiprocessing.Lock()
+        lock = threading.Lock()  # Use threading.Lock for ThreadPoolExecutor
 
         # with ProcessPoolExecutor(max_workers=ncpu) as executor:
         with ThreadPoolExecutor(max_workers=ncpu) as executor:

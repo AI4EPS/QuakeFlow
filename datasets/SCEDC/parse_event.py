@@ -3,6 +3,7 @@ import fsspec
 import pandas as pd
 from tqdm import tqdm
 import os
+import sys
 
 input_protocol = "s3"
 input_bucket = "scedc-pds"
@@ -24,21 +25,26 @@ def parse_scedc_catalog_line(line):
     if line.startswith('#') or len(line.strip()) == 0:
         return None
     
-    # try:
     # Parse fixed-width fields according to SCEDC format
-    date = line[0:10].strip()           # YYYY/MM/DD
-    time = line[11:22].strip()          # HH:mm:SS.ss
-    event_type = line[23:25].strip()    # event type (eq, qb, sn, nt, uk)
-    geo_type = line[27:28].strip()      # geographical type (l, r, t)
-    magnitude = line[29:33].strip()     # magnitude
-    mag_type = line[34:35].strip()      # magnitude type
-    latitude = line[39:45].strip()      # latitude
-    longitude = line[46:54].strip()     # longitude
-    depth = line[55:60].strip()         # depth
-    quality = line[61:62].strip()       # location quality
-    event_id = line[63:71].strip()      # event ID
-    nph = line[73:76].strip()           # number of picked phases
-    ngrams = line[77:81].strip()        # number of grams
+    # date = line[0:10].strip()           # YYYY/MM/DD
+    # time = line[11:22].strip()          # HH:mm:SS.ss
+    # event_type = line[23:25].strip()    # event type (eq, qb, sn, nt, uk)
+    # geo_type = line[27:28].strip()      # geographical type (l, r, t)
+    # magnitude = line[29:33].strip()     # magnitude
+    # mag_type = line[34:35].strip()      # magnitude type
+    # latitude = line[39:45].strip()      # latitude
+    # longitude = line[46:54].strip()     # longitude
+    # depth = line[55:60].strip()         # depth
+    # quality = line[61:62].strip()       # location quality
+    # event_id = line[63:71].strip()      # event ID
+    # nph = line[73:76].strip()           # number of picked phases
+    # ngrams = line[77:81].strip()        # number of grams
+
+    # Parse by splitting by space
+    tokens = line.strip().split()
+    if len(tokens) != 13:
+        print(f"Unexpected number of tokens ({len(tokens)} != 13) in line: {line.strip()}")
+    date, time, event_type, geo_type, magnitude, mag_type, latitude, longitude, depth, quality, event_id, nph, ngrams = tokens
     
     # Convert to proper data types
     magnitude = float(magnitude) if magnitude else None
@@ -117,6 +123,8 @@ columns_to_keep = [
 
 for catalog_file in tqdm(catalog_files):
 
+    print(f"Processing {catalog_file}")
+
     with input_fs.open(f"{catalog_file}", 'r') as f:
         lines = f.readlines()
 
@@ -137,9 +145,9 @@ for catalog_file in tqdm(catalog_files):
     df["year"] = df["time"].dt.strftime("%Y")
     df["jday"] = df["time"].dt.strftime("%j")
     df["time"] = df["time"].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%S.%f'))
-    df['event_id'] = df['event_id'].apply(lambda x: "sc" + x)
+    df['event_id'] = df['event_id'].apply(lambda x: "ci" + x)
 
-    for (year, jday), df in df.groupby(["year", "jday"]):
+    for (year, jday), df in tqdm(df.groupby(["year", "jday"])):
         if len(df) == 0:
             continue
         os.makedirs(f"{result_path}/{year}/{jday}", exist_ok=True)
@@ -151,8 +159,8 @@ for catalog_file in tqdm(catalog_files):
             f"{output_bucket}/{output_folder}/{year}/{jday}/events.csv",
         )
 
-    if year <= "2024":
-        break
+        if year <= "2024":
+            sys.exit()
 
 # %%
 

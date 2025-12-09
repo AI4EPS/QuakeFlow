@@ -3,7 +3,7 @@ import fsspec
 import pandas as pd
 from tqdm import tqdm
 import os
-from io import StringIO
+import sys
 
 
 input_protocol = "s3"
@@ -109,7 +109,7 @@ columns_to_keep = [
 ]
 
 for csv_file in tqdm(csv_files):
-    print(csv_file)
+    print(f"Processing {csv_file}")
 
     df = pd.read_csv(f"{input_protocol}://{csv_file}", dtype=str, encoding='latin-1')
     df = map_column_names(df)
@@ -121,21 +121,22 @@ for csv_file in tqdm(csv_files):
     df['event_id'] = df['event_id'].apply(lambda x: "nc" + x)
 
 
-    for (year, jday), df in df.groupby(["year", "jday"]):
-        if len(df) == 0:
+    for (year, jday), group_df in tqdm(df.groupby(["year", "jday"])):
+        if len(group_df) == 0:
             continue
         os.makedirs(f"{result_path}/{year}/{jday}", exist_ok=True)
 
-        df = df[columns_to_keep]
-        df.to_csv(f"{result_path}/{year}/{jday}/events.csv", index=False)
+        group_df = group_df[columns_to_keep]
+        group_df.to_csv(f"{result_path}/{year}/{jday}/events.csv", index=False)
         output_fs.put(
             f"{result_path}/{year}/{jday}/events.csv",
             f"{output_bucket}/{output_folder}/{year}/{jday}/events.csv",
         )
-        # df.to_csv(f"{output_protocol}://{output_bucket}/{output_folder}/{year}/{jday}/events.csv", index=False)
 
-    if year <= "2024":
-        break
+    csv_year = csv_file.split("/")[-1].split(".")[0][:4]
+
+    if csv_year <= "2024":
+        sys.exit()
 
     
 # %%
