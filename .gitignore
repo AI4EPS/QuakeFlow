@@ -154,6 +154,7 @@ Trash
 *.png
 *.csv
 *.pkl
+*.h5
 hypoinverse/
 notebooks/*/config.json
 Trash
@@ -173,3 +174,4 @@ slurm/*/*.xml
 .history/
 *.npy
 examples/california/cctorch_figures*/
+

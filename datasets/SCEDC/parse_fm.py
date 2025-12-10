@@ -2,14 +2,16 @@
 # https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal/sc2024_hash_ABCD_so.focmec.scedc
 # https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal/SouthernCalifornia_1981-2011_focalmec_Format.pdf
 
+import os
+
 import fsspec
 import pandas as pd
 from tqdm import tqdm
-import os
 
 input_url = "https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal"
 input_files = ["YSH_2010.hash"] + [f"sc{x}_hash_ABCD_so.focmec.scedc" for x in range(2011, 2025)]
-# input_files = input_files[-1:]
+## FIXME: HARD CODED FOR TESTING
+input_files = ["sc2024_hash_ABCD_so.focmec.scedc"]
 
 output_protocol = "gs"
 output_bucket = "quakeflow_dataset"
@@ -130,8 +132,6 @@ for input_file in tqdm(input_files):
     if len(df) == 0:
         print(f"No valid data found in {input_file}")
         continue
-
-    print(f"Parsed {len(df)} focal mechanism records")
 
     df["time"] = pd.to_datetime(df["time"])
     df["year"] = df["time"].dt.strftime("%Y")

@@ -1,9 +1,10 @@
 # %%
+import os
+import sys
+
 import fsspec
 import pandas as pd
 from tqdm import tqdm
-import os
-import sys
 
 input_protocol = "s3"
 input_bucket = "ncedc-pds"
@@ -146,6 +147,7 @@ def parse_mech_file(fs, file_path):
 # %%
 input_fs = fsspec.filesystem(input_protocol, anon=True)
 # mech_files = sorted(input_fs.glob(f"{input_bucket}/{input_folder}/????/????.??.mech"), reverse=True)
+## FIXME: HARD CODED FOR TESTING
 mech_files = [f"{input_bucket}/{input_folder}/2024/2024.01.mech"]
 output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json"))
 

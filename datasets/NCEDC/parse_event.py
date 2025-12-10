@@ -1,10 +1,10 @@
 # %%
-import fsspec   
-import pandas as pd
-from tqdm import tqdm
 import os
 import sys
 
+import fsspec
+import pandas as pd
+from tqdm import tqdm
 
 input_protocol = "s3"
 input_bucket = "ncedc-pds"
@@ -108,6 +108,9 @@ columns_to_keep = [
         'review_status',
 ]
 
+## FIXME: HARD CODED FOR TESTING
+csv_files = ["ncedc-pds/earthquake_catalogs/NCEDC/2024.ehpcsv"]
+
 for csv_file in tqdm(csv_files):
     print(f"Processing {csv_file}")
 
@@ -132,11 +135,6 @@ for csv_file in tqdm(csv_files):
             f"{result_path}/{year}/{jday}/events.csv",
             f"{output_bucket}/{output_folder}/{year}/{jday}/events.csv",
         )
-
-    csv_year = csv_file.split("/")[-1].split(".")[0][:4]
-
-    if csv_year <= "2024":
-        sys.exit()
 
     
 # %%

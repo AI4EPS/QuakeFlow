@@ -1,22 +1,36 @@
 # %%
 import argparse
 import json
+import multiprocessing
 import os
+import sys
+import threading
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
+from functools import partial
+
 import fsspec
+import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
-import h5py
-import matplotlib.pyplot as plt
-from contextlib import nullcontext
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-import multiprocessing
-import threading
-from functools import partial
-
 
 np.random.seed(42)
+
+
+def set_attr(obj, key, value):
+    """Set an attribute only if the value is not empty."""
+    if value is None:
+        return
+    if isinstance(value, str) and value == "":
+        return
+    if isinstance(value, (list, np.ndarray)) and len(value) > 0:
+        # Check if all elements are empty strings
+        if all(v == "" for v in value):
+            return
+    obj.attrs[key] = value
 
 
 # %%
@@ -36,9 +50,9 @@ def calc_snr(data, index0, noise_window=300, signal_window=300, gap_window=50):
     snr = []
     for i in range(data.shape[0]):
         j = index0
-        noise_start = max(0, j - noise_window)
+        noise_start = max(0, j - noise_window - gap_window)
         noise_end = max(0, j - gap_window)
-        signal_start = min(data.shape[1], j + gap_window)
+        signal_start = min(data.shape[1], j)
         signal_end = min(data.shape[1], j + signal_window)
 
         if noise_end <= noise_start or signal_end <= signal_start:
@@ -92,6 +106,7 @@ def extract_template_numpy(
     picks_group,
     events,
     picks,
+    mechanisms,
     config,
     fp,
     lock,
@@ -105,8 +120,13 @@ def extract_template_numpy(
 
         # for _, pick in picks.iterrows():
         for key, picks_ in picks.groupby(["event_id", "network", "station", "location", "instrument"]):
+
             event_id, network, station, location, instrument = key
             station_id = f"{network}.{station}.{location}.{instrument}"
+
+            if event_id not in events.index:
+                print(f"Event_id {event_id} does not have event information")
+                continue
 
             begin_time = picks_.iloc[0]["begin_time"]
             end_time = picks_.iloc[0]["end_time"]
@@ -119,14 +139,14 @@ def extract_template_numpy(
             if len(picks_) > 2:
                 print(f"More than two picks: {picks_}")
                 continue
-
+                
             event = events.loc[event_id]
 
-            ENZ = pick["ENZ"].split(",")
+            mseed_3c = pick["mseed_3c"].split(",")
 
-            if pick["ENZ"] not in waveforms_dict:
+            if pick["mseed_3c"] not in waveforms_dict:
                 stream_3c = obspy.Stream()
-                for c in ENZ:
+                for c in mseed_3c:
                     try:
                         with fsspec.open(c, "rb", anon=True) as f:
                             stream = obspy.read(f)
@@ -170,7 +190,7 @@ def extract_template_numpy(
                 stream_3c.rotate("->ZNE", inventory=inv)
 
             else:
-                stream_3c = waveforms_dict[pick["ENZ"]]
+                stream_3c = waveforms_dict[pick["mseed_3c"]]
 
             tmp = stream_3c.slice(
                 obspy.UTCDateTime(begin_time), obspy.UTCDateTime(end_time), keep_empty_traces=False, nearest_sample=True
@@ -178,7 +198,7 @@ def extract_template_numpy(
 
             template = np.zeros((3, config["nt"]), dtype=np.float32)
             component = []
-            for i, ch in enumerate(["E", "N", "Z"]):
+            for i, ch in enumerate(["E", "N", "Z"]): # rotation to mseed_3c
                 trace = tmp.select(component=f"{ch}")
                 if len(trace) == 0:
                     continue
@@ -203,54 +223,80 @@ def extract_template_numpy(
                     for key, value in event.items():
                         if key in ["event_time", "begin_time", "end_time"]:
                             value = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
-                        gp.attrs[key] = value
+                        set_attr(gp, key, value)
 
                     gp.attrs["begin_time"] = begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
                     gp.attrs["end_time"] = end_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
+                    if mechanisms is not None and event_id in mechanisms.index:
+                        mech = mechanisms.loc[event_id]
+                        mech_columns = [
+                            "strike", "dip", "rake",
+                            "num_first_motions", "first_motion_misfit",
+                            "num_sp_ratios", "sp_ratio_misfit",
+                            "strike_uncertainty", "dip_uncertainty", "rake_uncertainty",
+                            "plane1_uncertainty", "plane2_uncertainty", "quality",
+                        ]
+                        for key in mech_columns:
+                            if key in mech.index and pd.notna(mech[key]):
+                                set_attr(gp, key, mech[key])
+
                 ds = fp.create_dataset(f"{event_id}/{station_id}", data=template)
                 for key, value in pick.items():
-                    if key in ["event_id", "ENZ", "begin_time", "end_time"]:
+                    if key in ["event_id", "mseed_3c", "begin_time", "end_time"]:
                         continue
-                    if key in ["phase_time"]:
-                        value = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
-                    ds.attrs[key] = value
+                    if key in ["phase_time", "phase_type", "phase_index", "phase_score", "phase_polarity", "phase_remark", "phase_weight", "time_residual", "pick_component"]:
+                        continue # Handled later
+                    #     value = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
+                    set_attr(ds, key, value)
 
                 if len(p_pick) > 0:
-                    ds.attrs["p_phase_time"] = p_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f")
-                    ds.attrs["p_phase_index"] = p_pick["phase_index"].values[0]
-                    ds.attrs["p_phase_score"] = p_pick["phase_score"].values[0]
-                    ds.attrs["p_phase_polarity"] = p_pick["phase_polarity"].values[0]
-                    ds.attrs["p_phase_remark"] = p_pick["phase_remark"].values[0]
-                    ds.attrs["p_phase_status"] = p_pick["review_status"].values[0]
-                    ds.attrs["p_phase_weight"] = p_pick["phase_weight"].values[0]
+                    set_attr(ds, "p_phase_time", p_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f"))
+                    set_attr(ds, "p_phase_index", p_pick["phase_index"].values[0])
+                    set_attr(ds, "p_phase_score", p_pick["phase_score"].values[0])
+                    set_attr(ds, "p_phase_polarity", p_pick["phase_polarity"].values[0])
+                    set_attr(ds, "p_phase_remark", p_pick["phase_remark"].values[0])
+                    if "time_residual" in p_pick.columns:
+                        set_attr(ds, "p_time_residual", p_pick["time_residual"].values[0])
+                    if "phase_weight" in p_pick.columns:
+                        set_attr(ds, "p_phase_weight", p_pick["phase_weight"].values[0])
+                    if "review_status" in p_pick.columns:
+                        set_attr(ds, "p_phase_status", p_pick["review_status"].values[0])
 
                 if len(s_pick) > 0:
-                    ds.attrs["s_phase_time"] = s_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f")
-                    ds.attrs["s_phase_index"] = s_pick["phase_index"].values[0]
-                    ds.attrs["s_phase_score"] = s_pick["phase_score"].values[0]
-                    ds.attrs["s_phase_polarity"] = s_pick["phase_polarity"].values[0]
-                    ds.attrs["s_phase_remark"] = s_pick["phase_remark"].values[0]
-                    ds.attrs["s_phase_status"] = s_pick["review_status"].values[0]
-                    ds.attrs["s_phase_weight"] = s_pick["phase_weight"].values[0]
+                    set_attr(ds, "s_phase_time", s_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f"))
+                    set_attr(ds, "s_phase_index", s_pick["phase_index"].values[0])
+                    set_attr(ds, "s_phase_score", s_pick["phase_score"].values[0])
+                    set_attr(ds, "s_phase_polarity", s_pick["phase_polarity"].values[0])
+                    set_attr(ds, "s_phase_remark", s_pick["phase_remark"].values[0])
+                    if "time_residual" in s_pick.columns:
+                        set_attr(ds, "s_time_residual", s_pick["time_residual"].values[0])
+                    if "review_status" in s_pick.columns:
+                        set_attr(ds, "s_phase_status", s_pick["review_status"].values[0])
+                    if "phase_weight" in s_pick.columns:
+                        set_attr(ds, "s_phase_weight", s_pick["phase_weight"].values[0])
 
                 ds.attrs["unit"] = "micro m/s"
-                ds.attrs["component"] = component
-                ds.attrs["snr"] = snr
+                ds.attrs["component"] = "".join(component)
+                ds.attrs["snr"] = round(max(snr),3)
 
                 picks_in_window = picks[(picks["phase_time"] >= begin_time) & (picks["phase_time"] <= end_time)].copy()
                 picks_in_window.sort_values(by="phase_time", inplace=True)
-                ds.attrs["event_id"] = picks_in_window["event_id"].values
-                ds.attrs["phase_type"] = picks_in_window["phase_type"].values
-                ds.attrs["phase_time"] = (
-                    picks_in_window["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f")).values
-                )
-                ds.attrs["phase_index"] = picks_in_window["phase_index"].values
-                ds.attrs["phase_score"] = picks_in_window["phase_score"].values
-                ds.attrs["phase_polarity"] = picks_in_window["phase_polarity"].values
-                ds.attrs["phase_remark"] = picks_in_window["phase_remark"].values
-                ds.attrs["phase_weight"] = picks_in_window["phase_weight"].values
-
+                set_attr(ds, "event_id", picks_in_window["event_id"].values)
+                set_attr(ds, "phase_type", picks_in_window["phase_type"].values)
+                set_attr(ds, "phase_time", picks_in_window["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f")).values)
+                set_attr(ds, "phase_index", picks_in_window["phase_index"].values)
+                set_attr(ds, "phase_score", picks_in_window["phase_score"].values)
+                set_attr(ds, "phase_polarity", picks_in_window["phase_polarity"].values)
+                set_attr(ds, "phase_remark", picks_in_window["phase_remark"].values)
+                if "time_residual" in picks_in_window.columns: 
+                    set_attr(ds, "time_residual", picks_in_window["time_residual"].values)
+                if "phase_weight" in picks_in_window.columns:
+                    set_attr(ds, "phase_weight", picks_in_window["phase_weight"].values)
+                if "review_status" in picks_in_window.columns:
+                    set_attr(ds, "phase_status", picks_in_window["review_status"].values)
+                # if "pick_component" in picks_in_window.columns:
+                #     set_attr(ds, "pick_component", picks_in_window["pick_component"].values)
 
 # %%
 def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token):
@@ -310,15 +356,46 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             (picks["phase_time"] - picks["begin_time"]).dt.total_seconds() * config["sampling_rate"]
         ).astype(int)
 
+        # Set proper data types
+        picks["event_id"] = picks["event_id"].astype(str)
+        picks["phase_type"] = picks["phase_type"].astype(str)
+        picks["phase_score"] = picks["phase_score"].astype(float)
+        picks["phase_polarity"] = picks["phase_polarity"].fillna("").astype(str)
+        picks["phase_remark"] = picks["phase_remark"].fillna("").astype(str)
+        if "time_residual" in picks.columns:
+            picks["time_residual"] = picks["time_residual"].astype(float)
+        if "phase_weight" in picks.columns:
+            picks["phase_weight"] = picks["phase_weight"].astype(float)
+        if "review_status" in picks.columns:
+            picks["review_status"] = picks["review_status"].fillna("").astype(str)
+
         print(f"{len(picks) = }")
         print(picks.head())
 
         tmp = picks.groupby("event_id")["begin_time"].first()
-        events = events.merge(tmp, on="event_id", how="left")
+        # events = events.merge(tmp, on="event_id", how="left")
+        events = events.merge(tmp, on="event_id", how="inner")
+        picks = picks[picks["event_id"].isin(events["event_id"])]
         events["event_time_index"] = (
             (events["event_time"] - events["begin_time"]).dt.total_seconds() * config["sampling_rate"]
         ).astype(int)
+            
         events.set_index("event_id", inplace=True)
+
+        # Read focal mechanisms
+        mechanisms = None
+        try:
+            if protocol == "file":
+                mechanisms = pd.read_csv(
+                    f"{root_path}/{data_path}/{year:04d}/{jday:03d}/focal_mechanisms.csv", dtype=str
+                )
+            else:
+                with fs.open(f"{bucket}/{data_path}/{year:04d}/{jday:03d}/focal_mechanisms.csv", "r") as fp:
+                    mechanisms = pd.read_csv(fp, dtype=str)
+            mechanisms.set_index("event_id", inplace=True)
+            print(f"{len(mechanisms) = }")
+        except FileNotFoundError:
+            print(f"No focal mechanisms file for {year:04d}/{jday:03d}")
 
         ############################# CLOUD #########################################
         # Use separate filesystem for quakeflow_catalog bucket (contains mseed_list and station XML)
@@ -332,9 +409,9 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             with catalog_fs.open(f"{catalog_bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
                 mseeds = f.readlines()
             mseeds = [x.strip("\n") for x in mseeds]
-            mseeds = pd.DataFrame(mseeds, columns=["ENZ"])
+            mseeds = pd.DataFrame(mseeds, columns=["mseed_3c"])
             if folder == "SC":
-                mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+                mseeds["fname"] = mseeds["mseed_3c"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x[:2])
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x[2:7].strip("_"))
                 mseeds["instrument"] = mseeds["fname"].apply(lambda x: x[7:9])
@@ -342,7 +419,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                 mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
                 mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
             if folder == "NC":
-                mseeds["fname"] = mseeds["ENZ"].apply(lambda x: x.split("/")[-1])
+                mseeds["fname"] = mseeds["mseed_3c"].apply(lambda x: x.split("/")[-1])
                 mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
                 mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[0])
                 mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[2][:-1])
@@ -372,48 +449,59 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             continue
 
         picks_group = picks.copy()
-        picks_group = picks_group.groupby("ENZ")
+        picks_group = picks_group.groupby("mseed_3c")
 
         ############################################################
         os.makedirs(f"{result_path}/{year:04d}/{jday:03d}", exist_ok=True)
-        fp = h5py.File(f"{result_path}/{year:04d}/{jday:03d}/waveform.h5", "a")
+        # fp = h5py.File(f"{result_path}/{year:04d}/{jday:03d}/waveform.h5", "w")
+        with h5py.File(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/waveform.h5", "w") as fp:
 
-        # nsplit = 1
-        # group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
-        # picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
+            # ## FIXME: For testing purpose, use single processing
+            # nsplit = 1
+            # group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
+            # picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
 
-        # lock = nullcontext()
-        # for group in picks_group_chunk:
-        #     extract_template_numpy(group, events, picks, config, fp, lock)
-        # raise
+            # lock = nullcontext()
+            # for group in picks_group_chunk:
+            #     extract_template_numpy(group, events, picks, mechanisms, config, fp, lock)
+            # sys.exit(0)
 
-        ncpu = min(32, multiprocessing.cpu_count())
-        nsplit = len(picks_group)
-        print(f"Using {ncpu} cores")
+            ncpu = min(8, multiprocessing.cpu_count())
+            nsplit = len(picks_group)
+            print(f"Using {ncpu} cores")
 
-        group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
-        picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
+            group_chunk = np.array_split(list(picks_group.groups.keys()), nsplit)
+            picks_group_chunk = [[picks_group.get_group(g) for g in group] for group in group_chunk]
 
-        lock = threading.Lock()  # Use threading.Lock for ThreadPoolExecutor
+            lock = threading.Lock()  # Use threading.Lock for ThreadPoolExecutor
 
-        # with ProcessPoolExecutor(max_workers=ncpu) as executor:
-        with ThreadPoolExecutor(max_workers=ncpu) as executor:
-            futures = [
-                executor.submit(
-                    partial(extract_template_numpy, events=events, picks=picks, config=config, fp=fp, lock=lock), group
-                )
-                for group in picks_group_chunk
-            ]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Extracting templates"):
-                out = future.result()
-                if out is not None:
-                    print(out)
+            # with ProcessPoolExecutor(max_workers=ncpu) as executor:
+            with ThreadPoolExecutor(max_workers=ncpu) as executor:
+                futures = [
+                    executor.submit(
+                        partial(
+                            extract_template_numpy,
+                            events=events,
+                            picks=picks,
+                            mechanisms=mechanisms,
+                            config=config,
+                            fp=fp,
+                            lock=lock,
+                        ),
+                        group
+                    )
+                    for group in picks_group_chunk
+                ]
+                for future in tqdm(as_completed(futures), total=len(futures), desc="Extracting templates"):
+                    out = future.result()
+                    if out is not None:
+                        print(out)
 
-        # if protocol == "gs":
-        #     fs.put(
-        #         f"{root_path}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv",
-        #         f"{bucket}/{result_path}/{year:04d}/{jday:03d}/cctorch_picks.csv",
-        #     )
+        # Upload the HDF5 file to cloud storage
+        local_h5_path = f"{root_path}/{result_path}/{year:04d}/{jday:03d}/waveform.h5"
+        remote_h5_path = f"{bucket}/{result_path}/{year:04d}/{jday:03d}/waveform.h5"
+        print(f"Upload {local_h5_path} to {remote_h5_path}")
+        fs.put(local_h5_path, remote_h5_path)
 
 
 def parse_args():
@@ -426,6 +514,7 @@ def parse_args():
     parser.add_argument("--year", type=int, default=2024)
 
     return parser.parse_args()
+
 
 
 # %%
@@ -480,4 +569,6 @@ if __name__ == "__main__":
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
+    ## FIXME: Hardcode for testing
+    jdays = ["2024.001"]
     cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token)

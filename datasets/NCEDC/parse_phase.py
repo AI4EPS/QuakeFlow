@@ -1,13 +1,13 @@
 # %%
 import multiprocessing as mp
 import os
-from datetime import datetime, timedelta
+import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 
 import fsspec
 import pandas as pd
 from tqdm import tqdm
-import sys
 
 # %%
 input_protocol = "s3"
@@ -430,10 +430,9 @@ if __name__ == "__main__":
     for year in tqdm(sorted(input_fs.glob(f"{input_bucket}/{input_folder}/????"), reverse=True)):
         for file in sorted(input_fs.glob(f"{year}/*.phase.Z")):
             file_list.append(file)
-        
-        if year.split("/")[-1] <= "2024":
-            break
 
+    ## FIXME: HARD CODED FOR TESTING
+    file_list = ["ncedc-pds/event_phases/2024/2024.01.phase.Z"]
     for file in tqdm(file_list):
         print(f"Processing: {file}")
         process(file)

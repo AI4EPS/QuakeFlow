@@ -1,14 +1,14 @@
 # %%
 import multiprocessing as mp
 import os
+import sys
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 import fsspec
 import pandas as pd
 from tqdm import tqdm
-import sys
 
 # %%
 input_protocol = "s3"
@@ -220,9 +220,8 @@ if __name__ == "__main__":
         for jday in sorted(input_fs.glob(f"{year}/????_???"), reverse=False):
             file_list.append(jday)
 
-        if year.split("/")[-1] <= "2024":
-            break
-
+    ## FIXME: HARD CODED FOR TESTING
+    file_list = ["scedc-pds/event_phases/2024/2024_001"]
     for jday in file_list:
         print(f"Processing {jday}")
         process(jday)
