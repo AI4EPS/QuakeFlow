@@ -123,7 +123,7 @@ columns_to_keep = [
 ]
 
 ## FIXME: HARD CODED FOR TESTING
-catalog_files = ["scedc-pds/earthquake_catalogs/SCEC_DC/2024.catalog"]
+catalog_files = ["scedc-pds/earthquake_catalogs/SCEC_DC/2023.catalog"]
 for catalog_file in tqdm(catalog_files):
 
     print(f"Processing {catalog_file}")

@@ -109,7 +109,7 @@ columns_to_keep = [
 ]
 
 ## FIXME: HARD CODED FOR TESTING
-csv_files = ["ncedc-pds/earthquake_catalogs/NCEDC/2024.ehpcsv"]
+csv_files = ["ncedc-pds/earthquake_catalogs/NCEDC/2023.ehpcsv"]
 
 for csv_file in tqdm(csv_files):
     print(f"Processing {csv_file}")

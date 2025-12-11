@@ -563,12 +563,12 @@ if __name__ == "__main__":
         data_path = f"{region}EDC/dataset"
         result_path = f"{region}EDC/dataset"
     else:
-        data_path = f"{region}/catalog"
-        result_path = f"{region}/dataset"
+        data_path = f"{region}/catalog" # sorry for the inconsistency
+        result_path = f"{region}EDC/dataset"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
     ## FIXME: Hardcode for testing
-    jdays = ["2024.001"]
+    jdays = ["2023.001"]
     cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token)

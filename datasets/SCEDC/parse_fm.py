@@ -11,7 +11,7 @@ from tqdm import tqdm
 input_url = "https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal"
 input_files = ["YSH_2010.hash"] + [f"sc{x}_hash_ABCD_so.focmec.scedc" for x in range(2011, 2025)]
 ## FIXME: HARD CODED FOR TESTING
-input_files = ["sc2024_hash_ABCD_so.focmec.scedc"]
+input_files = ["sc2023_hash_ABCD_so.focmec.scedc"]
 
 output_protocol = "gs"
 output_bucket = "quakeflow_dataset"

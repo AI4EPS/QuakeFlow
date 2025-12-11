@@ -221,7 +221,7 @@ if __name__ == "__main__":
             file_list.append(jday)
 
     ## FIXME: HARD CODED FOR TESTING
-    file_list = ["scedc-pds/event_phases/2024/2024_001"]
+    file_list = ["scedc-pds/event_phases/2023/2023_001"]
     for jday in file_list:
         print(f"Processing {jday}")
         process(jday)

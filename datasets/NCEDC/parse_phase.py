@@ -432,7 +432,7 @@ if __name__ == "__main__":
             file_list.append(file)
 
     ## FIXME: HARD CODED FOR TESTING
-    file_list = ["ncedc-pds/event_phases/2024/2024.01.phase.Z"]
+    file_list = ["ncedc-pds/event_phases/2023/2023.01.phase.Z"]
     for file in tqdm(file_list):
         print(f"Processing: {file}")
         process(file)

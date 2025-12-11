@@ -175,3 +175,4 @@ slurm/*/*.xml
 *.npy
 examples/california/cctorch_figures*/
 
+*.nfs*

@@ -9,9 +9,10 @@ import numpy as np
 
 def normalize_trace(trace):
     """Normalize trace to [-0.5, 0.5] range for plotting."""
+    trace = trace - np.mean(trace)
     max_val = np.max(np.abs(trace))
     if max_val > 0:
-        return (trace - np.mean(trace)) / max_val
+        return trace / max_val
     return trace
 
 
@@ -74,9 +75,6 @@ def plot_waveform(h5_file, event_id=None, station_id=None, output_dir="figures")
         colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
 
         for i, (comp, color) in enumerate(zip(components, colors)):
-            # check waveform max of nc73983851 station BK.BARR.00.HN
-            if event_id == "nc73983851" and station_id == "BK.BARR.00.HN":
-                print(f"Max value of {event_id} {station_id} {comp}: {np.max(np.abs(waveform[i]))}")
             ax_full.plot(time, normalize_trace(waveform[i]) + i, color=color, label=comp, lw=0.5)
 
         if p_index is not None:
