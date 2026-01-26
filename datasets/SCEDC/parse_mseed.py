@@ -19,128 +19,113 @@ output_folder = "SCEDC/mseed"
 valid_instruments = {"BH", "HH", "EH", "HN", "DP", "SH", "EP"}
 valid_components = {"3", "2", "1", "E", "N", "Z"}
 
+input_fs = fsspec.filesystem(input_protocol, anon=True)
+
 
 # %%
-def parse_fname(mseed):
+def parse_fname(fname):
     """Parse SCEDC mseed filename.
 
     Format: {network}{station}{location}{channel}___{year}{jday}.ms
     Example: AZCRY__BHE___2026001.ms
     """
-    fname = mseed.split("/")[-1]
     return {
         "network": fname[:2],
         "station": fname[2:7].rstrip("_"),
         "location": fname[10:12].rstrip("_"),
         "instrument": fname[7:9],
         "component": fname[9],
+        "year": fname[14:18],
         "jday": fname[17:20],
     }
 
 
-def scan_jday(args):
-    """Scan a single jday folder and return grouped mseed files."""
-    jday_path, input_fs = args
-    folder_name = jday_path.split("/")[-1]
-    year, jday = folder_name.split("_")
+def discover_jday_folders():
+    """Discover all jday folders: years -> jdays."""
+    print("Discovering folder structure...")
 
-    # Use ls instead of glob - faster for listing directory contents
-    try:
-        files = input_fs.ls(jday_path, detail=False)
-    except Exception:
-        return jday, []
+    # Step 1: List years
+    years = input_fs.ls(f"{input_bucket}/{input_folder}", detail=False)
+    years = [y for y in years if y.split("/")[-1].isdigit()]
+    print(f"  Found {len(years)} years")
 
-    suffix = f"_{year}{jday}.ms"
-    groups = defaultdict(list)
-    for mseed in files:
-        fname = mseed.split("/")[-1]
-        # Quick filter before parsing
-        if not fname.endswith(suffix):
+    # Step 2: List jdays per year (parallel)
+    def list_jdays(year_path):
+        return input_fs.ls(year_path, detail=False)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(list_jdays, years))
+
+    jday_folders = [f for result in results for f in result]
+    print(f"  Found {len(jday_folders)} jday folders")
+    return jday_folders
+
+
+def process_jday_folder(jday_path):
+    """List files in jday folder, group by station, save and upload."""
+    # Parse year/jday from path: .../year/year_jday
+    year_jday = jday_path.split("/")[-1]  # e.g., "2024_001"
+    year, jday = year_jday.split("_")
+
+    # List all files in this jday folder
+    files = input_fs.ls(jday_path, detail=False)
+    station_groups = defaultdict(list)
+
+    for key in files:
+        fname = key.split("/")[-1]
+        if not fname.endswith(".ms"):
             continue
 
         try:
-            info = parse_fname(mseed)
-        except Exception:
+            info = parse_fname(fname)
+        except Exception as e:
+            print(f"Failed to parse filename: {fname}, error: {e}")
             continue
 
         if info["instrument"] in valid_instruments and info["component"] in valid_components:
-            key = f"{info['network']}.{info['station']}.{info['location']}.{info['instrument']}"
-            groups[key].append(f"{input_protocol}://{mseed}")
+            station_key = f"{info['network']}.{info['station']}.{info['location']}.{info['instrument']}"
+            station_groups[station_key].append(f"{input_protocol}://{key}")
 
-    result = ["|".join(sorted(files)) for files in groups.values()]
-    return jday, result
+    if not station_groups:
+        return 0, None, None
 
-
-def collect_mseeds(year, max_workers=64):
-    """Collect and group mseed files by station for a given year."""
-    input_fs = fsspec.filesystem(input_protocol, anon=True)
-    output_fs = fsspec.filesystem(output_protocol, token=output_token)
-
-    # Find all jday folders for this year using ls
-    try:
-        year_path = f"{input_bucket}/{input_folder}/{year}"
-        folders = input_fs.ls(year_path, detail=False)
-        jdays = [f for f in folders if f.split("/")[-1].startswith(f"{year}_")]
-    except FileNotFoundError:
-        print(f"No day folders found for year {year}")
-        return 0
-
-    if not jdays:
-        print(f"No day folders found for year {year}")
-        return 0
-
-    print(f"Found {len(jdays)} day folders for year {year}")
-
-    # Process jdays in parallel using threads (I/O-bound)
-    jday_groups = defaultdict(list)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = executor.map(scan_jday, [(jday, input_fs) for jday in jdays])
-        for jd, entries in tqdm(futures, total=len(jdays), desc=f"Scanning {year}"):
-            jday_groups[jd].extend(entries)
-
-    # Save each jday to separate file
+    # Save to local file
     local_dir = f"mseed/{year}"
-    total_groups = 0
-    local_files = []
-    for jday, entries in sorted(jday_groups.items()):
-        if not entries:
-            continue
-        os.makedirs(local_dir, exist_ok=True)
-        local_path = f"{local_dir}/{jday}.txt"
-        with open(local_path, "w") as f:
-            f.write("\n".join(sorted(entries)))
-        local_files.append((local_path, f"{output_bucket}/{output_folder}/{year}/{jday}.txt"))
-        total_groups += len(entries)
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = f"{local_dir}/{jday}.txt"
+    entries = ["|".join(sorted(files)) for files in station_groups.values()]
+    with open(local_path, "w") as f:
+        f.write("\n".join(sorted(entries)))
 
-    # Upload all files in parallel
-    def upload_file(paths):
-        local, remote = paths
-        output_fs.put(local, remote)
-
-    with ThreadPoolExecutor(max_workers=32) as executor:
-        list(executor.map(upload_file, local_files))
-
-    print(f"Saved {total_groups} station-day groups across {len(local_files)} files for year {year}")
-    return total_groups
+    remote_path = f"{output_bucket}/{output_folder}/{year}/{jday}.txt"
+    return len(entries), local_path, remote_path
 
 
 # %%
 if __name__ == "__main__":
-    input_fs = fsspec.filesystem(input_protocol, anon=True)
+    # Step 1: Discover all jday folders (fast ls-based listing)
+    jday_folders = discover_jday_folders()
 
-    # Find all available years using ls
-    try:
-        year_folders = input_fs.ls(f"{input_bucket}/{input_folder}", detail=False)
-        years = sorted([int(yf.split("/")[-1]) for yf in year_folders if yf.split("/")[-1].isdigit()])
-    except Exception as e:
-        print(f"Error listing years: {e}")
-        years = []
+    # Step 2: Process all jday folders in parallel
+    print(f"\nProcessing {len(jday_folders)} jday folders...")
+    with ThreadPoolExecutor(max_workers=64) as executor:
+        results = list(tqdm(executor.map(process_jday_folder, jday_folders), total=len(jday_folders), desc="Processing"))
 
-    print(f"Found years: {years}")
+    # Collect upload tasks
+    upload_tasks = [(local, remote) for _, local, remote in results if local]
+    total_groups = sum(r[0] for r in results)
 
-    # Process years sequentially (each year already parallelized internally)
-    for year in years:
-        print(f"\nProcessing year {year}")
-        collect_mseeds(year)
+    # Step 3: Upload to GCS in parallel
+    output_fs = fsspec.filesystem(output_protocol, token=output_token)
+
+    def upload_file(paths):
+        local, remote = paths
+        output_fs.put(local, remote)
+
+    print(f"\nUploading {len(upload_tasks)} files to GCS...")
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        list(tqdm(executor.map(upload_file, upload_tasks), total=len(upload_tasks), desc="Uploading"))
+
+    print(f"Saved {total_groups} station-day groups across {len(upload_tasks)} jdays")
 
 # %%

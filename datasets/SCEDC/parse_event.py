@@ -13,7 +13,7 @@ output_protocol = "gs"
 output_bucket = "quakeflow_dataset"
 output_folder = "SCEDC/catalog"
 
-result_path = "dataset"
+result_path = "catalog"
 os.makedirs(result_path, exist_ok=True)
 
 # Create filesystem objects once

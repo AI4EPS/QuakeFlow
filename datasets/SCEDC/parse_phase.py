@@ -4,9 +4,11 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import fsspec
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -23,7 +25,7 @@ output_folder = "SCEDC/catalog"
 output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
 
-result_path = "dataset"
+result_path = "catalog"
 os.makedirs(result_path, exist_ok=True)
 
 # %%
@@ -66,67 +68,95 @@ def parse_event_line(line):
     return event_info
 
 
-def parse_phase_line(line, event_id, event_time):
+def calc_azimuth_vectorized(lat1, lon1, lat2, lon2):
+    """Calculate azimuth from point 1 to point 2 in degrees (vectorized)."""
+    lat1, lon1, lat2, lon2 = np.radians(lat1), np.radians(lon1), np.radians(lat2), np.radians(lon2)
+    dlon = lon2 - lon1
+    x = np.sin(dlon) * np.cos(lat2)
+    y = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(dlon)
+    az = np.degrees(np.arctan2(x, y))
+    return np.round((az + 360) % 360, 2)
+
+
+def parse_phase_line(line, event_id, event_time, event_lat, event_lon):
     fields = line.split()
-    phase_pick = {
+    polarity = fields[8][0]
+    if polarity == ".":
+        polarity = ""
+    elif polarity in ("c", "+", "u"):
+        polarity = "U"
+    elif polarity in ("d", "-", "r"):
+        polarity = "D"
+    else:
+        polarity = ""
+    return {
         "network": fields[0],
         "station": fields[1],
         "channel": fields[2],
         "instrument": fields[2][:-1],
         "component": fields[2][-1],
         "location": fields[3] if fields[3] != "--" else "",
-        "latitude": float(fields[4]),
-        "longitude": float(fields[5]),
+        "sta_lat": float(fields[4]),
+        "sta_lon": float(fields[5]),
+        "event_lat": event_lat,
+        "event_lon": event_lon,
         "elevation_m": float(fields[6]),
         "depth_km": -round(float(fields[6]) / 1000, 3),
         "phase_type": fields[7],
-        "phase_polarity": fields[8],
-        # "signal onset quality": fields[9],
+        "phase_polarity": polarity,
         "phase_remark": fields[9],
         "phase_score": float(fields[10]),
         "distance_km": float(fields[11]),
-        "phase_time": (event_time + timedelta(seconds=float(fields[12]))),
+        "phase_time": event_time + timedelta(seconds=float(fields[12])),
         "event_id": event_id,
     }
-    if phase_pick["phase_polarity"][0] == ".":
-        phase_pick["phase_polarity"] = ""
-    elif phase_pick["phase_polarity"][0] in ["c", "+", "u"]:
-        phase_pick["phase_polarity"] = "U"
-    elif phase_pick["phase_polarity"][0] in ["d", "-", "r"]:
-        phase_pick["phase_polarity"] = "D"
-    else:
-        print(f"Unknown polarity: {phase_pick['phase_polarity']}")
-        phase_pick["phase_polarity"] = ""
-    return phase_pick
 
 
-# %% 
+def read_phase_file(file, input_fs):
+    """Read and parse a single phase file. Returns (event, phases_list) or None."""
+    try:
+        with input_fs.open(file, "r") as fp:
+            lines = fp.readlines()
+
+        event_line = lines[0].strip()
+        if event_line.startswith("0       1970/01/01,00:00:00.000"):
+            return None
+
+        event = parse_event_line(event_line)
+        phases_ = [
+            parse_phase_line(line.strip(), event["event_id"], event["time"], event["latitude"], event["longitude"])
+            for line in lines[1:]
+        ]
+        if len(phases_) == 0:
+            return None
+
+        return (event, phases_)
+    except Exception as e:
+        print(f"Error reading {file}: {e}")
+        return None
+
+
+# %%
 def process(jday):
 
     input_fs = fsspec.filesystem(input_protocol, anon=True)
     output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
+    # Get list of phase files
+    phase_files = list(input_fs.glob(f"{jday}/*.phase"))
+
+    # Read files in parallel using ThreadPoolExecutor
     events = []
-    phases = []
+    all_phases = []
 
-    for file in input_fs.glob(f"{jday}/*.phase"):
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        results = list(executor.map(lambda f: read_phase_file(f, input_fs), phase_files))
 
-        with input_fs.open(file, "r") as fp:
-            lines = fp.readlines()
-        
-            event_line = lines[0].strip()
-            nan_case = "0       1970/01/01,00:00:00.000"
-            if event_line.startswith(nan_case):
-                continue
-
-            event = parse_event_line(event_line)
-            phases_ = [parse_phase_line(line.strip(), event["event_id"], event["time"]) for line in lines[1:]]
-            if len(phases_) == 0:
-                continue
-        
-        events.append(event)
-        phases_ = pd.DataFrame(phases_)
-        phases.append(phases_)
+    for result in results:
+        if result is not None:
+            event, phases_ = result
+            events.append(event)
+            all_phases.extend(phases_)
 
     # %% save all events
     phase_columns = [
@@ -142,6 +172,8 @@ def process(jday):
         "phase_polarity",
         "phase_remark",
         "distance_km",
+        "azimuth",
+        "back_azimuth",
     ]
     event_columns = [
         "event_id",
@@ -160,18 +192,21 @@ def process(jday):
     
     events = pd.DataFrame(events)
     events = events[event_columns]
-    events["time"] = pd.to_datetime(events["time"])
-    # events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
-    events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+    events["time"] = pd.to_datetime(events["time"]).dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
-
-    phases = pd.concat(phases)
-    phases = phases.reset_index(drop=True)
+    phases = pd.DataFrame(all_phases)
+    # Vectorized azimuth calculation
+    phases["azimuth"] = calc_azimuth_vectorized(
+        phases["event_lat"].values, phases["event_lon"].values,
+        phases["sta_lat"].values, phases["sta_lon"].values
+    )
+    phases["back_azimuth"] = calc_azimuth_vectorized(
+        phases["sta_lat"].values, phases["sta_lon"].values,
+        phases["event_lat"].values, phases["event_lon"].values
+    )
     phases = phases[phase_columns]
-    phases["phase_time"] = pd.to_datetime(phases["phase_time"])
-    phases["phase_time"] = phases["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f"))
-    # phases["phase_time"] = phases["phase_time"].apply(lambda x: x + "+00:00")
-    phases["phase_remark"] = phases["phase_remark"].apply(lambda x: "" if x == "." else x)
+    phases["phase_time"] = pd.to_datetime(phases["phase_time"]).dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    phases["phase_remark"] = phases["phase_remark"].replace(".", "")
 
     year, jday = jday.split('/')[-1].split('_')
 
@@ -188,21 +223,18 @@ def process(jday):
         f"{output_bucket}/{output_folder}/{year}/{jday}/phases.csv",
     )
 
-    # %% save picks with P/S pairs
-    phases_ps = []
-    phases = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
-    for (event_id, network, station), picks in phases.groupby(["event_id", "network", "station"]):
-        if len(picks) >= 2:
-            phase_type = picks["phase_type"].unique()
-            if ("P" in phase_type) and ("S" in phase_type):
-                phases_ps.append(picks)
-        if len(picks) >= 3:
-            print(event_id, network, station, len(picks))
+    # %% save picks with P/S pairs - keep best score per event/station/phase_type
+    phases_best = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
 
-    if len(phases_ps) == 0:
+    # Find groups that have both P and S
+    group_cols = ["event_id", "network", "station"]
+    phase_counts = phases_best.groupby(group_cols + ["phase_type"]).size().unstack(fill_value=0)
+    has_both = phase_counts.index[(phase_counts.get("P", 0) > 0) & (phase_counts.get("S", 0) > 0)]
+
+    if len(has_both) == 0:
         return None
 
-    phases_ps = pd.concat(phases_ps)
+    phases_ps = phases_best.set_index(group_cols).loc[has_both].reset_index()
     phases_ps = phases_ps[phase_columns]
 
     phases_ps.to_csv(f"{result_path}/{year}/{jday}/phases_ps.csv", index=False)
@@ -222,18 +254,9 @@ if __name__ == "__main__":
         for jday in sorted(input_fs.glob(f"{year}/????_???"), reverse=False):
             file_list.append(jday)
 
-    ## FIXME: HARD CODED FOR TESTING
-    file_list = ["scedc-pds/event_phases/2025/2025_001"]
-    for jday in file_list:
-        print(f"Processing {jday}")
-        process(jday)
-        sys.exit(0)
-
-    ncpu = mp.cpu_count() - 1
-    with ProcessPoolExecutor(max_workers=ncpu) as executor:
-        futures = [executor.submit(process, file) for file in file_list]
-        
-        for future in tqdm(as_completed(futures), total=len(file_list)):
+    with ProcessPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process, jday) for jday in file_list]
+        for future in tqdm(as_completed(futures), total=len(file_list), desc="Processing phase files"):
             result = future.result()
             if result is not None:
                 print(result)

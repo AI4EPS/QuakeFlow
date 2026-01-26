@@ -22,7 +22,7 @@ output_folder = "NCEDC/catalog"
 output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
 # %%
-result_path = "dataset"
+result_path = "catalog"
 os.makedirs(result_path, exist_ok=True)
 os.makedirs(f"{result_path}/catalog_raw", exist_ok=True)
 
@@ -347,16 +347,11 @@ def process(file):
 
     events = pd.DataFrame(events)
     events = events[event_columns]
-    events["time"] = pd.to_datetime(events["time"])
-    # events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00")
-    events["time"] = events["time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+    events["time"] = pd.to_datetime(events["time"]).dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
-    phases = pd.concat(phases)
-    phases = phases.reset_index(drop=True)
+    phases = pd.concat(phases, ignore_index=True)
     phases = phases[phase_columns]
-    phases["phase_time"] = pd.to_datetime(phases["phase_time"])
-    phases["phase_time"] = phases["phase_time"].apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f"))
-    # phases["phase_time"] = phases["phase_time"].apply(lambda x: x + "+00:00")
+    phases["phase_time"] = pd.to_datetime(phases["phase_time"]).dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
     phases["network"] = phases["network"].str.strip()
     phases["station"] = phases["station"].str.strip()
@@ -364,19 +359,17 @@ def process(file):
     phases["azimuth"] = phases["azimuth"].str.strip()
     phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
     phases = phases[phases["distance_km"] != ""]
-    # Convert time_residual and phase_weight to numeric, handling empty strings
     phases["time_residual"] = pd.to_numeric(phases["time_residual"], errors="coerce")
     phases["phase_weight"] = pd.to_numeric(phases["phase_weight"], errors="coerce")
     phases = phases[phases["time_residual"].abs() < 9.99]
     phases = phases[~((phases["phase_weight"] == 0) & (phases["time_residual"] == 0))]
-    phases["location"] = phases["location"].apply(lambda x: x if x != "--" else "")
-    phases["phase_remark"] = phases["phase_remark"].apply(lambda x: "" if x in ["p", "s"] else x)
+    phases["location"] = phases["location"].replace("--", "")
+    phases["phase_remark"] = phases["phase_remark"].replace(["p", "s"], "")
 
-    # %% 
     # save picks to jday
-    phases["tmp_time"] = pd.to_datetime(phases["phase_time"])
-    phases["jday"] = phases["tmp_time"].dt.strftime("%j")
-    phases["year"] = phases["tmp_time"].dt.strftime("%Y")
+    tmp_time = pd.to_datetime(phases["phase_time"])
+    phases["jday"] = tmp_time.dt.strftime("%j")
+    phases["year"] = tmp_time.dt.strftime("%Y")
     for (year, jday), picks in phases.groupby(["year", "jday"]):
         if len(picks) == 0:
             continue
@@ -395,20 +388,18 @@ def process(file):
             f"{output_bucket}/{output_folder}/{year}/{jday}/phases.csv",
         )
 
-    # %% save picks with P/S pairs
-    phases_ps = []
-    phases = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
-    for (event_id, network, station), picks in phases.groupby(["event_id", "network", "station"]):
-        if len(picks) >= 2:
-            phase_type = picks["phase_type"].unique()
-            if ("P" in phase_type) and ("S" in phase_type):
-                phases_ps.append(picks)
-        if len(picks) >= 3:
-            print(event_id, network, station, len(picks))
+    # %% save picks with P/S pairs - keep best score per event/station/phase_type
+    phases_best = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
 
-    if len(phases_ps) == 0:
+    # Find groups that have both P and S
+    group_cols = ["event_id", "network", "station"]
+    phase_counts = phases_best.groupby(group_cols + ["phase_type"]).size().unstack(fill_value=0)
+    has_both = phase_counts.index[(phase_counts.get("P", 0) > 0) & (phase_counts.get("S", 0) > 0)]
+
+    if len(has_both) == 0:
         return
-    phases_ps = pd.concat(phases_ps)
+
+    phases_ps = phases_best.set_index(group_cols).loc[has_both].reset_index()
 
     for (year, jday), picks in phases_ps.groupby(["year", "jday"]):
         if len(picks) == 0:
@@ -431,19 +422,9 @@ if __name__ == "__main__":
         for file in sorted(input_fs.glob(f"{year}/*.phase.Z")):
             file_list.append(file)
 
-    ## FIXME: HARD CODED FOR TESTING
-    file_list = ["ncedc-pds/event_phases/2025/2025.01.phase.Z"]
-    for file in tqdm(file_list):
-        print(f"Processing: {file}")
-        process(file)
-        sys.exit(0)
-
-    ncpu = mp.cpu_count() - 1
-    with ProcessPoolExecutor(max_workers=ncpu) as executor:
-        
+    with ProcessPoolExecutor(max_workers=8) as executor:
         futures = [executor.submit(process, file) for file in file_list]
-        
-        for future in tqdm(as_completed(futures), total=len(file_list)):
+        for future in tqdm(as_completed(futures), total=len(file_list), desc="Processing phase files"):
             result = future.result()
             if result is not None:
                 print(result)
