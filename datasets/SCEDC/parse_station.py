@@ -1,97 +1,86 @@
 # %%
 import os
-from datetime import timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import fsspec
-import obspy
-import pandas as pd
 from tqdm import tqdm
 
 # %%
 input_protocol = "s3"
 input_bucket = "scedc-pds"
+input_folder = "FDSNstationXML"
 input_fs = fsspec.filesystem(input_protocol, anon=True)
 
 output_protocol = "gs"
 output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
-output_bucket = "quakeflow_dataset/SC"
+output_bucket = "quakeflow_dataset"
+output_folder = "SCEDC/FDSNstationXML"
 output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
-# %%
-station_path = f"{input_bucket}/FDSNstationXML"
-
 
 # %%
-def parse_inventory_csv(inventory):
-    channel_list = []
-    for network in inventory:
-        for station in network:
-            for channel in station:
-                if channel.sensor is None:
-                    sensor_description = ""
-                else:
-                    sensor_description = channel.sensor.description
-                channel_list.append(
-                    {
-                        "network": network.code,
-                        "station": station.code,
-                        "location": channel.location_code,
-                        "instrument": channel.code[:-1],
-                        "component": channel.code[-1],
-                        "channel": channel.code,
-                        "longitude": channel.longitude,
-                        "latitude": channel.latitude,
-                        "elevation_m": channel.elevation,
-                        "local_depth_m": channel.depth,
-                        "depth_km": round(-channel.elevation / 1000, 4),
-                        # "depth_km": channel.depth,
-                        "begin_time": (
-                            channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.start_date is not None
-                            else None
-                        ),
-                        "end_time": (
-                            channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.end_date is not None
-                            else None
-                        ),
-                        "azimuth": channel.azimuth,
-                        "dip": channel.dip,
-                        "sensitivity": (
-                            channel.response.instrument_sensitivity.value
-                            if channel.response.instrument_sensitivity
-                            else None
-                        ),
-                        "site": station.site.name,
-                        "sensor": sensor_description,
-                    }
-                )
-    channel_list = pd.DataFrame(channel_list)
+def copy_single_file(xml_file, overwrite=False):
+    """Copy a single XML file to GCS."""
+    input_fs = fsspec.filesystem(input_protocol, anon=True)
+    output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
-    print(f"Parse {len(channel_list)} channels into csv")
+    filename = Path(xml_file).name
+    # Extract network and station from filename
+    # Handle both formats: BC_AGSX.xml (underscore) and PB.B079.xml (dot)
+    name = filename.replace(".xml", "")
+    if "_" in name:
+        network, station = name.split("_", 1)
+    else:
+        parts = name.split(".")
+        network, station = parts[0], parts[1]
+    output_path = f"{output_bucket}/{output_folder}/{network}/{network}.{station}.xml"
 
-    return channel_list
+    if not overwrite and output_fs.exists(output_path):
+        return None
+
+    with input_fs.open(xml_file, "rb") as src:
+        output_fs.makedirs(f"{output_bucket}/{output_folder}/{network}", exist_ok=True)
+        with output_fs.open(output_path, "wb") as dst:
+            dst.write(src.read())
+
+    return f"{network}.{station}.xml"
 
 
-# %%
-inv = obspy.Inventory()
-for network in input_fs.glob(f"{station_path}/*"):
-    print(f"Parse {network}")
-    for xml in tqdm(input_fs.glob(f"{network}/*.xml")):
-        with input_fs.open(xml) as f:
-            inv += obspy.read_inventory(f)
+def copy_xml_to_gcs(max_workers=16):
+    """Copy FDSN station XML files from SCEDC S3 to Google Cloud Storage."""
+    input_fs = fsspec.filesystem(input_protocol, anon=True)
 
-# %%
-stations = parse_inventory_csv(inv)
-if not os.path.exists("dataset"):
-    os.makedirs("dataset")
-stations.to_csv("dataset/stations.csv", index=False)
-with output_fs.open(f"{output_bucket}/stations.csv", "wb") as f:
-    stations.to_csv(f, index=False)
+    # List all folders (CI, unauthoritative-XML, etc.)
+    folders = input_fs.ls(f"{input_bucket}/{input_folder}")
+    # Separate unauthoritative and authoritative folders
+    unauth_folders = [f for f in folders if "unauthoritative" in f]
+    auth_folders = [f for f in folders if "unauthoritative" not in f]
+
+    # Process unauthoritative files first, then authoritative files overwrite them
+    for folder_group, group_name in [(unauth_folders, "unauthoritative"), (auth_folders, "authoritative")]:
+        all_tasks = []
+        for folder in folder_group:
+            xml_files = input_fs.glob(f"{folder}/*.xml")
+            all_tasks.extend(xml_files)
+
+        if not all_tasks:
+            continue
+
+        print(f"Processing {len(all_tasks)} {group_name} XML files")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(copy_single_file, xml_file, overwrite=True): xml_file
+                for xml_file in all_tasks
+            }
+
+            for future in tqdm(as_completed(futures), total=len(futures), desc=f"Copying {group_name}"):
+                future.result()
+
 
 # %%
-# for network, sta in stations.groupby("network"):
-#     with output_fs.open(f"{output_bucket}/station/{network}.csv", "wb") as f:
-#         sta.to_csv(f, index=False)
+if __name__ == "__main__":
+    copy_xml_to_gcs(max_workers=16)
 
 # %%

@@ -19,7 +19,7 @@ input_fs = fsspec.filesystem(input_protocol, anon=True)
 output_protocol = "gs"
 output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
 output_bucket = "quakeflow_dataset"
-output_folder = "SC/catalog"
+output_folder = "SCEDC/catalog"
 output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
 
@@ -175,6 +175,8 @@ def process(jday):
 
     year, jday = jday.split('/')[-1].split('_')
 
+    os.makedirs(f"{result_path}/{year}/{jday}", exist_ok=True)
+
     # events.to_csv(f"{result_path}/event/{year}/{jday}.csv", index=False)
     # output_fs.put(
     #     f"{result_path}/event/{year}/{jday}.csv",
@@ -213,7 +215,7 @@ def process(jday):
 # %%
 if __name__ == "__main__":
     file_list = []
-    for year in tqdm(sorted(input_fs.glob(f"{input_bucket}/{input_folder}/????"), reverse=True)):
+    for year in tqdm(sorted(input_fs.glob(f"{input_bucket}/{input_folder}/????"), reverse=True), desc="Scanning phase files"):
         if year.endswith("done"):
             continue
 
@@ -221,7 +223,7 @@ if __name__ == "__main__":
             file_list.append(jday)
 
     ## FIXME: HARD CODED FOR TESTING
-    file_list = ["scedc-pds/event_phases/2023/2023_001"]
+    file_list = ["scedc-pds/event_phases/2025/2025_001"]
     for jday in file_list:
         print(f"Processing {jday}")
         process(jday)

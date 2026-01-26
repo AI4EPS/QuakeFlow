@@ -1,140 +1,80 @@
 # %%
 import os
-from datetime import datetime, timedelta, timezone
-from glob import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import fsspec
-import numpy as np
-import obspy
-import pandas as pd
 from tqdm import tqdm
 
 # %%
-input_protocol = "gs"
-input_bucket = "quakeflow_dataset/NC"
-input_fs = fsspec.filesystem(input_protocol, anon=True)
+input_base_url = "https://ncedc.org/ftp/pub/doc"
+input_folder = input_base_url
 
 output_protocol = "gs"
 output_token = f"{os.environ['HOME']}/.config/gcloud/application_default_credentials.json"
-output_bucket = "quakeflow_dataset/NC"
-output_fs = fsspec.filesystem(output_protocol, token=output_token)
-
-# %%
-station_path = f"{input_bucket}/raw_data/FDSNstationXML"
-
-# %% copy to FDSNstationXML
-# for network in input_fs.glob(f"{station_path}/*.info"):
-#     network_name = network.split("/")[-1]
-#     if network_name in ["broadband.info", "BARD.info", "CISN.info"]:
-#         continue
-#     print(f"Parse {network}")
-#     network_code = network.split("/")[-1].split(".")[0]
-#     print(network_code)
-#     inv = obspy.Inventory()
-#     for xml in tqdm(input_fs.glob(f"{network}/{network_code}.FDSN.xml/{network_code}.*.xml")):
-#         with input_fs.open(xml) as src:
-#             xml_name = xml.split("/")[-1]
-#             with output_fs.open(f"{output_bucket}/FDSNstationXML/{network_code}/{xml_name}", "wb") as dst:
-#                 dst.write(src.read())
+output_bucket = "quakeflow_dataset"
+output_folder = "NCEDC/FDSNstationXML"  # network/network.station.xml
 
 
 # %%
-def parse_inventory_csv(inventory):
-    channel_list = []
-    for network in inventory:
-        for station in network:
-            for channel in station:
-                if channel.sensor is None:
-                    sensor_description = ""
-                else:
-                    sensor_description = channel.sensor.description
-                channel_list.append(
-                    {
-                        "network": network.code,
-                        "station": station.code,
-                        "location": channel.location_code,
-                        "instrument": channel.code[:-1],
-                        "component": channel.code[-1],
-                        "channel": channel.code,
-                        "longitude": channel.longitude,
-                        "latitude": channel.latitude,
-                        "elevation_m": channel.elevation,
-                        "local_depth_m": channel.depth,
-                        "depth_km": round(-channel.elevation / 1000, 4),
-                        # "depth_km": channel.depth,
-                        "begin_time": (
-                            channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.start_date is not None
-                            else None
-                        ),
-                        "end_time": (
-                            channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
-                            if channel.end_date is not None
-                            else None
-                        ),
-                        "azimuth": channel.azimuth,
-                        "dip": channel.dip,
-                        "sensitivity": (
-                            channel.response.instrument_sensitivity.value
-                            if channel.response.instrument_sensitivity
-                            else None
-                        ),
-                        "site": station.site.name,
-                        "sensor": sensor_description,
-                    }
-                )
-    channel_list = pd.DataFrame(channel_list)
+def copy_single_file(xml_file, overwrite=False):
+    """Copy a single XML file to GCS."""
+    input_fs = fsspec.filesystem("https")
+    output_fs = fsspec.filesystem(output_protocol, token=output_token)
 
-    print(f"Parse {len(channel_list)} channels into csv")
+    filename = Path(xml_file).name
+    # Extract network and station from filename (e.g., BK.BRK.xml -> network=BK, station=BRK)
+    parts = filename.replace(".xml", "").split(".")
+    network, station = parts[0], parts[1]
+    output_path = f"{output_bucket}/{output_folder}/{network}/{network}.{station}.xml"
 
-    return channel_list
+    if not overwrite and output_fs.exists(output_path):
+        return None
+
+    with input_fs.open(xml_file, "rb") as src:
+        output_fs.makedirs(f"{output_bucket}/{output_folder}/{network}", exist_ok=True)
+        with output_fs.open(output_path, "wb") as dst:
+            dst.write(src.read())
+
+    return f"{network}.{station}.xml"
 
 
-# %%
-inv = obspy.Inventory()
-for network in input_fs.glob(f"{station_path}/*.info"):
-    network_name = network.split("/")[-1]
-    if network_name in ["broadband.info", "BARD.info", "CISN.info"]:
-        continue
-    print(f"Parse {network}")
-    network_code = network.split("/")[-1].split(".")[0]
-    for xml in tqdm(input_fs.glob(f"{network}/{network_code}.FDSN.xml/{network_code}.*.xml")):
-        with input_fs.open(xml) as f:
-            inv += obspy.read_inventory(f)
+def copy_xml_to_gcs(overwrite=False, max_workers=16):
+    """Copy FDSN station XML files from NCEDC FTP to Google Cloud Storage."""
+    input_fs = fsspec.filesystem("https")
 
-# %%
-stations = parse_inventory_csv(inv)
-if not os.path.exists("dataset"):
-    os.makedirs("dataset")
-stations.to_csv("dataset/stations.csv", index=False)
-with output_fs.open(f"{output_bucket}/stations.csv", "wb") as f:
-    stations.to_csv(f, index=False)
+    # List all network folders (*.info/)
+    network_folders = input_fs.ls(input_folder)
+    network_folders = [f["name"].rstrip("/") for f in network_folders if f["name"].rstrip("/").endswith(".info")]
 
-# # %%
-# for network, sta in stations.groupby("network"):
-#     print(network)
-#     with output_fs.open(f"{output_bucket}/station/{network}.csv", "wb") as f:
-#         sta.to_csv(f, index=False)
+    # Collect all files to copy
+    all_tasks = []
+    for network_folder in tqdm(network_folders, desc="Scanning networks"):
+        network = Path(network_folder).name.replace(".info", "")
+
+        fdsn_folder = f"{network_folder}/{network}.FDSN.xml"
+        if not input_fs.exists(fdsn_folder):
+            continue
+
+        xml_files = input_fs.ls(fdsn_folder)
+        xml_files = [f["name"] for f in xml_files if f["name"].endswith(".xml")]
+        all_tasks.extend(xml_files)
+
+    print(f"Found {len(all_tasks)} XML files to process")
+
+    # Copy files in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(copy_single_file, xml_file, overwrite): xml_file
+            for xml_file in all_tasks
+        }
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Copying files"):
+            future.result()
 
 
 # %%
-# # for network in station_path.glob("*.info"):
-# for network in glob(f"{station_path}/*.info"):
-#     network_name = network.split("/")[-1]
-#     if network_name in ["broadband.info", "BARD.info", "CISN.info"]:
-#         continue
-#     # if (root_path / "station" / f"{network.stem}.csv").exists():
-#     network_stem = network.split("/")[-1].split(".")[0]
-#     if os.path.exists(f"{result_path}/{network_stem}.csv"):
-#         print(f"Skip {network_stem}")
-#         # continue
-#     print(f"Parse {network_stem}")
-#     inv = obspy.Inventory()
-#     # for xml in (network / f"{network_stem}.FDSN.xml").glob(f"{network_stem}.*.xml"):
-#     for xml in glob(f"{network}/{network_stem}.FDSN.xml/{network_stem}.*.xml"):
-#         inv += obspy.read_inventory(xml)
-#     stations = parse_inventory_csv(inv)
-#     if len(stations) > 0:
-#         stations.to_csv(f"{result_path}/{network_stem}.csv", index=False)
-#         stations.to_csv(f"{result_path}/{network_stem}.csv", index=False)
+if __name__ == "__main__":
+    copy_xml_to_gcs(overwrite=True, max_workers=16)
+
+# %%

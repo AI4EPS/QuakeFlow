@@ -1,6 +1,5 @@
 # %%
 import os
-import sys
 
 import fsspec
 import pandas as pd
@@ -12,10 +11,14 @@ input_folder = "earthquake_catalogs/SCEC_DC"
 
 output_protocol = "gs"
 output_bucket = "quakeflow_dataset"
-output_folder = "SC/catalog"
+output_folder = "SCEDC/catalog"
 
 result_path = "dataset"
 os.makedirs(result_path, exist_ok=True)
+
+# Create filesystem objects once
+input_fs = fsspec.filesystem(input_protocol, anon=True)
+output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json"))
 
 # %%
 # Parse SCEDC fixed-width catalog format
@@ -102,8 +105,6 @@ def map_column_names(df):
     return df
 
 # %%
-input_fs = fsspec.filesystem(input_protocol, anon=True)
-output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json"))
 catalog_files = sorted(input_fs.glob(f"{input_bucket}/{input_folder}/*.catalog"), reverse=True)
 
 # %%
@@ -122,45 +123,51 @@ columns_to_keep = [
     'num_grams'
 ]
 
-## FIXME: HARD CODED FOR TESTING
-catalog_files = ["scedc-pds/earthquake_catalogs/SCEC_DC/2023.catalog"]
-for catalog_file in tqdm(catalog_files):
-
+def process_catalog_file(catalog_file):
+    """Process a single catalog file and save events by year/jday (local only)."""
     print(f"Processing {catalog_file}")
 
     with input_fs.open(f"{catalog_file}", 'r') as f:
         lines = f.readlines()
 
-    parsed_data = []
-    for line in lines:
-        parsed_line = parse_scedc_catalog_line(line)
-        if parsed_line:
-            parsed_data.append(parsed_line)
-    
+    parsed_data = [parse_scedc_catalog_line(line) for line in lines]
+    parsed_data = [p for p in parsed_data if p is not None]
+
     if not parsed_data:
         print(f"No valid data found in {catalog_file}")
-        continue
-    
+        return None
+
     df = pd.DataFrame(parsed_data)
     df = map_column_names(df)
 
+    # Vectorized datetime operations
     df["time"] = pd.to_datetime(df["time"])
     df["year"] = df["time"].dt.strftime("%Y")
     df["jday"] = df["time"].dt.strftime("%j")
-    df["time"] = df["time"].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%S.%f'))
-    df['event_id'] = df['event_id'].apply(lambda x: "ci" + x)
+    df["time"] = df["time"].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
+    df['event_id'] = "ci" + df['event_id'].astype(str)
 
-    for (year, jday), df in tqdm(df.groupby(["year", "jday"])):
-        if len(df) == 0:
+    for (year, jday), group_df in df.groupby(["year", "jday"]):
+        if len(group_df) == 0:
             continue
         os.makedirs(f"{result_path}/{year}/{jday}", exist_ok=True)
+        group_df[columns_to_keep].to_csv(f"{result_path}/{year}/{jday}/events.csv", index=False)
+    return catalog_file
 
-        df = df[columns_to_keep]
-        df.to_csv(f"{result_path}/{year}/{jday}/events.csv", index=False)
-        output_fs.put(
-            f"{result_path}/{year}/{jday}/events.csv",
-            f"{output_bucket}/{output_folder}/{year}/{jday}/events.csv",
-        )
+
+if __name__ == "__main__":
+    # Process all files locally first
+    for catalog_file in tqdm(catalog_files, desc="Processing catalogs"):
+        process_catalog_file(catalog_file)
+
+    # Upload year directories to GCS
+    print("Uploading to GCS...")
+    years = sorted(os.listdir(result_path))
+    for year in tqdm(years, desc="Uploading"):
+        year_path = f"{result_path}/{year}"
+        if os.path.isdir(year_path):
+            output_fs.put(year_path, f"{output_bucket}/{output_folder}/{year}", recursive=True)
+    print("Done!")
 
 # %%
 
