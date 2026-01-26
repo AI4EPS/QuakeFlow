@@ -56,36 +56,85 @@ output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.conf
 #       th: Thunder
 #       uk: Unknown type
 
+# %%
+# Standardized review status mapping
+REVIEW_STATUS_MAP = {
+    'A': 'automatic',
+    'F': 'finalized',
+    'H': 'human_reviewed',
+    'I': 'intermediate',
+}
+
+# Standardized magnitude type mapping (consistent with SCEDC)
+MAGNITUDE_TYPE_MAP = {
+    'a': 'amplitude',
+    'b': 'body_wave',
+    'd': 'duration',
+    'dl': 'low_gain_amplitude',
+    'e': 'energy',
+    'h': 'human_assigned',
+    'l': 'local',
+    'n': 'none',
+    'un': 'unknown',
+    'w': 'moment',
+}
+
+# Standardized event type mapping (consistent with SCEDC)
+EVENT_TYPE_MAP = {
+    'bc': 'building_collapse',
+    'eq': 'earthquake',
+    'ex': 'chemical_explosion',
+    'lp': 'long_period',
+    'ls': 'landslide',
+    'mi': 'meteor_impact',
+    'nt': 'nuclear_test',
+    'ot': 'other',
+    'qb': 'quarry_blast',
+    'rs': 'rockslide',
+    'sh': 'survey_shot',
+    'sn': 'sonic_boom',
+    'st': 'subnet_trigger',
+    'th': 'thunder',
+    'uk': 'unknown',
+}
+
 def map_column_names(df):
     column_mapping = {
         'id': 'event_id',
         'time': 'time',
-        'latitude': 'latitude', 
+        'latitude': 'latitude',
         'longitude': 'longitude',
         'depth': 'depth_km',
         'mag': 'magnitude',
         'magType': 'magnitude_type',
         'type': 'event_type',
-        'gap': 'azimuthal_gap',
-        'dmin': 'minimum_distance_km',
-        'rms': 'time_residual',
+        'gap': 'azimuthal_gap_deg',
+        'dmin': 'min_station_distance_deg',
+        'rms': 'rms_residual_sec',
         'horizontalError': 'horizontal_error_km',
-        'depthError': 'depth_error_km', 
+        'depthError': 'depth_error_km',
         'status': 'review_status',
         'nst': 'num_stations',
         'net': 'network',
         'updated': 'updated_time',
         'place': 'place',
         'magError': 'magnitude_error',
-        'magNst': 'magnitude_num_stations',
+        'magNst': 'num_magnitude_stations',
         'locationSource': 'location_source',
         'magSource': 'magnitude_source'
     }
-    
-    # Rename columns that exist in the dataframe
+
     existing_columns = {col: column_mapping[col] for col in df.columns if col in column_mapping}
     df = df.rename(columns=existing_columns)
-    
+
+    # Standardize categorical values to descriptive names
+    if 'review_status' in df.columns:
+        df['review_status'] = df['review_status'].map(REVIEW_STATUS_MAP).fillna(df['review_status'])
+    if 'magnitude_type' in df.columns:
+        df['magnitude_type'] = df['magnitude_type'].map(MAGNITUDE_TYPE_MAP).fillna(df['magnitude_type'])
+    if 'event_type' in df.columns:
+        df['event_type'] = df['event_type'].map(EVENT_TYPE_MAP).fillna(df['event_type'])
+
     return df
 
 # %%
@@ -93,20 +142,23 @@ csv_files = sorted(input_fs.glob(f"{input_bucket}/{input_folder}/*.ehpcsv"), rev
 
 # %%
 columns_to_keep = [
-        'event_id',
-        'time',
-        'latitude', 
-        'longitude',
-        'depth_km',
-        'magnitude',
-        'magnitude_type',
-        'event_type',
-        'azimuthal_gap',
-        'minimum_distance_km',
-        'time_residual',
-        'horizontal_error_km',
-        'depth_error_km', 
-        'review_status',
+    # Core fields (consistent with SCEDC)
+    'event_id',
+    'time',
+    'latitude',
+    'longitude',
+    'depth_km',
+    'magnitude',
+    'magnitude_type',
+    'event_type',
+    # NCEDC-specific fields
+    'review_status',
+    'num_stations',
+    'azimuthal_gap_deg',
+    'min_station_distance_deg',
+    'rms_residual_sec',
+    'horizontal_error_km',
+    'depth_error_km',
 ]
 
 def process_catalog_file(csv_file):
