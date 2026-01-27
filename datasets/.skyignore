@@ -1,6 +1,11 @@
-NCEDC/catalog
-NCEDC/dataset
-NCEDC/mseed
-SCEDC/catalog
-SCEDC/dataset
-SCEDC/mseed
+NCEDC/catalog/
+NCEDC/dataset/
+NCEDC/mseed/
+SCEDC/catalog/
+SCEDC/dataset/
+SCEDC/mseed/
+figures/
+tests/
+.venv/
+.claude/
+__pycache__

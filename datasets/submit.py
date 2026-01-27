@@ -1,132 +1,128 @@
+"""
+Submit cut_event_parquet.py jobs to SkyPilot - batched by day blocks.
+
+Usage:
+    python submit.py                              # Submit all pending jobs
+    python submit.py --dry_run                    # Preview jobs
+    python submit.py --regions SC --year 2024    # Specific region/year
+    python submit.py --batch_size 30             # Days per job (default: 30)
+"""
 import argparse
 import json
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import fsspec
 import sky
-from tqdm import tqdm
-import pandas as pd
 
-###### Hardcoded #######
-token_json = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
-with open(token_json, "r") as fp:
-    token = json.load(fp)
-fs = fsspec.filesystem("gs", token=token)
-###### Hardcoded #######
+BUCKET = "quakeflow_dataset"
+CREDENTIALS = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_nodes", type=int, default=16)
-    parser.add_argument("--region", type=str, default="NC")
-    return parser.parse_args()
+def get_pending_days(region: str, year: int, fs) -> list:
+    """Return days that have mseed data but haven't been processed yet."""
+    folder = f"{'SC' if region == 'SC' else 'NC'}EDC"
+
+    # Get days with available mseed data
+    available = set()
+    try:
+        for f in fs.ls(f"{BUCKET}/{folder}/mseed/{year}/"):
+            day = int(f.split("/")[-1].replace(".txt", ""))
+            available.add(day)
+    except Exception:
+        return []
+
+    # Get already processed days
+    done = set()
+    try:
+        for f in fs.glob(f"{BUCKET}/{folder}/dataset/{year:04d}/*.parquet"):
+            done.add(int(f.split("/")[-1].replace(".parquet", "")))
+    except Exception:
+        pass
+
+    return sorted(d for d in available if d not in done)
 
 
-args = parse_args()
-NUM_NODES = args.num_nodes
-REGION = args.region
+def batch(items: list, size: int) -> list:
+    return [items[i:i + size] for i in range(0, len(items), size)]
 
-task = sky.Task(
-    name=f"cut-event",
-    setup="""
-echo "Begin setup."                                                           
-echo export WANDB_API_KEY=$WANDB_API_KEY >> ~/.bashrc
-pip install h5py tqdm wandb pandas scipy numpy==1.26.4
-pip install fsspec gcsfs s3fs                                                   
-pip install obspy pyproj
-""",
-    run="""
-num_nodes=`echo "$SKYPILOT_NODE_IPS" | wc -l`
-master_addr=`echo "$SKYPILOT_NODE_IPS" | head -n1`
-if [ "$SKYPILOT_NODE_RANK" == "0" ]; then
-    ls -al /opt
-    ls -al /data
-    ls -al ./
-fi
-echo "Downloading waveforms on (node_rank, num_node) = ($NODE_RANK, $NUM_NODE)"
-python cut_event.py --num_node $NUM_NODE --node_rank $NODE_RANK --region $REGION
-""",
-    workdir=".",
-    num_nodes=1,
-    envs={"NUM_NODE": NUM_NODES, "NODE_RANK": 0, "REGION": REGION},
-)
-task.set_resources(
-    sky.Resources(
+
+def make_task(region: str, year: int, days: list) -> sky.Task:
+    days_arg = ",".join(str(d) for d in days)
+    task = sky.Task(
+        name=f"{region.lower()}-{year}-{days[0]:03d}-{days[-1]:03d}",
+        setup="pip install -q h5py tqdm pandas scipy 'numpy<2' fsspec gcsfs s3fs obspy pyproj pyarrow",
+        run=f"python cut_event_parquet.py --region {region} --year {year} --days \"{days_arg}\"",
+        workdir=".",
+    )
+    task.set_resources(sky.Resources(
         cloud=sky.GCP(),
-        region="us-west1",  # GCP
-        # region="us-west-2",  # AWS
-        accelerators=None,
-        cpus=4,
-        disk_tier="low",
-        disk_size=10,  # GB
-        memory=None,
+        region="us-west1",
+        cpus="1+",
+        memory="8+",
+        disk_size=20,
         use_spot=True,
-    ),
-)
-
-jobs = []
-try:
-    sky.status(refresh="AUTO")
-except Exception as e:
-    print(e)
-
-task.update_envs({"NODE_RANK": 0, "NUM_NODES": 1})
-job_id = sky.launch(task, cluster_name="cut-event", fast=True)
-status = sky.stream_and_get(job_id)
-print(f"Job ID: {job_id}, status: {status}")
-
-raise
-
-# job_idx = 1
-# requests_ids = []
-# for NODE_RANK in range(NUM_NODES):
-
-#     task.update_envs({"NODE_RANK": NODE_RANK})
-#     cluster_name = f"cut-event-{NODE_RANK:03d}"
-
-#     requests_ids.append(sky.jobs.launch(task, name=f"{cluster_name}"))
-
-#     print(f"Running cut event on (rank={NODE_RANK}, num_node={NUM_NODES}) of {cluster_name}")
-
-#     job_idx += 1
-
-# for request_id in requests_ids:
-#     print(sky.get(request_id))
-
-# with ThreadPoolExecutor(max_workers=NUM_NODES) as executor:
-#     for NODE_RANK in range(NUM_NODES):
-
-#         task.update_envs({"NODE_RANK": NODE_RANK})
-#         cluster_name = f"download-{NODE_RANK:03d}"
-
-# status = sky.status(cluster_names=[f"{cluster_name}"], refresh="AUTO")
-# print(f"{status = }")
-# if len(status) > 0:
-#     if status[0]["status"].value == "INIT":
-#         sky.down(f"{cluster_name}")
-#     if (not status[0]["to_down"]) and (not status[0]["status"].value == "INIT"):
-#         sky.autostop(f"{cluster_name}", idle_minutes=10, down=True)
-#     print(f"Cluster {cluster_name}/{NUM_NODES} already exists.")
-#     continue
-
-# status = sky.status(cluster_names=[f"{cluster_name}"])
-# if len(status) == 0:
-#     print(f"Launching cluster {cluster_name}/{NUM_NODES}...")
-#     jobs.append(
-#         executor.submit(
-#             sky.launch,
-#             task,
-#             cluster_name=f"{cluster_name}",
-#             idle_minutes_to_autostop=10,
-#             down=True,
-#             detach_setup=True,
-#             detach_run=True,
-#         )
-#     )
-#     time.sleep(10)
+    ))
+    return task
 
 
-# for job in jobs:
-#     print(job.result())
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--regions", nargs="+", default=["NC", "SC"], choices=["NC", "SC"])
+    parser.add_argument("--start_year", type=int, default=1984)
+    parser.add_argument("--end_year", type=int, default=2024)
+    parser.add_argument("--year", type=int, help="Process single year")
+    parser.add_argument("--batch_size", type=int, default=30, help="Days per job")
+    parser.add_argument("--max_jobs", type=int)
+    parser.add_argument("--dry_run", action="store_true")
+    args = parser.parse_args()
+
+    years = [args.year] if args.year else range(args.start_year, args.end_year + 1)
+    fs = fsspec.filesystem("gs", token=json.load(open(CREDENTIALS)))
+
+    # Collect pending jobs (batched by days)
+    jobs = []
+    for region in args.regions:
+        for year in years:
+            pending = get_pending_days(region, year, fs)
+            for day_batch in batch(pending, args.batch_size):
+                jobs.append((region, year, day_batch))
+
+    if args.max_jobs:
+        jobs = jobs[:args.max_jobs]
+
+    print(f"Total jobs: {len(jobs)} ({args.batch_size} days/job)")
+
+    if args.dry_run or not jobs:
+        for r, y, days in jobs[:20]:
+            print(f"  {r} {y} days {days[0]:03d}-{days[-1]:03d} ({len(days)} days)")
+        if len(jobs) > 20:
+            print(f"  ... and {len(jobs) - 20} more")
+        return
+
+    # Submit all jobs asynchronously first
+    request_ids = []
+    for region, year, days in jobs:
+        try:
+            name = f"{region.lower()}-{year}-{days[0]:03d}-{days[-1]:03d}"
+            print(f"Submitting job {name}...")
+            request_id = sky.jobs.launch(make_task(region, year, days), name=name)
+            request_ids.append((request_id, region, year, days))
+            print(f"  Request ID: {request_id}")
+            time.sleep(10)  # Avoid overwhelming local CPU
+        except Exception as e:
+            print(f"Failed to submit {region} {year} days {days[0]:03d}-{days[-1]:03d}: {e}")
+
+    print(f"\nSubmitted {len(request_ids)} requests. Use 'sky jobs queue' to check status.")
+
+    # Wait for submissions to complete
+    for request_id, region, year, days in request_ids:
+        try:
+            job_id, handle = sky.get(request_id)
+            print(f"Confirmed {region} {year} days {days[0]:03d}-{days[-1]:03d} -> job_id={job_id}")
+        except Exception as e:
+            print(f"Failed {region} {year} days {days[0]:03d}-{days[-1]:03d}: {e}")
+
+
+if __name__ == "__main__":
+    main()

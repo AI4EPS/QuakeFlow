@@ -478,9 +478,10 @@ def parse_args():
     parser.add_argument("--region", type=str, default="SC")
     parser.add_argument("--root_path", type=str, default="./")
     parser.add_argument("--bucket", type=str, default="quakeflow_dataset")
+    parser.add_argument("--year", type=int, default=2024)
+    parser.add_argument("--days", type=str, help="Comma-separated days to process (e.g., '1,2,3' or '1-30')")
     parser.add_argument("--num_nodes", type=int, default=1)
     parser.add_argument("--node_rank", type=int, default=0)
-    parser.add_argument("--year", type=int, default=2024)
     return parser.parse_args()
 
 
@@ -495,24 +496,22 @@ if __name__ == "__main__":
     bucket = args.bucket
     year = args.year
 
-    num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
-    jdays = list(range(1, num_jday + 1))
-    jdays = np.array_split(jdays, args.num_nodes)[args.node_rank]
-    jdays = [f"{year}.{d:03d}" for d in jdays]
+    # Determine which days to process
+    if args.days:
+        # Parse comma-separated days (e.g., "1,2,3,10,11,12")
+        day_nums = [int(d.strip()) for d in args.days.split(",")]
+    else:
+        # Fall back to node-based splitting for backward compatibility
+        num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
+        all_days = list(range(1, num_jday + 1))
+        day_nums = list(np.array_split(all_days, args.num_nodes)[args.node_rank])
 
+    jdays = [f"{year}.{d:03d}" for d in day_nums]
     print(f"Processing {len(jdays)} days: {jdays[0]} to {jdays[-1]}")
 
     config = {"region": region}
-
-    if protocol == "file":
-        data_path = f"{region}EDC/dataset"
-        result_path = f"{region}EDC/dataset"
-    else:
-        data_path = f"{region}EDC/catalog"
-        result_path = f"{region}EDC/dataset"
+    data_path = f"{region}EDC/catalog"
+    result_path = f"{region}EDC/dataset"
 
     os.makedirs(f"{root_path}/{result_path}", exist_ok=True)
-
-    # FIXME: Testing
-    jdays = ["2024.001"]
     cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token)
