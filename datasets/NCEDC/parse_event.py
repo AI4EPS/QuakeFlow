@@ -60,9 +60,9 @@ output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.conf
 # Standardized review status mapping
 REVIEW_STATUS_MAP = {
     'A': 'automatic',
-    'F': 'finalized',
-    'H': 'human_reviewed',
-    'I': 'intermediate',
+    'F': 'reviewed',
+    'H': 'reviewed',
+    'I': 'automatic',
 }
 
 # Standardized magnitude type mapping (consistent with SCEDC)

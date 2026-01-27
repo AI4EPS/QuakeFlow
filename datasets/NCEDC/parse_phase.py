@@ -226,7 +226,9 @@ def parse_phase_line(line):
             )
             tmp += timedelta(seconds=p_phase["second_of_p_arrival"])
             p_phase["phase_time"] = tmp.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        p_phase["phase_polarity"] = p_phase["p_polarity"]
+        # Normalize polarity: U (up/compressional), D (down/dilatational), or empty
+        polarity = p_phase["p_polarity"].strip()
+        p_phase["phase_polarity"] = polarity if polarity in ("U", "D") else ""
         p_remark_stripped = p_phase["p_remark"].strip()
         p_phase["phase_remark"] = p_remark_stripped[0].lower() if p_remark_stripped else ""
         p_weight_code = p_phase["p_weight_code"].strip()
@@ -358,11 +360,12 @@ def process(file):
     phases["phase_polarity"] = phases["phase_polarity"].str.strip()
     phases["azimuth"] = phases["azimuth"].str.strip()
     phases["takeoff_angle"] = phases["takeoff_angle"].str.strip()
-    phases = phases[phases["distance_km"] != ""]
+    phases["distance_km"] = pd.to_numeric(phases["distance_km"], errors="coerce")
     phases["time_residual"] = pd.to_numeric(phases["time_residual"], errors="coerce")
     phases["phase_weight"] = pd.to_numeric(phases["phase_weight"], errors="coerce")
-    phases = phases[phases["time_residual"].abs() < 9.99]
-    phases = phases[~((phases["phase_weight"] == 0) & (phases["time_residual"] == 0))]
+    # phases = phases[phases["distance_km"] != ""]
+    # phases = phases[phases["time_residual"].abs() < 9.99]
+    # phases = phases[~((phases["phase_weight"] == 0) & (phases["time_residual"] == 0))]
     phases["location"] = phases["location"].replace("--", "")
     phases["phase_remark"] = phases["phase_remark"].replace(["p", "s"], "")
 

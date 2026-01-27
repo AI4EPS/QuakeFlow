@@ -176,3 +176,6 @@ slurm/*/*.xml
 examples/california/cctorch_figures*/
 
 *.nfs*
+*.txt
+datasets/NCEDC/catalog/
+datasets/SCEDC/catalog/

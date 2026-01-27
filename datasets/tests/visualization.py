@@ -1,10 +1,35 @@
 # %%
 import argparse
+import json
 import os
 
+import fsspec
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Constants
+GCS_CREDENTIALS_PATH = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+DEFAULT_BUCKET = "quakeflow_dataset"
+
+
+def open_h5_file(h5_path, mode="r"):
+    """Open an HDF5 file from local path or Google Cloud Storage.
+
+    Args:
+        h5_path: Local path or GCS path (gs://bucket/path/to/file.h5)
+        mode: File mode ('r' for read)
+
+    Returns:
+        h5py.File object
+    """
+    if h5_path.startswith("gs://"):
+        with open(GCS_CREDENTIALS_PATH, "r") as f:
+            token = json.load(f)
+        fs = fsspec.filesystem("gs", token=token)
+        return h5py.File(fs.open(h5_path, "rb"), mode)
+    else:
+        return h5py.File(h5_path, mode)
 
 
 def normalize_trace(trace):
@@ -27,7 +52,7 @@ def plot_waveform(h5_file, event_id=None, station_id=None, output_dir="figures")
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    with h5py.File(h5_file, "r") as fp:
+    with open_h5_file(h5_file, "r") as fp:
         if event_id is None:
             event_id = list(fp.keys())[0]
 
@@ -175,7 +200,7 @@ def plot_waveform(h5_file, event_id=None, station_id=None, output_dir="figures")
 
 def list_events(h5_file, max_events=10):
     """List events and their stations in the HDF5 file."""
-    with h5py.File(h5_file, "r") as fp:
+    with open_h5_file(h5_file, "r") as fp:
         events = list(fp.keys())
         print(f"Total events: {len(events)}")
         print("-" * 50)
@@ -196,9 +221,28 @@ def list_events(h5_file, max_events=10):
             print(f"... and {len(events) - max_events} more events")
 
 
+def build_gcs_path(region, year, jday, bucket=DEFAULT_BUCKET):
+    """Build GCS path for waveform.h5 file.
+
+    Args:
+        region: 'SC' or 'NC'
+        year: Year (e.g., 2025)
+        jday: Julian day (e.g., 1)
+        bucket: GCS bucket name
+
+    Returns:
+        GCS path string (gs://bucket/path/waveform.h5)
+    """
+    return f"gs://{bucket}/{region}EDC/dataset/{year:04d}/{jday:03d}/waveform.h5"
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Visualize waveforms from HDF5 file")
-    parser.add_argument("h5_file", type=str, help="Path to the waveform.h5 file")
+    parser.add_argument("--h5_file", type=str, default=None, help="Path to the waveform.h5 file (local or gs://)")
+    parser.add_argument("--region", type=str, default=None, help="Region code (SC or NC) for cloud path")
+    parser.add_argument("--year", type=int, default=None, help="Year for cloud path")
+    parser.add_argument("--jday", type=int, default=None, help="Julian day for cloud path")
+    parser.add_argument("--bucket", type=str, default=DEFAULT_BUCKET, help="GCS bucket name")
     parser.add_argument("--event_id", type=str, default=None, help="Specific event ID to plot")
     parser.add_argument("--station_id", type=str, default=None, help="Specific station ID to plot")
     parser.add_argument("--output_dir", type=str, default="figures", help="Output directory for figures")
@@ -213,13 +257,23 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    # Determine h5_file path
+    if args.h5_file:
+        h5_file = args.h5_file
+    elif args.region and args.year and args.jday:
+        h5_file = build_gcs_path(args.region, args.year, args.jday, args.bucket)
+        print(f"Using cloud path: {h5_file}")
+    else:
+        print("Error: Provide either --h5_file or (--region, --year, --jday)")
+        exit(1)
+
     if args.list:
-        list_events(args.h5_file, args.max_events)
+        list_events(h5_file, args.max_events)
     elif args.plot_all:
-        with h5py.File(args.h5_file, "r") as fp:
+        with open_h5_file(h5_file, "r") as fp:
             events = list(fp.keys())[:args.max_events]
 
         for event_id in events:
-            plot_waveform(args.h5_file, event_id=event_id, output_dir=args.output_dir)
+            plot_waveform(h5_file, event_id=event_id, output_dir=args.output_dir)
     else:
-        plot_waveform(args.h5_file, event_id=args.event_id, station_id=args.station_id, output_dir=args.output_dir)
+        plot_waveform(h5_file, event_id=args.event_id, station_id=args.station_id, output_dir=args.output_dir)

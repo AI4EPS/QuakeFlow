@@ -3,6 +3,7 @@
 # https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal/SouthernCalifornia_1981-2011_focalmec_Format.pdf
 
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import fsspec
 import pandas as pd
@@ -10,14 +11,12 @@ from tqdm import tqdm
 
 input_url = "https://service.scedc.caltech.edu/ftp/catalogs/hauksson/Socal_focal"
 input_files = ["YSH_2010.hash"] + [f"sc{x}_hash_ABCD_so.focmec.scedc" for x in range(2011, 2025)]
-## FIXME: HARD CODED FOR TESTING
-input_files = ["sc2023_hash_ABCD_so.focmec.scedc"]
 
 output_protocol = "gs"
 output_bucket = "quakeflow_dataset"
-output_folder = "SC/catalog"
+output_folder = "SCEDC/catalog"
 
-result_path = "dataset"
+result_path = "catalog"
 os.makedirs(result_path, exist_ok=True)
 
 
@@ -102,8 +101,6 @@ def parse_focal_mechanism_file(file_path):
 
 
 # %%
-output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json"))
-
 columns_to_keep = [
     'event_id',
     'time',
@@ -113,7 +110,7 @@ columns_to_keep = [
     'magnitude',
     'strike',
     'dip',
-    'rake', 
+    'rake',
     'num_first_motions',
     'first_motion_misfit',
     'num_sp_ratios',
@@ -123,31 +120,64 @@ columns_to_keep = [
     'quality',
 ]
 
-for input_file in tqdm(input_files):
+
+def process_focal_mechanism_file(input_file):
+    """Process a single focal mechanism file and return list of (year, jday, df) tuples."""
     file_path = f"{input_url}/{input_file}"
-    print(f"Processing {file_path}")
-
     df = parse_focal_mechanism_file(file_path)
-
     if len(df) == 0:
-        print(f"No valid data found in {input_file}")
-        continue
+        return []
 
-    df["time"] = pd.to_datetime(df["time"])
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    df = df.dropna(subset=["time"])  # Drop rows with invalid time
+    if len(df) == 0:
+        return []
+
     df["year"] = df["time"].dt.strftime("%Y")
     df["jday"] = df["time"].dt.strftime("%j")
-    df['time'] = df['time'].apply(lambda x: x.strftime('%Y-%m-%dT%H:%M:%S.%f'))
+    df['time'] = df['time'].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
-    for (year, jday), group_df in tqdm(df.groupby(["year", "jday"]), leave=False):
-        if len(group_df) == 0:
-            continue
-        os.makedirs(f"{result_path}/{year}/{jday}", exist_ok=True)
+    results = []
+    for (year, jday), group_df in df.groupby(["year", "jday"]):
+        if len(group_df) > 0:
+            results.append((year, jday, group_df[columns_to_keep]))
+    return results
 
-        group_df = group_df[columns_to_keep]
-        group_df.to_csv(f"{result_path}/{year}/{jday}/focal_mechanisms.csv", index=False)
-        output_fs.put(
-            f"{result_path}/{year}/{jday}/focal_mechanisms.csv",
-            f"{output_bucket}/{output_folder}/{year}/{jday}/focal_mechanisms.csv",
-        )
+
+# %%
+if __name__ == "__main__":
+    output_fs = fsspec.filesystem(output_protocol, token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json"))
+
+    print(f"Processing {len(input_files)} focal mechanism files")
+
+    # Process files in parallel
+    all_results = {}  # (year, jday) -> list of dataframes
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(process_focal_mechanism_file, f): f for f in input_files}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Parsing"):
+            for year, jday, df in future.result():
+                key = (year, jday)
+                if key not in all_results:
+                    all_results[key] = []
+                all_results[key].append(df)
+
+    # Merge and save locally
+    local_files = []
+    for (year, jday), dfs in tqdm(all_results.items(), desc="Saving"):
+        merged = pd.concat(dfs, ignore_index=True).drop_duplicates(subset=['event_id'])
+        local_path = f"{result_path}/{year}/{jday}"
+        os.makedirs(local_path, exist_ok=True)
+        csv_path = f"{local_path}/focal_mechanisms.csv"
+        merged.to_csv(csv_path, index=False)
+        local_files.append((csv_path, f"{output_bucket}/{output_folder}/{year}/{jday}/focal_mechanisms.csv"))
+
+    # Parallel upload
+    def upload_file(args):
+        local, remote = args
+        output_fs.put(local, remote)
+
+    print(f"Uploading {len(local_files)} files...")
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        list(tqdm(executor.map(upload_file, local_files), total=len(local_files), desc="Uploading"))
 
 # %%

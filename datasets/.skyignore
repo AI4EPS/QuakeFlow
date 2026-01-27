@@ -1,2 +1,6 @@
-NCEDC
-SCEDC
+NCEDC/catalog
+NCEDC/dataset
+NCEDC/mseed
+SCEDC/catalog
+SCEDC/dataset
+SCEDC/mseed

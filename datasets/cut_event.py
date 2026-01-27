@@ -3,21 +3,25 @@ import argparse
 import json
 import multiprocessing
 import os
-import sys
 import threading
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 
 import fsspec
 import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 import obspy
 import pandas as pd
 from tqdm import tqdm
 
 np.random.seed(42)
+
+# Constants
+GCS_CREDENTIALS_PATH = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+SAMPLING_RATE = 100.0
+TIME_BEFORE = 40.96  # seconds before first arrival
+TIME_AFTER = 40.96 * 2  # seconds after first arrival
+NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
 
 
 def set_attr(obj, key, value):
@@ -70,42 +74,54 @@ def calc_snr(data, index0, noise_window=300, signal_window=300, gap_window=50):
     return snr
 
 
-def flip_polarity(phase_polarity, channel_dip):
-    """Flip polarity based on channel dip angle.
+def set_phase_attrs(ds, phase_prefix, pick_df):
+    """Set phase attributes for P or S picks on a dataset.
 
     Args:
-        phase_polarity: List of polarity values ('U', 'D', '+', '-', etc.)
-        channel_dip: List of dip angles for each pick
-
-    Returns:
-        List of corrected polarity values
+        ds: HDF5 dataset to set attributes on
+        phase_prefix: 'p' or 's' for the attribute prefix
+        pick_df: DataFrame containing the pick data
     """
-    pol_out = []
-    for pol, dip in zip(phase_polarity, channel_dip):
-        if pol == "U" or pol == "+":
-            if dip == -90:
-                pol_out.append("U")
-            elif dip == 90:
-                pol_out.append("D")
-            else:
-                pol_out.append("N")
-        elif pol == "D" or pol == "-":
-            if dip == -90:
-                pol_out.append("D")
-            elif dip == 90:
-                pol_out.append("U")
-            else:
-                pol_out.append("N")
+    if len(pick_df) == 0:
+        return
+
+    set_attr(ds, f"{phase_prefix}_phase_time", pick_df["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f"))
+    set_attr(ds, f"{phase_prefix}_phase_index", pick_df["phase_index"].values[0])
+    set_attr(ds, f"{phase_prefix}_phase_score", pick_df["phase_score"].values[0])
+    set_attr(ds, f"{phase_prefix}_phase_polarity", pick_df["phase_polarity"].values[0])
+    set_attr(ds, f"{phase_prefix}_phase_remark", pick_df["phase_remark"].values[0])
+
+    optional_cols = [
+        ("time_residual", f"{phase_prefix}_time_residual"),
+        ("phase_weight", f"{phase_prefix}_phase_weight"),
+        ("review_status", f"{phase_prefix}_phase_status"),
+    ]
+    for col, attr_name in optional_cols:
+        if col in pick_df.columns:
+            set_attr(ds, attr_name, pick_df[col].values[0])
+
+
+def set_optional_attrs(ds, df, column_mappings):
+    """Set optional attributes from DataFrame columns.
+
+    Args:
+        ds: HDF5 dataset to set attributes on
+        df: DataFrame containing the data
+        column_mappings: List of (column_name, attr_name) tuples, or just column names
+    """
+    for mapping in column_mappings:
+        if isinstance(mapping, tuple):
+            col, attr_name = mapping
         else:
-            pol_out.append("N")
-    return pol_out
+            col = attr_name = mapping
+        if col in df.columns:
+            set_attr(ds, attr_name, df[col].values)
 
 
 # %%
 def extract_template_numpy(
     picks_group,
     events,
-    picks,
     mechanisms,
     config,
     fp,
@@ -114,12 +130,12 @@ def extract_template_numpy(
 
     region = config["region"]
 
-    for picks in picks_group:
+    for picks_df in picks_group:
 
         waveforms_dict = {}
 
-        # for _, pick in picks.iterrows():
-        for key, picks_ in picks.groupby(["event_id", "network", "station", "location", "instrument"]):
+        # for _, pick in picks_df.iterrows():
+        for key, picks_ in picks_df.groupby(["event_id", "network", "station", "location", "instrument"]):
 
             event_id, network, station, location, instrument = key
             station_id = f"{network}.{station}.{location}.{instrument}"
@@ -142,7 +158,7 @@ def extract_template_numpy(
                 
             event = events.loc[event_id]
 
-            mseed_3c = pick["mseed_3c"].split(",")
+            mseed_3c = pick["mseed_3c"].split("|")
 
             if pick["mseed_3c"] not in waveforms_dict:
                 stream_3c = obspy.Stream()
@@ -161,33 +177,38 @@ def extract_template_numpy(
                                     trace.resample(config["sampling_rate"])
                             stream_3c.append(trace)
                     except Exception as err:
-                        print(f"Error reading: {err}")
+                        print(f"Error reading mseed: {err} on {c}")
                         continue
 
                 try:
-                    fs = fsspec.filesystem(
-                        "gs", token=os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
-                    )
+                    fs = fsspec.filesystem("gs", token=GCS_CREDENTIALS_PATH)
                     if region == "SC":
                         with fs.open(
-                            f"quakeflow_catalog/SC/FDSNstationXML/{network}/{network}_{station}.xml", "r"
+                            f"quakeflow_dataset/SCEDC/FDSNstationXML/{network}/{network}.{station}.xml", "r"
                         ) as f:
                             inv = obspy.read_inventory(f)
                     elif region == "NC":
                         with fs.open(
-                            f"quakeflow_catalog/NC/FDSNstationXML/{network}/{network}.{station}.xml", "r"
+                            f"quakeflow_dataset/NCEDC/FDSNstationXML/{network}/{network}.{station}.xml", "r"
                         ) as f:
                             inv = obspy.read_inventory(f)
                     else:
                         raise ValueError(f"Invalid region: {region}")
 
                 except Exception as err:
-                    print(f"Error reading: {err}")
+                    print(f"Error reading inventory: {err} on {network}.{station}.xml")
                     continue
 
-                stream_3c.remove_sensitivity(inv)
-                stream_3c.detrend("constant")
-                stream_3c.rotate("->ZNE", inventory=inv)
+                try:
+                    stream_3c.remove_sensitivity(inv)
+                    stream_3c.detrend("constant")
+                    stream_3c.rotate("->ZNE", inventory=inv)
+                except Exception as err:
+                    print(f"Error removing sensitivity: {err} on {pick['mseed_3c']}")
+                    continue
+
+                # Cache the processed stream for reuse
+                waveforms_dict[pick["mseed_3c"]] = stream_3c
 
             else:
                 stream_3c = waveforms_dict[pick["mseed_3c"]]
@@ -234,7 +255,6 @@ def extract_template_numpy(
                             "strike", "dip", "rake",
                             "num_first_motions", "first_motion_misfit",
                             "num_sp_ratios", "sp_ratio_misfit",
-                            "strike_uncertainty", "dip_uncertainty", "rake_uncertainty",
                             "plane1_uncertainty", "plane2_uncertainty", "quality",
                         ]
                         for key in mech_columns:
@@ -250,37 +270,14 @@ def extract_template_numpy(
                     #     value = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
                     set_attr(ds, key, value)
 
-                if len(p_pick) > 0:
-                    set_attr(ds, "p_phase_time", p_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f"))
-                    set_attr(ds, "p_phase_index", p_pick["phase_index"].values[0])
-                    set_attr(ds, "p_phase_score", p_pick["phase_score"].values[0])
-                    set_attr(ds, "p_phase_polarity", p_pick["phase_polarity"].values[0])
-                    set_attr(ds, "p_phase_remark", p_pick["phase_remark"].values[0])
-                    if "time_residual" in p_pick.columns:
-                        set_attr(ds, "p_time_residual", p_pick["time_residual"].values[0])
-                    if "phase_weight" in p_pick.columns:
-                        set_attr(ds, "p_phase_weight", p_pick["phase_weight"].values[0])
-                    if "review_status" in p_pick.columns:
-                        set_attr(ds, "p_phase_status", p_pick["review_status"].values[0])
-
-                if len(s_pick) > 0:
-                    set_attr(ds, "s_phase_time", s_pick["phase_time"].iloc[0].strftime("%Y-%m-%dT%H:%M:%S.%f"))
-                    set_attr(ds, "s_phase_index", s_pick["phase_index"].values[0])
-                    set_attr(ds, "s_phase_score", s_pick["phase_score"].values[0])
-                    set_attr(ds, "s_phase_polarity", s_pick["phase_polarity"].values[0])
-                    set_attr(ds, "s_phase_remark", s_pick["phase_remark"].values[0])
-                    if "time_residual" in s_pick.columns:
-                        set_attr(ds, "s_time_residual", s_pick["time_residual"].values[0])
-                    if "review_status" in s_pick.columns:
-                        set_attr(ds, "s_phase_status", s_pick["review_status"].values[0])
-                    if "phase_weight" in s_pick.columns:
-                        set_attr(ds, "s_phase_weight", s_pick["phase_weight"].values[0])
+                set_phase_attrs(ds, "p", p_pick)
+                set_phase_attrs(ds, "s", s_pick)
 
                 ds.attrs["unit"] = "micro m/s"
                 ds.attrs["component"] = "".join(component)
                 ds.attrs["snr"] = round(max(snr),3)
 
-                picks_in_window = picks[(picks["phase_time"] >= begin_time) & (picks["phase_time"] <= end_time)].copy()
+                picks_in_window = picks_df[(picks_df["phase_time"] >= begin_time) & (picks_df["phase_time"] <= end_time)].copy()
                 picks_in_window.sort_values(by="phase_time", inplace=True)
                 set_attr(ds, "event_id", picks_in_window["event_id"].values)
                 set_attr(ds, "phase_type", picks_in_window["phase_type"].values)
@@ -289,14 +286,16 @@ def extract_template_numpy(
                 set_attr(ds, "phase_score", picks_in_window["phase_score"].values)
                 set_attr(ds, "phase_polarity", picks_in_window["phase_polarity"].values)
                 set_attr(ds, "phase_remark", picks_in_window["phase_remark"].values)
-                if "time_residual" in picks_in_window.columns: 
-                    set_attr(ds, "time_residual", picks_in_window["time_residual"].values)
-                if "phase_weight" in picks_in_window.columns:
-                    set_attr(ds, "phase_weight", picks_in_window["phase_weight"].values)
-                if "review_status" in picks_in_window.columns:
-                    set_attr(ds, "phase_status", picks_in_window["review_status"].values)
-                # if "pick_component" in picks_in_window.columns:
-                #     set_attr(ds, "pick_component", picks_in_window["pick_component"].values)
+                set_optional_attrs(ds, picks_in_window, [
+                    "time_residual",
+                    "phase_weight",
+                    ("review_status", "phase_status"),
+                    "azimuth",
+                    "back_azimuth",
+                    "takeoff_angle",
+                ])
+
+    return 
 
 # %%
 def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token):
@@ -304,18 +303,10 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     # %%
     fs = fsspec.filesystem(protocol, token=token)
 
-    sampling_rate = 100.0
-    time_before = 40.96
-    time_after = 40.96 * 2
-
-    time_window = time_before + time_after
-    nt = int(round(time_window * sampling_rate))
-    assert nt == 4096 * 3
-
-    config["nt"] = nt
-    config["sampling_rate"] = sampling_rate
-    config["time_before"] = time_before
-    config["time_after"] = time_after
+    config["nt"] = NT
+    config["sampling_rate"] = SAMPLING_RATE
+    config["time_before"] = TIME_BEFORE
+    config["time_after"] = TIME_AFTER
 
     for jday in jdays:
         year, jday = jday.split(".")
@@ -363,9 +354,9 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         picks["phase_polarity"] = picks["phase_polarity"].fillna("").astype(str)
         picks["phase_remark"] = picks["phase_remark"].fillna("").astype(str)
         if "time_residual" in picks.columns:
-            picks["time_residual"] = picks["time_residual"].astype(float)
+            picks["time_residual"] = pd.to_numeric(picks["time_residual"], errors="coerce")
         if "phase_weight" in picks.columns:
-            picks["phase_weight"] = picks["phase_weight"].astype(float)
+            picks["phase_weight"] = pd.to_numeric(picks["phase_weight"], errors="coerce")
         if "review_status" in picks.columns:
             picks["review_status"] = picks["review_status"].fillna("").astype(str)
 
@@ -398,51 +389,46 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             print(f"No focal mechanisms file for {year:04d}/{jday:03d}")
 
         ############################# CLOUD #########################################
-        # Use separate filesystem for quakeflow_catalog bucket (contains mseed_list and station XML)
-        catalog_bucket = "quakeflow_catalog"
-        catalog_token_json = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
-        with open(catalog_token_json, "r") as fp:
-            catalog_token = json.load(fp)
-        catalog_fs = fsspec.filesystem(protocol="gs", token=catalog_token)
-        mseeds_df = []
-        for folder in [region]:
-            with catalog_fs.open(f"{catalog_bucket}/{folder}/mseed_list/{year}_3c.txt", "r") as f:
-                mseeds = f.readlines()
-            mseeds = [x.strip("\n") for x in mseeds]
-            mseeds = pd.DataFrame(mseeds, columns=["mseed_3c"])
-            if folder == "SC":
-                mseeds["fname"] = mseeds["mseed_3c"].apply(lambda x: x.split("/")[-1])
-                mseeds["network"] = mseeds["fname"].apply(lambda x: x[:2])
-                mseeds["station"] = mseeds["fname"].apply(lambda x: x[2:7].strip("_"))
-                mseeds["instrument"] = mseeds["fname"].apply(lambda x: x[7:9])
-                mseeds["location"] = mseeds["fname"].apply(lambda x: x[10:12].strip("_"))
-                mseeds["year"] = mseeds["fname"].apply(lambda x: x[13:17])
-                mseeds["jday"] = mseeds["fname"].apply(lambda x: x[17:20])
-            if folder == "NC":
-                mseeds["fname"] = mseeds["mseed_3c"].apply(lambda x: x.split("/")[-1])
-                mseeds["network"] = mseeds["fname"].apply(lambda x: x.split(".")[1])
-                mseeds["station"] = mseeds["fname"].apply(lambda x: x.split(".")[0])
-                mseeds["instrument"] = mseeds["fname"].apply(lambda x: x.split(".")[2][:-1])
-                mseeds["location"] = mseeds["fname"].apply(lambda x: x.split(".")[3])
-                mseeds["year"] = mseeds["fname"].apply(lambda x: x.split(".")[5])
-                mseeds["jday"] = mseeds["fname"].apply(lambda x: x.split(".")[6])
-            mseeds_df.append(mseeds)
-        mseeds_df = pd.concat(mseeds_df)
+        # Use separate filesystem for quakeflow_dataset bucket (contains mseed list and station XML)
+        dataset_bucket = "quakeflow_dataset"
+        dataset_token_json = GCS_CREDENTIALS_PATH
+        with open(dataset_token_json, "r") as fp:
+            dataset_token = json.load(fp)
+        dataset_fs = fsspec.filesystem(protocol="gs", token=dataset_token)
+
+        # Map region to folder name
+        region_folder = "SCEDC" if region == "SC" else "NCEDC"
+
+        # Read mseed list for this specific jday (new format: {year}/{jday}.txt)
+        with dataset_fs.open(f"{dataset_bucket}/{region_folder}/mseed/{year}/{jday:03d}.txt", "r") as f:
+            mseeds = f.readlines()
+        mseeds = [x.strip("\n") for x in mseeds]
+        mseeds_df = pd.DataFrame(mseeds, columns=["mseed_3c"])
+
+        # Parse first file in each 3c group to extract metadata
+        # mseed_3c format: "s3://bucket/path/file1.ms|s3://bucket/path/file2.ms|..."
+        mseeds_df["fname"] = mseeds_df["mseed_3c"].apply(lambda x: x.split("|")[0].split("/")[-1])
+
+        if region == "SC":
+            # SCEDC format: {network}{station}{location}{channel}___{year}{jday}.ms
+            # Example: AZCRY__BHE___2026001.ms
+            mseeds_df["network"] = mseeds_df["fname"].apply(lambda x: x[:2])
+            mseeds_df["station"] = mseeds_df["fname"].apply(lambda x: x[2:7].rstrip("_"))
+            mseeds_df["instrument"] = mseeds_df["fname"].apply(lambda x: x[7:9])
+            mseeds_df["location"] = mseeds_df["fname"].apply(lambda x: x[10:12].rstrip("_"))
+        else:  # NC
+            # NCEDC format: {station}.{network}.{channel}.{location}.{quality}.{year}.{jday}
+            # Example: ABL.CI.HHE..D.2026.001
+            mseeds_df["network"] = mseeds_df["fname"].apply(lambda x: x.split(".")[1])
+            mseeds_df["station"] = mseeds_df["fname"].apply(lambda x: x.split(".")[0])
+            mseeds_df["instrument"] = mseeds_df["fname"].apply(lambda x: x.split(".")[2][:-1])
+            mseeds_df["location"] = mseeds_df["fname"].apply(lambda x: x.split(".")[3])
 
         print(f"{len(mseeds_df) = }")
         print(mseeds_df.head())
 
-        # picks["network"] = picks["station_id"].apply(lambda x: x.split(".")[0])
-        # picks["station"] = picks["station_id"].apply(lambda x: x.split(".")[1])
-        # picks["location"] = picks["station_id"].apply(lambda x: x.split(".")[2])
-        # picks["instrument"] = picks["station_id"].apply(lambda x: x.split(".")[3])
-        picks["year"] = picks["phase_time"].dt.strftime("%Y")
-        picks["jday"] = picks["phase_time"].dt.strftime("%j")
-
-        mseeds_df = mseeds_df[(mseeds_df["year"].astype(int) == year) & (mseeds_df["jday"].astype(int) == jday)]
-
-        picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument", "year", "jday"])
-        picks.drop(columns=["fname", "year", "jday"], inplace=True)
+        picks = picks.merge(mseeds_df, on=["network", "station", "location", "instrument"])
+        picks.drop(columns=["fname"], inplace=True)
 
         if len(picks) == 0:
             print(f"No picks found for {year:04d}/{jday:03d}")
@@ -452,8 +438,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         picks_group = picks_group.groupby("mseed_3c")
 
         ############################################################
-        os.makedirs(f"{result_path}/{year:04d}/{jday:03d}", exist_ok=True)
-        # fp = h5py.File(f"{result_path}/{year:04d}/{jday:03d}/waveform.h5", "w")
         with h5py.File(f"{root_path}/{result_path}/{year:04d}/{jday:03d}/waveform.h5", "w") as fp:
 
             # ## FIXME: For testing purpose, use single processing
@@ -482,7 +466,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                         partial(
                             extract_template_numpy,
                             events=events,
-                            picks=picks,
                             mechanisms=mechanisms,
                             config=config,
                             fp=fp,
@@ -506,7 +489,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--region", type=str, default="NC")
+    parser.add_argument("--region", type=str, default="SC")
     parser.add_argument("--root_path", type=str, default="./")
     parser.add_argument("--bucket", type=str, default="quakeflow_dataset")
     parser.add_argument("--num_nodes", type=int, default=1)
@@ -522,8 +505,7 @@ if __name__ == "__main__":
 
     # %%
     protocol = "gs"
-    token_json = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
-    with open(token_json, "r") as fp:
+    with open(GCS_CREDENTIALS_PATH, "r") as fp:
         token = json.load(fp)
 
     # protocol = "file"
@@ -563,12 +545,12 @@ if __name__ == "__main__":
         data_path = f"{region}EDC/dataset"
         result_path = f"{region}EDC/dataset"
     else:
-        data_path = f"{region}/catalog" # sorry for the inconsistency
+        data_path = f"{region}EDC/catalog" # sorry for the inconsistency
         result_path = f"{region}EDC/dataset"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
 
     ## FIXME: Hardcode for testing
-    jdays = ["2023.001"]
+    jdays = ["2025.001"]
     cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token)
