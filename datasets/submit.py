@@ -19,7 +19,7 @@ BUCKET = "quakeflow_dataset"
 CREDENTIALS = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
 
 
-def get_pending_days(region: str, year: int, fs) -> list:
+def get_pending_days(region: str, year: int, fs, overwrite: bool = False) -> list:
     """Return days that have mseed data but haven't been processed yet."""
     folder = f"{'SC' if region == 'SC' else 'NC'}EDC"
 
@@ -31,6 +31,9 @@ def get_pending_days(region: str, year: int, fs) -> list:
             available.add(day)
     except Exception:
         return []
+
+    if overwrite:
+        return sorted(available)
 
     # Get already processed days
     done = set()
@@ -58,8 +61,8 @@ def make_task(region: str, year: int, days: list) -> sky.Task:
     task.set_resources(sky.Resources(
         cloud=sky.GCP(),
         region="us-west1",
-        cpus="1+",
-        memory="8+",
+        cpus="2+",
+        memory="64+",
         disk_size=20,
         use_spot=True,
     ))
@@ -75,6 +78,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=30, help="Days per job")
     parser.add_argument("--max_jobs", type=int)
     parser.add_argument("--dry_run", action="store_true")
+    parser.add_argument("--overwrite", action="store_true", help="Reprocess existing parquet files")
     args = parser.parse_args()
 
     years = [args.year] if args.year else range(args.start_year, args.end_year + 1)
@@ -84,7 +88,7 @@ def main():
     jobs = []
     for region in args.regions:
         for year in years:
-            pending = get_pending_days(region, year, fs)
+            pending = get_pending_days(region, year, fs, args.overwrite)
             for day_batch in batch(pending, args.batch_size):
                 jobs.append((region, year, day_batch))
 

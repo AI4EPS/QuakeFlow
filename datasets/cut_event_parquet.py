@@ -8,6 +8,7 @@ Key logic:
 3. Cache mseed streams per station to avoid redundant reads
 """
 import argparse
+import gc
 import json
 import multiprocessing
 import os
@@ -32,24 +33,55 @@ TIME_AFTER = 40.96 * 2
 NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
 
 
-def calc_snr(data, index0, noise_window=300, signal_window=300, gap_window=50):
-    """Calculate signal-to-noise ratio for each channel."""
-    snr = []
-    for i in range(data.shape[0]):
-        noise_start = max(0, index0 - noise_window - gap_window)
-        noise_end = max(0, index0 - gap_window)
-        signal_start = min(data.shape[1], index0)
-        signal_end = min(data.shape[1], index0 + signal_window)
+def calc_snr(data, index0, noise_window=100, signal_window=100, gap_window=10):
+    """
+    Calculate signal-to-noise ratio for each channel.
 
-        if noise_end <= noise_start or signal_end <= signal_start:
-            snr.append(0)
-            continue
+    Window layout:
+        |--noise_window--|--gap--|--signal_window--|
+                                 ^
+                               index0 (phase arrival)
 
-        noise = np.std(data[i, noise_start:noise_end])
-        signal = np.std(data[i, signal_start:signal_end])
-        snr.append(signal / noise if noise > 0 and signal > 0 else 0)
+    Args:
+        data: Waveform array of shape (n_channels, n_samples)
+        index0: Sample index of phase arrival
+        noise_window: Samples for noise estimation (default: 100 = 1s at 100Hz)
+        signal_window: Samples for signal estimation (default: 100 = 1s at 100Hz)
+        gap_window: Samples between noise and signal windows (default: 10 = 0.1s)
 
-    return snr
+    Returns:
+        List of SNR values for each channel (0 if cannot compute)
+    """
+    n_channels, n_samples = data.shape
+
+    # Phase arrival outside waveform
+    if index0 < 0 or index0 >= n_samples:
+        return [0.0] * n_channels
+
+    # Define window boundaries
+    noise_end = index0 - gap_window
+    noise_start = noise_end - noise_window
+    signal_start = index0
+    signal_end = index0 + signal_window
+
+    # Clamp to valid bounds
+    noise_start = max(0, noise_start)
+    noise_end = max(0, noise_end)
+    signal_end = min(n_samples, signal_end)
+
+    # Not enough samples for either window
+    if noise_end <= noise_start or signal_end <= signal_start:
+        return [0.0] * n_channels
+
+    # Vectorized SNR computation across all channels
+    noise_std = np.std(data[:, noise_start:noise_end], axis=1)
+    signal_std = np.std(data[:, signal_start:signal_end], axis=1)
+
+    # Avoid division by zero
+    valid = (noise_std > 0) & (signal_std > 0)
+    snr = np.where(valid, signal_std / noise_std, 0.0)
+
+    return snr.tolist()
 
 
 def prepare_picks(picks, events, config):
@@ -93,7 +125,7 @@ def prepare_picks(picks, events, config):
     return picks
 
 
-def load_and_process_stream(mseed_3c, network, station, region, sampling_rate):
+def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, gcs_fs):
     """Load mseed files and process (remove sensitivity, rotate to ZNE)."""
     mseed_files = mseed_3c.split("|")
 
@@ -118,9 +150,8 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate):
         return None
 
     try:
-        fs = fsspec.filesystem("gs", token=GCS_CREDENTIALS_PATH)
         folder = "SCEDC" if region == "SC" else "NCEDC"
-        with fs.open(f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml", "r") as f:
+        with gcs_fs.open(f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml", "r") as f:
             inv = obspy.read_inventory(f)
         stream_3c.remove_sensitivity(inv)
         stream_3c.detrend("constant")
@@ -132,7 +163,7 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate):
     return stream_3c
 
 
-def process_station_group(picks_df, config):
+def process_station_group(picks_df, config, gcs_fs):
     """
     Process all picks for a single station (same mseed_3c).
 
@@ -149,7 +180,7 @@ def process_station_group(picks_df, config):
 
     # Load and cache the stream for this station
     stream_3c = load_and_process_stream(
-        mseed_3c, network, station, region, config["sampling_rate"]
+        mseed_3c, network, station, region, config["sampling_rate"], gcs_fs
     )
     if stream_3c is None:
         return records
@@ -213,8 +244,8 @@ def process_station_group(picks_df, config):
             "station_longitude": float(pick["station_longitude"]) if pd.notna(pick.get("station_longitude")) else None,
             "station_elevation_m": float(pick["station_elevation_m"]) if pd.notna(pick.get("station_elevation_m")) else None,
 
-            # Waveform
-            "waveform": waveform.tolist(),
+            # Waveform (keep as numpy, convert to list at write time)
+            "waveform": waveform,
             "component": "".join(components),
             "snr": round(max(snr), 3),
             "begin_time": begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -258,6 +289,8 @@ def process_station_group(picks_df, config):
 
         records.append(record)
 
+    # Clear stream to free memory
+    stream_3c.clear()
     return records
 
 
@@ -343,9 +376,9 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # ============================================================
         # Step 5: Match picks with mseed files
         # ============================================================
-        dataset_fs = fsspec.filesystem("gs", token=json.load(open(GCS_CREDENTIALS_PATH)))
+        gcs_fs = fsspec.filesystem("gs", token=token)
         region_folder = "SCEDC" if region == "SC" else "NCEDC"
-        with dataset_fs.open(f"quakeflow_dataset/{region_folder}/mseed/{year}/{day:03d}.txt", "r") as f:
+        with gcs_fs.open(f"quakeflow_dataset/{region_folder}/mseed/{year}/{day:03d}.txt", "r") as f:
             mseeds = [x.strip() for x in f.readlines()]
 
         mseeds_df = pd.DataFrame(mseeds, columns=["mseed_3c"])
@@ -370,6 +403,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         if len(picks) == 0:
             print(f"No picks matched for {year:04d}/{day:03d}")
+            del picks, events
+            gc.collect()
             continue
 
         print(f"Matched picks: {len(picks)}")
@@ -377,16 +412,15 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # ============================================================
         # Step 6: Process by station (mseed_3c) - cache stream per station
         # ============================================================
-        mseed_keys = list(picks["mseed_3c"].unique().tolist())
-        groups = [picks[picks["mseed_3c"] == key] for key in mseed_keys]
-        ncpu = min(8, multiprocessing.cpu_count())
-        print(f"Processing {len(groups)} stations with {ncpu} workers")
+        station_groups = list(picks.groupby("mseed_3c"))
+        ncpu = min(8, multiprocessing.cpu_count()*2)
+        print(f"Processing {len(station_groups)} stations with {ncpu} workers")
 
         all_records = []
         with ThreadPoolExecutor(max_workers=ncpu) as executor:
             futures = [
-                executor.submit(partial(process_station_group, config=config), group)
-                for group in groups
+                executor.submit(partial(process_station_group, config=config, gcs_fs=gcs_fs), group_df)
+                for _, group_df in station_groups
             ]
             for future in tqdm(as_completed(futures), total=len(futures), desc="Processing"):
                 records = future.result()
@@ -395,6 +429,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         if not all_records:
             print(f"No records for {year:04d}/{day:03d}")
+            del picks, events, station_groups, all_records
+            gc.collect()
             continue
 
         print(f"Total records: {len(all_records)}")
@@ -403,6 +439,14 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # Step 7: Save to Parquet
         # ============================================================
         df = pd.DataFrame(all_records)
+        del all_records  # Free memory before sorting
+        gc.collect()
+
+        # Sort by event_id, then station for efficient event-based queries
+        df = df.sort_values(["event_id", "network", "station", "location", "instrument"]).reset_index(drop=True)
+
+        # Convert numpy waveforms to lists for Parquet serialization
+        df["waveform"] = df["waveform"].apply(lambda x: x.tolist())
 
         schema = pa.schema([
             # Event info
@@ -467,10 +511,16 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         pq.write_table(table, local_path, compression="zstd")
         print(f"Saved: {local_path}")
 
-        # Upload
+        # Upload and cleanup
         remote_path = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
         fs.put(local_path, remote_path)
         print(f"Uploaded: {remote_path}")
+        os.remove(local_path)
+        print(f"Deleted local: {local_path}")
+
+        # Free memory
+        del df, table, picks, events, station_groups
+        gc.collect()
 
 
 def parse_args():
