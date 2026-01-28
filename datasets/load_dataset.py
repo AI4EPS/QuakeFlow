@@ -5,6 +5,7 @@
 #     "numpy",
 #     "pandas",
 #     "gcsfs",
+#     "matplotlib",
 # ]
 # ///
 """
@@ -73,9 +74,7 @@ def load_quakeflow_dataset(region="SC", years=None, days=None, streaming=False):
     return dataset["train"]
 
 
-# ============================================================
-# Example 1: Iterate over event-station records (phases)
-# ============================================================
+# %% Iterate over phase picks
 def iterate_phases():
     """Each record is one event-station pair with P and/or S phase."""
     dataset = load_quakeflow_dataset(region="SC", years=[2025], days=[9])
@@ -98,9 +97,7 @@ def iterate_phases():
         break  # Remove to iterate all
 
 
-# ============================================================
-# Example 2: Group by events (all stations for one event)
-# ============================================================
+# %% Group records by event
 def iterate_events():
     """Group records by event_id to get all stations for each event."""
     dataset = load_quakeflow_dataset(region="SC", years=[2025], days=[9])
@@ -122,9 +119,7 @@ def iterate_events():
         break  # Remove to iterate all
 
 
-# ============================================================
-# Example 3: Streaming mode for large datasets
-# ============================================================
+# %% Stream records
 def iterate_streaming():
     """Stream data without loading everything into memory."""
     dataset = load_quakeflow_dataset(region="SC", years=[2025], days=[9], streaming=True)
@@ -137,9 +132,7 @@ def iterate_streaming():
             break
 
 
-# ============================================================
-# Example 4: Stream by events (memory-efficient)
-# ============================================================
+# %% Stream by event
 def iterate_events_streaming():
     """
     Stream events one at a time using itertools.groupby.
@@ -173,9 +166,7 @@ def iterate_events_streaming():
             break  # Remove to iterate all
 
 
-# ============================================================
-# Example 5: Filter by magnitude or SNR
-# ============================================================
+# %% Filter by magnitude and SNR
 def filter_dataset():
     """Filter dataset by criteria."""
     dataset = load_quakeflow_dataset(region="SC", years=[2025], days=[9])
@@ -193,28 +184,100 @@ def filter_dataset():
         break
 
 
+# %% Visualize waveforms with phase picks
+def visualize_waveforms(n_examples=3):
+    """
+    Plot waveforms with P and S phase arrivals marked.
+
+    Creates a figure showing 3-component (E, N, Z) seismograms with
+    vertical lines indicating P (blue) and S (red) arrival times.
+    """
+    import matplotlib.pyplot as plt
+
+    dataset = load_quakeflow_dataset(region="SC", years=[2025], days=[9])
+
+    # Filter for records with both P and S picks
+    records_with_picks = [
+        r for r in dataset
+        if r["p_phase_index"] is not None and r["s_phase_index"] is not None
+    ][:n_examples]
+
+    if not records_with_picks:
+        print("No records with both P and S picks found")
+        return
+
+    fig, axes = plt.subplots(n_examples, 1, figsize=(14, 3 * n_examples))
+    if n_examples == 1:
+        axes = [axes]
+
+    sampling_rate = 100  # Hz
+    channel_names = ["E", "N", "Z"]
+
+    for ax, record in zip(axes, records_with_picks):
+        waveform = np.array(record["waveform"])  # (3, 12288)
+        n_samples = waveform.shape[1]
+        time = np.arange(n_samples) / sampling_rate
+
+        p_idx = record["p_phase_index"]
+        s_idx = record["s_phase_index"]
+
+        # Plot each channel with offset
+        for i, (channel, name) in enumerate(zip(waveform, channel_names)):
+            normalized = channel / (np.abs(channel).max() + 1e-10)
+            ax.plot(time, normalized + i * 2.5, "k", linewidth=0.5, label=name if i == 0 else None)
+            ax.text(-1, i * 2.5, name, fontsize=10, va="center", ha="right")
+
+        # Mark P and S arrivals
+        ax.axvline(p_idx / sampling_rate, color="blue", linewidth=1.5, linestyle="--", label=f"P ({p_idx / sampling_rate:.1f}s)")
+        ax.axvline(s_idx / sampling_rate, color="red", linewidth=1.5, linestyle="--", label=f"S ({s_idx / sampling_rate:.1f}s)")
+
+        # Labels
+        station = f"{record['network']}.{record['station']}"
+        mag = record["event_magnitude"]
+        snr = record.get("snr")
+        title = f"{record['event_id']} | {station} | M{mag:.1f}"
+        if snr is not None:
+            title += f" | SNR={snr:.1f}"
+        ax.set_title(title, fontsize=11)
+        ax.set_xlim(0, n_samples / sampling_rate)
+        ax.set_yticks([])
+        ax.legend(loc="upper right", fontsize=9)
+
+    axes[-1].set_xlabel("Time (s)")
+    fig.suptitle("Waveforms with P and S Phase Arrivals", fontsize=13, y=1.02)
+    plt.tight_layout()
+    plt.savefig("waveform_visualization.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved to waveform_visualization.png")
+
+
 if __name__ == "__main__":
     print("=" * 60)
-    print("Example 1: Iterate over phases (event-station pairs)")
+    print("1. Iterate over phase picks")
     print("=" * 60)
     iterate_phases()
 
     print("\n" + "=" * 60)
-    print("Example 2: Group by events")
+    print("2. Group records by event")
     print("=" * 60)
     iterate_events()
 
     print("\n" + "=" * 60)
-    print("Example 3: Streaming mode")
+    print("3. Stream records")
     print("=" * 60)
     iterate_streaming()
 
     print("\n" + "=" * 60)
-    print("Example 4: Stream by events (memory-efficient)")
+    print("4. Stream by event")
     print("=" * 60)
     iterate_events_streaming()
 
     print("\n" + "=" * 60)
-    print("Example 5: Filter dataset")
+    print("5. Filter by magnitude and SNR")
     print("=" * 60)
     filter_dataset()
+
+    print("\n" + "=" * 60)
+    print("6. Visualize waveforms with phase picks")
+    print("=" * 60)
+    visualize_waveforms(n_examples=3)
