@@ -1,11 +1,15 @@
 # %%
 """
-Cut event waveforms and save to Parquet format.
+Cut event waveforms and save to HDF5 format.
 
 Key logic:
 1. For each event, use the first P phase across ALL stations as the reference time
 2. All stations for the same event share the same time window (begin_time, end_time)
 3. Cache mseed streams per station to avoid redundant reads
+
+HDF5 structure:
+    /{event_id}/                    (group, event-level attributes)
+    /{event_id}/{station_id}        (dataset, shape=(3, NT), station/phase attributes)
 """
 import argparse
 import gc
@@ -16,11 +20,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 
 import fsspec
+import h5py
 import numpy as np
 import obspy
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 from tqdm import tqdm
 
 np.random.seed(42)
@@ -32,6 +35,18 @@ TIME_BEFORE = 40.96
 TIME_AFTER = 40.96 * 2
 NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
 EARTH_RADIUS_KM = 6371.0
+
+
+def set_attr(obj, key, value):
+    """Set an HDF5 attribute only if the value is not empty/None."""
+    if value is None:
+        return
+    if isinstance(value, str) and value == "":
+        return
+    if isinstance(value, (list, np.ndarray)) and len(value) > 0:
+        if all(v == "" for v in value):
+            return
+    obj.attrs[key] = value
 
 
 def calc_azimuth(lat1, lon1, lat2, lon2):
@@ -63,7 +78,6 @@ def load_station_csv(region, gcs_fs):
     with gcs_fs.open(csv_path, "r") as f:
         stations = pd.read_csv(f)
 
-    # Aggregate to network+station level (median across channels/locations/time periods)
     station_coords = (
         stations.groupby(["network", "station"])
         .agg(
@@ -80,49 +94,33 @@ def load_station_csv(region, gcs_fs):
 
 def calc_snr(data, index0, noise_window=100, signal_window=100, gap_window=10):
     """
-    Calculate signal-to-noise ratio for each channel.
+    Calculate signal-to-noise ratio for each channel (vectorized).
 
     Window layout:
         |--noise_window--|--gap--|--signal_window--|
                                  ^
                                index0 (phase arrival)
-
-    Args:
-        data: Waveform array of shape (n_channels, n_samples)
-        index0: Sample index of phase arrival
-        noise_window: Samples for noise estimation (default: 100 = 1s at 100Hz)
-        signal_window: Samples for signal estimation (default: 100 = 1s at 100Hz)
-        gap_window: Samples between noise and signal windows (default: 10 = 0.1s)
-
-    Returns:
-        List of SNR values for each channel (0 if cannot compute)
     """
     n_channels, n_samples = data.shape
 
-    # Phase arrival outside waveform
     if index0 < 0 or index0 >= n_samples:
         return [0.0] * n_channels
 
-    # Define window boundaries
     noise_end = index0 - gap_window
     noise_start = noise_end - noise_window
     signal_start = index0
     signal_end = index0 + signal_window
 
-    # Clamp to valid bounds
     noise_start = max(0, noise_start)
     noise_end = max(0, noise_end)
     signal_end = min(n_samples, signal_end)
 
-    # Not enough samples for either window
     if noise_end <= noise_start or signal_end <= signal_start:
         return [0.0] * n_channels
 
-    # Vectorized SNR computation across all channels
     noise_std = np.std(data[:, noise_start:noise_end], axis=1)
     signal_std = np.std(data[:, signal_start:signal_end], axis=1)
 
-    # Avoid division by zero
     valid = (noise_std > 0) & (signal_std > 0)
     snr = np.where(valid, signal_std / noise_std, 0.0)
 
@@ -219,12 +217,12 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
     Process all picks for a single station (same mseed_3c).
 
     Load the stream once, then cut waveforms for each event-station pair.
-    One record per event-station with both P and S phase info.
+    One record per event-station with both P and S phase info, plus all
+    picks that fall within the time window (for HDF5 array attrs).
     """
     region = config["region"]
     records = []
 
-    # All picks share the same mseed_3c (same station, same day)
     mseed_3c = picks_df.iloc[0]["mseed_3c"]
     network = picks_df.iloc[0]["network"]
     station = picks_df.iloc[0]["station"]
@@ -238,11 +236,9 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
 
     # Group by event_id - one record per event-station pair
     for event_id, event_picks in picks_df.groupby("event_id"):
-        # Get P and S picks for this event-station
         p_picks = event_picks[event_picks["phase_type"] == "P"]
         s_picks = event_picks[event_picks["phase_type"] == "S"]
 
-        # All picks share same metadata (begin_time, end_time, event/station info)
         pick = event_picks.iloc[0]
         begin_time = pick["begin_time"]
         end_time = pick["end_time"]
@@ -275,17 +271,22 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
         if max(snr) == 0:
             continue
 
-        # Build record - one per event-station with both P and S
+        # Event time index (sample index of origin time relative to begin_time)
+        event_time_index = None
+        if pd.notna(pick.get("event_time")):
+            event_time_index = int((pick["event_time"] - begin_time).total_seconds() * config["sampling_rate"])
+
+        # Build record
         record = {
             # Event info
             "event_id": event_id,
             "event_time": pick["event_time"].strftime("%Y-%m-%dT%H:%M:%S.%f"),
-            "event_latitude": float(pick["event_latitude"]) if pd.notna(pick.get("event_latitude")) else None,
-            "event_longitude": float(pick["event_longitude"]) if pd.notna(pick.get("event_longitude")) else None,
-            "event_depth_km": float(pick["event_depth_km"]) if pd.notna(pick.get("event_depth_km")) else None,
-            "event_magnitude": float(pick["event_magnitude"]) if pd.notna(pick.get("event_magnitude")) else None,
+            "event_latitude": float(pick["event_latitude"]) if pd.notna(pick.get("event_latitude")) and pick["event_latitude"] != "" else None,
+            "event_longitude": float(pick["event_longitude"]) if pd.notna(pick.get("event_longitude")) and pick["event_longitude"] != "" else None,
+            "event_depth_km": float(pick["event_depth_km"]) if pd.notna(pick.get("event_depth_km")) and pick["event_depth_km"] != "" else None,
+            "event_magnitude": float(pick["event_magnitude"]) if pd.notna(pick.get("event_magnitude")) and pick["event_magnitude"] != "" else None,
             "event_magnitude_type": pick.get("event_magnitude_type") or None,
-            "event_time_index": int((pick["event_time"] - begin_time).total_seconds() * config["sampling_rate"]) if pd.notna(pick.get("event_time")) else None,
+            "event_time_index": event_time_index,
 
             # Station info
             "network": network,
@@ -297,7 +298,7 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
             "station_elevation_m": float(pick["station_elevation_m"]) if pd.notna(pick.get("station_elevation_m")) else None,
             "station_depth_km": float(pick["station_depth_km"]) if pd.notna(pick.get("station_depth_km")) else None,
 
-            # Waveform (keep as numpy, convert to list at write time)
+            # Waveform
             "waveform": waveform,
             "component": "".join(components),
             "snr": round(max(snr), 3),
@@ -319,7 +320,7 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
             "s_phase_remark": s_picks.iloc[0].get("phase_remark") if len(s_picks) > 0 and s_picks.iloc[0].get("phase_remark") else None,
         }
 
-        # Optional fields (from first pick)
+        # Optional float fields
         for col in ["azimuth", "back_azimuth", "takeoff_angle", "distance_km"]:
             if col in pick.index and pd.notna(pick[col]) and pick[col] != "":
                 try:
@@ -338,15 +339,92 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
                 except (ValueError, TypeError):
                     pass
 
-        # Focal mechanism quality (string field)
         if "quality" in pick.index and pd.notna(pick["quality"]) and pick["quality"] != "":
             record["fm_quality"] = str(pick["quality"])
+
+        # All picks in this time window for this station (multi-event array attrs)
+        picks_in_window = picks_df[
+            (picks_df["phase_time"] >= begin_time) & (picks_df["phase_time"] <= end_time)
+        ].sort_values("phase_time")
+
+        if len(picks_in_window) > 0:
+            record["all_event_ids"] = picks_in_window["event_id"].values
+            record["all_phase_types"] = picks_in_window["phase_type"].values
+            record["all_phase_times"] = picks_in_window["phase_time"].apply(
+                lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f")
+            ).values
+            record["all_phase_indices"] = picks_in_window["phase_index"].values
+            record["all_phase_scores"] = picks_in_window["phase_score"].values
+            if "phase_polarity" in picks_in_window.columns:
+                record["all_phase_polarities"] = picks_in_window["phase_polarity"].values
+            if "phase_remark" in picks_in_window.columns:
+                record["all_phase_remarks"] = picks_in_window["phase_remark"].values
 
         records.append(record)
 
     # Clear stream to free memory
     stream_3c.clear()
     return records
+
+
+def save_to_hdf5(records, output_path):
+    """Save all records to an HDF5 file."""
+    with h5py.File(output_path, "w") as fp:
+        for record in records:
+            event_id = record["event_id"]
+            station_id = f"{record['network']}.{record['station']}.{record['location']}.{record['instrument']}"
+
+            # Create event group (once per event)
+            if event_id not in fp:
+                gp = fp.create_group(event_id)
+                for key in ["event_time", "event_latitude", "event_longitude",
+                           "event_depth_km", "event_magnitude", "event_magnitude_type",
+                           "event_time_index", "begin_time", "end_time"]:
+                    if record.get(key) is not None:
+                        set_attr(gp, key, record[key])
+
+                # Focal mechanism attrs on event group
+                for key in ["strike", "dip", "rake",
+                           "num_first_motions", "first_motion_misfit",
+                           "num_sp_ratios", "sp_ratio_misfit",
+                           "plane1_uncertainty", "plane2_uncertainty", "fm_quality"]:
+                    if record.get(key) is not None:
+                        set_attr(gp, key, record[key])
+
+            # Create station dataset with waveform data
+            ds = fp.create_dataset(f"{event_id}/{station_id}", data=record["waveform"])
+            ds.attrs["unit"] = "micro m/s"
+
+            # Station attrs
+            for key in ["network", "station", "location", "instrument",
+                       "station_latitude", "station_longitude",
+                       "station_elevation_m", "station_depth_km",
+                       "component", "snr",
+                       "azimuth", "back_azimuth", "takeoff_angle", "distance_km"]:
+                if record.get(key) is not None:
+                    set_attr(ds, key, record[key])
+
+            # Per-phase attrs (p_* and s_*)
+            for prefix in ["p", "s"]:
+                for suffix in ["phase_time", "phase_index", "phase_score",
+                              "phase_polarity", "phase_remark"]:
+                    attr_key = f"{prefix}_{suffix}"
+                    if record.get(attr_key) is not None:
+                        set_attr(ds, attr_key, record[attr_key])
+
+            # All picks in window (array attrs for multi-event windows)
+            attr_map = {
+                "all_event_ids": "event_id",
+                "all_phase_types": "phase_type",
+                "all_phase_times": "phase_time",
+                "all_phase_indices": "phase_index",
+                "all_phase_scores": "phase_score",
+                "all_phase_polarities": "phase_polarity",
+                "all_phase_remarks": "phase_remark",
+            }
+            for record_key, attr_name in attr_map.items():
+                if record.get(record_key) is not None:
+                    set_attr(ds, attr_name, record[record_key])
 
 
 def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token):
@@ -496,7 +574,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # Step 8: Process by station (mseed_3c) - cache stream per station
         # ============================================================
         station_groups = list(picks.groupby("mseed_3c"))
-        ncpu = min(8, multiprocessing.cpu_count()*2)
+        ncpu = min(8, multiprocessing.cpu_count() * 2)
         print(f"Processing {len(station_groups)} stations with {ncpu} workers")
 
         all_records = []
@@ -519,94 +597,21 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         print(f"Total records: {len(all_records)}")
 
         # ============================================================
-        # Step 9: Save to Parquet
+        # Step 9: Save to HDF5
         # ============================================================
-        df = pd.DataFrame(all_records)
-        del all_records  # Free memory before sorting
-        gc.collect()
-
-        # Sort by event_id, then station for efficient event-based queries
-        df = df.sort_values(["event_id", "network", "station", "location", "instrument"]).reset_index(drop=True)
-
-        # Convert numpy waveforms to lists for Parquet serialization
-        df["waveform"] = df["waveform"].apply(lambda x: x.tolist())
-
-        schema = pa.schema([
-            # Event info
-            ("event_id", pa.string()),
-            ("event_time", pa.string()),
-            ("event_latitude", pa.float32()),
-            ("event_longitude", pa.float32()),
-            ("event_depth_km", pa.float32()),
-            ("event_magnitude", pa.float32()),
-            ("event_magnitude_type", pa.string()),
-            ("event_time_index", pa.int32()),
-            # Station info
-            ("network", pa.string()),
-            ("station", pa.string()),
-            ("location", pa.string()),
-            ("instrument", pa.string()),
-            ("station_latitude", pa.float32()),
-            ("station_longitude", pa.float32()),
-            ("station_elevation_m", pa.float32()),
-            ("station_depth_km", pa.float32()),
-            # Waveform
-            ("waveform", pa.list_(pa.list_(pa.float32(), NT), 3)),
-            ("component", pa.string()),
-            ("snr", pa.float32()),
-            ("begin_time", pa.string()),
-            ("end_time", pa.string()),
-            # P phase
-            ("p_phase_time", pa.string()),
-            ("p_phase_index", pa.int32()),
-            ("p_phase_score", pa.float32()),
-            ("p_phase_polarity", pa.string()),
-            ("p_phase_remark", pa.string()),
-            # S phase
-            ("s_phase_time", pa.string()),
-            ("s_phase_index", pa.int32()),
-            ("s_phase_score", pa.float32()),
-            ("s_phase_polarity", pa.string()),
-            ("s_phase_remark", pa.string()),
-            # Optional fields
-            ("azimuth", pa.float32()),
-            ("back_azimuth", pa.float32()),
-            ("takeoff_angle", pa.float32()),
-            ("distance_km", pa.float32()),
-            # Focal mechanism
-            ("strike", pa.float32()),
-            ("dip", pa.float32()),
-            ("rake", pa.float32()),
-            ("num_first_motions", pa.float32()),
-            ("first_motion_misfit", pa.float32()),
-            ("num_sp_ratios", pa.float32()),
-            ("sp_ratio_misfit", pa.float32()),
-            ("plane1_uncertainty", pa.float32()),
-            ("plane2_uncertainty", pa.float32()),
-            ("fm_quality", pa.string()),
-        ])
-
-        # Fill missing columns
-        for field in schema:
-            if field.name not in df.columns:
-                df[field.name] = None
-
-        df = df[[field.name for field in schema]]
-        table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
-
-        local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.parquet"
-        pq.write_table(table, local_path, compression="zstd")
+        local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.h5"
+        save_to_hdf5(all_records, local_path)
         print(f"Saved: {local_path}")
 
         # Upload and cleanup
-        remote_path = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
+        remote_path = f"{bucket}/{result_path}/{year:04d}/{day:03d}.h5"
         fs.put(local_path, remote_path)
         print(f"Uploaded: {remote_path}")
         os.remove(local_path)
         print(f"Deleted local: {local_path}")
 
         # Free memory
-        del df, table, picks, events, station_groups
+        del all_records, picks, events, station_groups
         gc.collect()
 
 
@@ -635,10 +640,8 @@ if __name__ == "__main__":
 
     # Determine which days to process
     if args.days:
-        # Parse comma-separated days (e.g., "1,2,3,10,11,12")
         day_nums = [int(d.strip()) for d in args.days.split(",")]
     else:
-        # Fall back to node-based splitting for backward compatibility
         num_jday = 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
         all_days = list(range(1, num_jday + 1))
         day_nums = list(np.array_split(all_days, args.num_nodes)[args.node_rank])

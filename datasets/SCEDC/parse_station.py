@@ -1,9 +1,12 @@
 # %%
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timezone
 from pathlib import Path
 
 import fsspec
+import obspy
+import pandas as pd
 from tqdm import tqdm
 
 # %%
@@ -80,7 +83,100 @@ def copy_xml_to_gcs(max_workers=16):
 
 
 # %%
+def parse_inventory_csv(inventory):
+    """Parse an obspy Inventory into a DataFrame of channel-level station info."""
+    channel_list = []
+    for network in inventory:
+        for station in network:
+            for channel in station:
+                sensitivity = None
+                if channel.response is not None and channel.response.instrument_sensitivity is not None:
+                    sensitivity = channel.response.instrument_sensitivity.value
+
+                channel_list.append(
+                    {
+                        "network": network.code,
+                        "station": station.code,
+                        "location": channel.location_code,
+                        "instrument": channel.code[:-1],
+                        "component": channel.code[-1],
+                        "channel": channel.code,
+                        "longitude": channel.longitude,
+                        "latitude": channel.latitude,
+                        "elevation_m": channel.elevation,
+                        "local_depth_m": channel.depth,
+                        "depth_km": round(-channel.elevation / 1000, 4),
+                        "begin_time": (
+                            channel.start_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                            if channel.start_date is not None
+                            else None
+                        ),
+                        "end_time": (
+                            channel.end_date.datetime.replace(tzinfo=timezone.utc).isoformat()
+                            if channel.end_date is not None
+                            else None
+                        ),
+                        "azimuth": channel.azimuth,
+                        "dip": channel.dip,
+                        "sensitivity": sensitivity,
+                        "site": station.site.name if station.site is not None else "",
+                        "sensor": channel.sensor.description if channel.sensor is not None else "",
+                    }
+                )
+
+    return pd.DataFrame(channel_list)
+
+
+def read_single_xml(xml_path):
+    """Read a single XML file and return an obspy Inventory."""
+    fs = fsspec.filesystem(output_protocol, token=output_token)
+    try:
+        with fs.open(xml_path, "rb") as f:
+            return obspy.read_inventory(f)
+    except Exception as e:
+        print(f"Failed to read {xml_path}: {e}")
+        return None
+
+
+def parse_xml_to_csv(output_csv=None, max_workers=16):
+    """Parse all station XML files from GCS into a single CSV file.
+
+    Args:
+        output_csv: Output CSV path on GCS. Defaults to {output_bucket}/SCEDC/stations.csv.
+        max_workers: Number of parallel workers for reading XML files.
+    """
+    if output_csv is None:
+        output_csv = f"{output_bucket}/SCEDC/stations.csv"
+
+    fs = fsspec.filesystem(output_protocol, token=output_token)
+
+    # List all XML files under the station XML folder
+    xml_files = fs.glob(f"{output_bucket}/{output_folder}/*/*.xml")
+    print(f"Found {len(xml_files)} XML files")
+
+    # Read XML files in parallel
+    inv = obspy.Inventory()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(read_single_xml, xml_file): xml_file for xml_file in xml_files}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Reading XML"):
+            result = future.result()
+            if result is not None:
+                inv += result
+
+    # Convert to CSV
+    stations = parse_inventory_csv(inv)
+    print(f"Parsed {len(stations)} channels from {len(xml_files)} XML files")
+
+    with fs.open(output_csv, "w") as f:
+        stations.to_csv(f, index=False)
+    print(f"Saved to {output_csv}")
+
+    return stations
+
+
+# %%
 if __name__ == "__main__":
-    copy_xml_to_gcs(max_workers=16)
+    # copy_xml_to_gcs(max_workers=16)
+    parse_xml_to_csv(max_workers=16)
 
 # %%
