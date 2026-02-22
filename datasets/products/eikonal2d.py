@@ -1,13 +1,7 @@
-import itertools
-import shelve
 import time
-from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.optimize
 from numba import njit
-from numba.typed import List
 
 np.random.seed(0)
 
@@ -98,18 +92,6 @@ def _get_index(ir, iz, nr, nz, order="C"):
         raise ValueError("order must be either C or F")
 
 
-def test_get_index():
-    vr, vz = np.meshgrid(np.arange(10), np.arange(20), indexing="ij")
-    vr = vr.ravel()
-    vz = vz.ravel()
-    nr = 10
-    nz = 20
-    for ir in range(nr):
-        for iz in range(nz):
-            assert vr[_get_index(ir, iz, nr, nz)] == ir
-            assert vz[_get_index(ir, iz, nr, nz)] == iz
-
-
 @njit
 def _interp(time_table, r, z, rgrid0, zgrid0, nr, nz, h):
     shape = r.shape
@@ -147,111 +129,11 @@ def _interp(time_table, r, z, rgrid0, zgrid0, nr, nz, h):
     return t.reshape(shape)
 
 
-# def traveltime(event_loc, station_loc, phase_type, eikonal):
-def traveltime(event_index, station_index, phase_type, events, stations, eikonal, vel={0: 6.0, 1: 6.0 / 1.73}):
-    """
-    event_index: list of event index
-    station_index: list of station index
-    phase_type: list of phase type
-    events: list of event location
-    stations: list of station location
-    """
-    if eikonal is None:
-        v = np.array([vel[x] for x in phase_type])
-        tt = np.linalg.norm(events[event_index] - stations[station_index], axis=-1, keepdims=False) / v
-    else:
-        if isinstance(event_index, int):
-            event_index = np.array([event_index] * len(phase_type))
-
-        # r = np.linalg.norm(event_loc[:, :2] - station_loc[:, :2], axis=-1, keepdims=False)
-        # z = event_loc[:, 2] - station_loc[:, 2]
-        x = events[event_index, 0] - stations[station_index, 0]
-        y = events[event_index, 1] - stations[station_index, 1]
-        z = events[event_index, 2] - stations[station_index, 2]
-        r = np.sqrt(x**2 + y**2)
-
-        rgrid0 = eikonal["rgrid"][0]
-        zgrid0 = eikonal["zgrid"][0]
-        nr = eikonal["nr"]
-        nz = eikonal["nz"]
-        h = eikonal["h"]
-
-        if isinstance(phase_type, list):
-            phase_type = np.array(phase_type)
-        # if isinstance(station_index, list):
-        #     station_index = np.array(station_index)
-
-        tt = np.zeros(len(phase_type), dtype=np.float32)
-
-        if isinstance(phase_type[0], str):
-            p_index = phase_type == "P"
-            s_index = phase_type == "S"
-        elif isinstance(phase_type[0].item(), int):
-            p_index = phase_type == 0
-            s_index = phase_type == 1
-        else:
-            raise ValueError("phase_type must be either P/S or 0/1")
-
-        if len(tt[p_index]) > 0:
-            tt[p_index] = _interp(eikonal["up"], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
-        if len(tt[s_index]) > 0:
-            tt[s_index] = _interp(eikonal["us"], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
-
-    return tt
-
-
-def calc_traveltime(event_locs, station_locs, phase_type, eikonal):
-    """
-    event_locs: (num_event, 3) array of event locations
-    station_locs: (num_station, 3) array of station locations
-    phase_type: (num_event,) array of phase type
-    eikonal: dictionary of eikonal solver
-    """
-
-    if eikonal is None:
-        v = np.array([vel[x] for x in phase_type])
-        tt = np.linalg.norm(event_locs - station_locs, axis=-1, keepdims=False) / v
-    else:
-        x = event_locs[:, 0] - station_locs[:, 0]
-        y = event_locs[:, 1] - station_locs[:, 1]
-        z = event_locs[:, 2] - station_locs[:, 2]
-        r = np.sqrt(x**2 + y**2)
-
-        rgrid0 = eikonal["rgrid"][0]
-        zgrid0 = eikonal["zgrid"][0]
-        nr = eikonal["nr"]
-        nz = eikonal["nz"]
-        h = eikonal["h"]
-
-        if isinstance(phase_type, list):
-            phase_type = np.array(phase_type)
-
-        tt = np.zeros(len(phase_type), dtype=np.float32)
-        if isinstance(phase_type[0], str):
-            p_index = phase_type == "P"
-            s_index = phase_type == "S"
-        elif isinstance(phase_type[0].item(), int):
-            p_index = phase_type == 0
-            s_index = phase_type == 1
-        else:
-            raise ValueError("phase_type must be either P/S or 0/1")
-
-        if len(tt[p_index]) > 0:
-            tt[p_index] = _interp(eikonal["up"], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
-        if len(tt[s_index]) > 0:
-            tt[s_index] = _interp(eikonal["us"], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
-
-    return tt
-
-
-# def grad_traveltime(event_loc, station_loc, phase_type, eikonal):
 def grad_traveltime(event_index, station_index, phase_type, events, stations, eikonal):
 
     if isinstance(event_index, int):
         event_index = np.array([event_index] * len(phase_type))
 
-    # r = np.linalg.norm(event_loc[:, :2] - station_loc[:, :2], axis=-1, keepdims=False)
-    # z = event_loc[:, 2] - station_loc[:, 2]
     x = events[event_index, 0] - stations[station_index, 0]
     y = events[event_index, 1] - stations[station_index, 1]
     z = events[event_index, 2] - stations[station_index, 2]
@@ -265,14 +147,10 @@ def grad_traveltime(event_index, station_index, phase_type, events, stations, ei
 
     if isinstance(phase_type, list):
         phase_type = np.array(phase_type)
-    # if isinstance(station_index, list):
-    #     station_index = np.array(station_index)
 
     dt_dr = np.zeros(len(phase_type))
     dt_dz = np.zeros(len(phase_type))
 
-    # p_index = phase_type == "p"
-    # s_index = phase_type == "s"
     p_index = phase_type == 0
     s_index = phase_type == 1
 
@@ -281,9 +159,6 @@ def grad_traveltime(event_index, station_index, phase_type, events, stations, ei
     dt_dz[p_index] = _interp(eikonal["grad_up"][1], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
     dt_dz[s_index] = _interp(eikonal["grad_us"][1], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
 
-    # dr_dxy = (event_loc[:, :2] - station_loc[:, :2]) / (r[:, np.newaxis] + 1e-6)
-    # dt_dxy = dt_dr[:, np.newaxis] * dr_dxy
-    # grad = np.column_stack((dt_dxy, dt_dz[:, np.newaxis]))
     dt_dx = dt_dr * x / (r + 1e-6)
     dt_dy = dt_dr * y / (r + 1e-6)
 
@@ -292,54 +167,23 @@ def grad_traveltime(event_index, station_index, phase_type, events, stations, ei
     return grad
 
 
-def calc_ray_angle(event_locs, station_locs, phase_types, eikonal):
-
-    x = event_locs[:, 0] - station_locs[:, 0]
-    y = event_locs[:, 1] - station_locs[:, 1]
-    z = event_locs[:, 2] - station_locs[:, 2] 
-    r = np.sqrt(x**2 + y**2)
-
-    azimuth = np.arctan2(x, y) * 180 / np.pi # tan = x/y
-    azimuth = (azimuth + 360) % 360
-
-    if eikonal is None:
-        takeoff = np.arctan2(r, -z) * 180 / np.pi # tan = r / z
-        takeoff = (takeoff + 360) % 360
-
-    else:
-        rgrid0 = eikonal["rgrid"][0]
-        zgrid0 = eikonal["zgrid"][0]
-        nr = eikonal["nr"]
-        nz = eikonal["nz"]
-        h = eikonal["h"]
-
-        dt_dr = np.zeros(len(phase_types))
-        dt_dz = np.zeros(len(phase_types))
-
-        # p_index = phase_type == "p"
-        # s_index = phase_type == "s"
-        if isinstance(phase_types, list):
-            phase_types = np.array(phase_types)
-        p_index = phase_types == 0
-        s_index = phase_types == 1
-
-        dt_dr[p_index] = _interp(eikonal["grad_up"][0], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
-        dt_dr[s_index] = _interp(eikonal["grad_us"][0], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
-        dt_dz[p_index] = _interp(eikonal["grad_up"][1], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
-        dt_dz[s_index] = _interp(eikonal["grad_us"][1], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
-
-        ## TODO: double check if -dt_dz or dt_dz
-        takeoff = np.arctan2(dt_dr, -dt_dz) * 180 / np.pi # tan = dr / -dz
-        takeoff = (takeoff + 360) % 360
-
-    return {"takeoff": takeoff, "azimuth": azimuth}
-
 def calc_ray_param(event_lon, event_lat, event_dep, station_lon, station_lat, station_dep, phase_types, eikonal):
+    """Compute ray parameters (takeoff angle, azimuth, distance) for event-station pairs.
 
+    Takeoff angle convention: 0° = straight down, 90° = horizontal, 180° = straight up.
+    The eikonal grid u(r, z) has source at (r=0, z=0), axis 0 = r (horizontal),
+    axis 1 = z (upward from event toward surface, z = event_dep - station_dep).
+    np.gradient(u, h) returns [du/dr, du/dz] where dz points upward.
+    To get takeoff from downward vertical, negate dz: takeoff = arctan2(du/dr, -du/dz).
+
+    For the simple (no eikonal) case with uniform velocity:
+    r = horizontal distance, z = event_dep - station_dep (positive when event is deeper,
+    i.e., station is above event, so z points upward). Since the ray goes upward from
+    event to station, takeoff from downward = arctan2(r, -z).
+    """
     R = 6371.0  # Earth radius in km
 
     # Convert degrees to radians
-    print(f"{event_lat.shape = }")
     event_phi, event_lambda = np.radians(event_lat), np.radians(event_lon)
     station_phi, station_lambda = np.radians(station_lat), np.radians(station_lon)
     delta_phi = station_phi - event_phi
@@ -348,7 +192,7 @@ def calc_ray_param(event_lon, event_lat, event_dep, station_lon, station_lat, st
     # --- 1. Vectorized Haversine Distance ---
     a = np.sin(delta_phi / 2)**2 + \
         np.cos(event_phi) * np.cos(station_phi) * np.sin(delta_lambda / 2)**2
-    
+
     # np.arctan2 is numerically stable
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     distance = R * c
@@ -366,7 +210,11 @@ def calc_ray_param(event_lon, event_lat, event_dep, station_lon, station_lat, st
     z = event_dep - station_dep
 
     if eikonal is None:
-        takeoff = np.arctan2(r, -z) * 180 / np.pi # tan = r / z
+        # Uniform velocity: straight-ray takeoff angle
+        # 0° = straight down, 90° = horizontal, 180° = straight up
+        # z = event_dep - station_dep points UPWARD (from event toward station),
+        # so negate to get the downward component for the takeoff convention.
+        takeoff = np.arctan2(r, -z) * 180 / np.pi
         takeoff = (takeoff + 360) % 360
 
     else:
@@ -379,8 +227,6 @@ def calc_ray_param(event_lon, event_lat, event_dep, station_lon, station_lat, st
         dt_dr = np.zeros(len(phase_types))
         dt_dz = np.zeros(len(phase_types))
 
-        # p_index = phase_type == "p"
-        # s_index = phase_type == "s"
         if isinstance(phase_types, list):
             phase_types = np.array(phase_types)
         p_index = phase_types == 0
@@ -391,11 +237,14 @@ def calc_ray_param(event_lon, event_lat, event_dep, station_lon, station_lat, st
         dt_dz[p_index] = _interp(eikonal["grad_up"][1], r[p_index], z[p_index], rgrid0, zgrid0, nr, nz, h)
         dt_dz[s_index] = _interp(eikonal["grad_us"][1], r[s_index], z[s_index], rgrid0, zgrid0, nr, nz, h)
 
-        ## TODO: double check if -dt_dz or dt_dz
-        takeoff = np.arctan2(dt_dr, -dt_dz) * 180 / np.pi # tan = dr / -dz
+        # Slowness vector (dt_dr, dt_dz) points in direction of wave propagation.
+        # dt_dz is along the grid z-axis which points UPWARD (from event toward surface),
+        # so negate to get the downward component for the takeoff convention (0° = down).
+        takeoff = np.arctan2(dt_dr, -dt_dz) * 180 / np.pi
         takeoff = (takeoff + 360) % 360
 
     return {"takeoff": takeoff, "azimuth": azimuth, "distance_km": distance}
+
 
 def init_eikonal2d(config):
 
@@ -416,30 +265,13 @@ def init_eikonal2d(config):
     vel = config["vel"]
     zz, vp, vs = np.array(vel["Z"]), np.array(vel["P"]), np.array(vel["S"])
 
-    # ##############################################
-    # ## make the velocity staircase not linear
-    # zz_grid = zz[1:] - h
-    # vp_grid = vp[:-1]
-    # vs_grid = vs[:-1]
-    # zz = np.concatenate([zz, zz_grid])
-    # vp = np.concatenate([vp, vp_grid])
-    # vs = np.concatenate([vs, vs_grid])
-    # idx = np.argsort(zz)
-    # zz = zz[idx]
-    # vp = vp[idx]
-    # vs = vs[idx]
-    # ##############################################
-
     vp1d = np.interp(zgrid, zz, vp)
     vs1d = np.interp(zgrid, zz, vs)
     vp = np.tile(vp1d, (nr, 1))
     vs = np.tile(vs1d, (nr, 1))
-    # ir0 = np.floor(config["source_loc"][0] / h).astype(np.int64)
-    # iz0 = np.floor(config["source_loc"][1] / h).astype(np.int64)
     ir0 = np.round(0 - rlim[0] / h).astype(np.int64)
     iz0 = np.round(0 - zlim[0] / h).astype(np.int64)
     up = 1000 * np.ones((nr, nz))
-    # up[0, 0] = 0.0
     up[ir0, iz0] = 0.0
 
     up = eikonal_solve(up, vp, h)
@@ -448,7 +280,6 @@ def init_eikonal2d(config):
     grad_up = [x.ravel() for x in grad_up]
 
     us = 1000 * np.ones((nr, nz))
-    # us[0, 0] = 0.0
     us[ir0, iz0] = 0.0
 
     us = eikonal_solve(us, vs, h)
@@ -474,58 +305,16 @@ def init_eikonal2d(config):
 
 
 if __name__ == "__main__":
-
     import os
 
-    import matplotlib as mpl
+    import matplotlib.pyplot as plt
 
     data_path = "data"
-    if not os.path.exists(data_path):
-        os.makedirs(data_path, exist_ok=True)
+    os.makedirs(data_path, exist_ok=True)
 
-    # nr = 21
-    # nz = 21
-    # vel = {"p": 6.0, "s": 6.0 / 1.73}
-    # vp = np.ones((nr, nz)) * vel["p"]
-    # vs = np.ones((nr, nz)) * vel["s"]
-    # h = 1.0
-
-    # up = 1000 * np.ones((nr, nz))
-    # # up[nr//2, nz//2] = 0.0
-    # up[0, 0] = 0.0
-
-    # up = eikonal_solve(up, vp, h)
-    # grad_up = np.gradient(up, h, edge_order=2)
-    # up = up.ravel()
-    # grad_up = [x.ravel() for x in grad_up]
-
-    # us = 1000 * np.ones((nr, nz))
-    # # us[nr//2, nz//2] = 0.0
-    # us[0, 0] = 0.0
-
-    # us = eikonal_solve(us, vs, h)
-    # grad_us = np.gradient(us, h, edge_order=2)
-    # us = us.ravel()
-    # grad_us = [x.ravel() for x in grad_us]
-
-    # config = {
-    #         "up": up,
-    #         "us": us,
-    #         "grad_up": grad_up,
-    #         "grad_us": grad_us,
-    #         "rgrid": np.arange(nr) * h,
-    #         "zgrid": np.arange(nz) * h,
-    #         "nr": nr,
-    #         "nz": nz,
-    #         "h": h,
-    # }
-
-    # %%
+    # Test with uniform velocity to validate takeoff angle fix
     R = np.sqrt(2) * 100
     Z = 100
-    # zz = [0.0, 5.5, 16.0, 32.0]
-    # # vp = [5.5, 5.5, 6.7, 7.8]
-    # vp = [5.5, 5.5, 5.5, 5.5]
     zz = [-100, 100]
     vp = [1000, 1000]
     vp_vs_ratio = 1.73
@@ -533,164 +322,58 @@ if __name__ == "__main__":
     h = 2.0
 
     vel = {"Z": zz, "P": vp, "S": vs}
-    vel0 = {"P": 1000, "S": 1000/vp_vs_ratio}
     config = {
         "vel": vel,
         "h": h,
         "xlim_km": [0, R],
-        "ylim_km": [0, R], 
-        "zlim_km": [-Z, Z]
+        "ylim_km": [0, R],
+        "zlim_km": [-Z, Z],
     }
     config = init_eikonal2d(config)
-    up = config["up"]
-    us = config["us"]
-    grad_up = config["grad_up"]
-    grad_us = config["grad_us"]
     nr = config["nr"]
     nz = config["nz"]
 
-    num_event = 10
-    event_loc = np.random.rand(num_event, 3) * np.array([nr * h / np.sqrt(2), nr * h / np.sqrt(2), nz * h])
-    event_index = np.arange(num_event)
-    print(f"{event_loc = }")
-    # event_loc = np.round(event_loc, 0)
-    # station_loc = np.random.rand(1, 3) * np.array([nr*h/np.sqrt(2), nr*h/np.sqrt(2), 0])
-    station_loc = np.array([0, 0, 0])
-    print(f"{station_loc = }")
-    station_loc = np.tile(station_loc, (num_event, 1))
-    station_index = [0] * num_event
-    # phase_type = np.random.choice(["p", "s"], num_event, replace=True)
-    # print(f"{list(phase_type) = }")
-    phase_type = np.array(["P"] * (num_event // 2) + ["S"] * (num_event - num_event // 2))
-    v = np.array([vel0[x] for x in phase_type])
-    t = np.linalg.norm(event_loc - station_loc, axis=-1, keepdims=False) / v
-    grad_t = (
-        (event_loc - station_loc) / np.linalg.norm(event_loc - station_loc, axis=-1, keepdims=True) / v[:, np.newaxis]
-    )
-    print(f"True traveltime: {t = }")
-    print(f"True grad traveltime: {grad_t = }")
+    # --- Validate takeoff: simple vs eikonal should match for uniform velocity ---
+    print("\n=== Takeoff angle validation (uniform velocity) ===")
+    # Events at varying depths, station at surface
+    n_test = 20
+    ez = np.linspace(1, 80, n_test)
+    event_lon = np.full(n_test, -122.0)
+    event_lat = np.full(n_test, 37.0)
+    event_dep = ez  # depth in km
+    # Station ~100km away at surface
+    station_lon = np.full(n_test, -121.0)
+    station_lat = np.full(n_test, 37.0)
+    station_dep = np.zeros(n_test)
+    phase_types = np.zeros(n_test, dtype=int)  # P wave
 
-    # tp = np.linalg.norm(event_loc - station_loc, axis=-1, keepdims=False) / vel["p"]
-    # print(f"{tp = }")
-    # ts = np.linalg.norm(event_loc - station_loc, axis=-1, keepdims=False) / vel["s"]
-    # print(f"{ts = }")
+    ray_simple = calc_ray_param(event_lon, event_lat, event_dep,
+                                station_lon, station_lat, station_dep,
+                                phase_types, None)
+    ray_eikonal = calc_ray_param(event_lon, event_lat, event_dep,
+                                 station_lon, station_lat, station_dep,
+                                 phase_types, config)
 
-    mapping_int = {"P": 0, "S": 1}
-    phase_type = np.array([mapping_int[x] for x in phase_type])
-    # t = traveltime(event_loc, station_loc, phase_type, config)
-    # grad_t = grad_traveltime(event_loc, station_loc, phase_type, config)
-    t = traveltime(event_index, station_index, phase_type, event_loc, station_loc, config)
-    grad_t = grad_traveltime(event_index, station_index, phase_type, event_loc, station_loc, config)
-    print(f"Computed traveltime: {t = }")
-    print(f"Computed grad traveltime: {grad_t = }")
+    print(f"{'Depth':>8} {'Simple':>10} {'Eikonal':>10} {'Diff':>10}")
+    for i in range(n_test):
+        diff = ray_simple["takeoff"][i] - ray_eikonal["takeoff"][i]
+        print(f"{ez[i]:8.1f} {ray_simple['takeoff'][i]:10.2f} {ray_eikonal['takeoff'][i]:10.2f} {diff:10.2f}")
 
-    up = up.reshape((nr, nz))
-    plt.figure()
-    plt.pcolormesh(up[:, :].T)
-    plt.gca().invert_yaxis()
-    plt.colorbar()
-    plt.savefig(f"{data_path}/slice_tp_2d.png")
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    ax[0].plot(ez, ray_simple["takeoff"], "b-o", label="Simple (uniform)")
+    ax[0].plot(ez, ray_eikonal["takeoff"], "r--x", label="Eikonal (uniform)")
+    ax[0].set_xlabel("Event Depth (km)")
+    ax[0].set_ylabel("Takeoff Angle (deg)")
+    ax[0].set_title("Takeoff Angle: Simple vs Eikonal")
+    ax[0].legend()
+    ax[0].axhline(90, color="gray", ls="--", alpha=0.5)
 
-    us = us.reshape((nr, nz))
-    plt.figure()
-    plt.pcolormesh(us[:, :].T)
-    plt.gca().invert_yaxis()
-    plt.colorbar()
-    plt.savefig(f"{data_path}/slice_ts_2d.png")
-
-    grad_up = [x.reshape((nr, nz)) for x in grad_up]
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    cax0 = ax[0].pcolormesh(grad_up[0][:, :].T)
-    fig.colorbar(cax0, ax=ax[0])
-    ax[0].invert_yaxis()
-    ax[0].set_title("grad_tp_x")
-    cax1 = ax[1].pcolormesh(grad_up[1][:, :].T)
-    fig.colorbar(cax1, ax=ax[1])
-    ax[1].invert_yaxis()
-    ax[1].set_title("grad_tp_z")
-    plt.savefig(f"{data_path}/slice_grad_tp_2d.png")
-
-    grad_us = [x.reshape((nr, nz)) for x in grad_us]
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    cax0 = ax[0].pcolormesh(grad_us[0][:, :].T)
-    fig.colorbar(cax0, ax=ax[0])
-    ax[0].invert_yaxis()
-    ax[0].set_title("grad_ts_x")
-    cax1 = ax[1].pcolormesh(grad_us[1][:, :].T)
-    fig.colorbar(cax1, ax=ax[1])
-    ax[1].invert_yaxis()
-    ax[1].set_title("grad_ts_z")
-    plt.savefig(f"{data_path}/slice_grad_ts_2d.png")
-
-    ## check ray angle
-    R = 100
-    theta = np.arange(0, 360, 10)
-    sx = R * np.cos(theta * np.pi / 180)
-    sy = R * np.sin(theta * np.pi / 180)
-    sz = np.zeros_like(sx)
-    ez = np.linspace(-100, 100, 20)
-    ex = np.zeros_like(ez)
-    ey = np.zeros_like(ez)
-
-    event_loc = np.column_stack((ex, ey, ez))
-    station_loc = np.column_stack((sx, sy, sz))
-
-    dummy_loc = np.column_stack((np.zeros_like(sx), np.zeros_like(sx), np.zeros_like(sx)))
-    phase_type = np.ones_like(sx) * 0  # P wave
-    ray_angle0 = calc_ray_angle(dummy_loc, station_loc, phase_type, None)
-    azimuth0 = ray_angle0["azimuth"]
-    ray_angle = calc_ray_angle(dummy_loc, station_loc, phase_type, eikonal=config)
-    azimuth = ray_angle["azimuth"]
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    im0 = ax[0].scatter(sx, sy, c=azimuth0, cmap="hsv", s=100, vmin=0, vmax=360)
-    fig.colorbar(im0, ax=ax[0], label="Azimuth (deg)", fraction=0.046, pad=0.04)
-    ax[0].set_title("Azimuth (no eikonal)")
-    ax[0].set_xlabel("X (km)")
-    ax[0].set_ylabel("Y (km)")
-    ax[0].axis("equal")
-
-    im1 = ax[1].scatter(sx, sy, c=azimuth, cmap="hsv", s=100, vmin=0, vmax=360)
-    fig.colorbar(im1, ax=ax[1], label="Azimuth (deg)", fraction=0.046, pad=0.04)
-    ax[1].set_title("Azimuth (with eikonal)")
-    ax[1].set_xlabel("X (km)")
-    ax[1].set_ylabel("Y (km)")
-    ax[1].axis("equal")
+    ax[1].plot(ez, ray_simple["takeoff"] - ray_eikonal["takeoff"], "k-o")
+    ax[1].set_xlabel("Event Depth (km)")
+    ax[1].set_ylabel("Difference (deg)")
+    ax[1].set_title("Simple - Eikonal (should be ~0 for uniform)")
+    ax[1].axhline(0, color="gray", ls="--", alpha=0.5)
 
     plt.tight_layout()
-    plt.savefig(f"{data_path}/ray_azimuth_2d.png")
-
-    
-    dummy_loc = np.column_stack((np.ones_like(ez)*R, np.zeros_like(ez), np.zeros_like(ez)))
-    phase_type = np.ones_like(ez) * 0  # P wave
-    ray_angle0 = calc_ray_angle(event_loc, dummy_loc, phase_type, None)
-    takeoff0 = ray_angle0["takeoff"]
-    ray_angle = calc_ray_angle(event_loc, dummy_loc, phase_type, eikonal=config)
-    takeoff = ray_angle["takeoff"]
-
-    print(f"{ez = }")
-    print(f"{takeoff0 = }")
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    im0 = ax[0].scatter(np.zeros_like(ez), ez, c=takeoff0, cmap="viridis", s=100, vmin=45, vmax=180-45)
-    fig.colorbar(im0, ax=ax[0], label="Takeoff Angle (deg)", fraction=0.046, pad=0.04)
-    ax[0].set_title("Takeoff Angle (no eikonal)")
-    ax[0].invert_yaxis()
-    ax[0].set_xlabel("R (km)")
-    ax[0].set_ylabel("Z (km)")
-
-    im1 = ax[1].scatter(np.zeros_like(ez), ez, c=takeoff, cmap="viridis", s=100, vmin=45, vmax=180-45)
-    fig.colorbar(im1, ax=ax[1], label="Takeoff Angle (deg)", fraction=0.046, pad=0.04)
-    ax[1].set_title("Takeoff Angle (with eikonal)")
-    ax[1].invert_yaxis()
-    ax[1].set_xlabel("R (km)")
-    ax[1].set_ylabel("Z (km)")
-
-    plt.tight_layout()
-    plt.savefig(f"{data_path}/ray_takeoff_2d.png")
-
-    
-
-
-
-
+    plt.savefig(f"{data_path}/takeoff_validation.png", dpi=150)
+    print(f"\nSaved {data_path}/takeoff_validation.png")

@@ -392,7 +392,13 @@ def save_to_hdf5(records, output_path):
                         set_attr(gp, key, record[key])
 
             # Create station dataset with waveform data
-            ds = fp.create_dataset(f"{event_id}/{station_id}", data=record["waveform"])
+            ds = fp.create_dataset(
+                f"{event_id}/{station_id}",
+                data=record["waveform"],
+                compression="gzip",
+                compression_opts=4,
+                chunks=(3, 12288),
+            )
             ds.attrs["unit"] = "micro m/s"
 
             # Station attrs
