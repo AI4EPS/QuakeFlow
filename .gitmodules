@@ -19,3 +19,6 @@
 [submodule "ADLoc"]
 	path = ADLoc
 	url = https://github.com/AI4EPS/ADLoc.git
+[submodule "CEED"]
+	path = CEED
+	url = https://huggingface.co/datasets/AI4EPS/CEED
