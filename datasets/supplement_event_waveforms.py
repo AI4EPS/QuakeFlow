@@ -318,7 +318,6 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
             except Exception:
                 try:
                     inv = _download_inv_from_fdsn(network, station, region)
-                    _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
                 except Exception as err:
                     print(f"  No inventory for {network}.{station}: {err}")
                     inv = None
@@ -335,7 +334,6 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
         if record == "retry_inv":
             try:
                 inv = _download_inv_from_fdsn(network, station, region)
-                _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
                 inv_cache[cache_key] = inv
                 sta_stream = full_stream.select(network=network, station=station).copy()
                 for tr in sta_stream:
@@ -352,8 +350,14 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
                 inv_cache[cache_key] = None
                 record = None
 
+        # Only upload inventory to GCS after remove_sensitivity succeeded
         if record is not None and record != "retry_inv":
             records.append(record)
+            if inv is not None:
+                try:
+                    _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
+                except Exception:
+                    pass
 
     return records
 

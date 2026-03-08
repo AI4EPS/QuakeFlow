@@ -259,7 +259,6 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
             if inv is None:
                 try:
                     inv = _download_inv_from_fdsn(network, station, region)
-                    _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
                 except Exception as fdsn_err:
                     print(f"FDSN inventory also failed for {network}.{station}: {fdsn_err}")
                     if inv_cache is not None:
