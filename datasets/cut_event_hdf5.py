@@ -193,7 +193,7 @@ def _download_inv_from_fdsn(network, station, region):
     from obspy.clients.fdsn import Client
     primary = "SCEDC" if region == "SC" else "NCEDC"
     secondary = "NCEDC" if region == "SC" else "SCEDC"
-    for provider in ["IRIS", primary, secondary]:
+    for provider in [primary, "IRIS", secondary]:
         try:
             client = Client(provider)
             inv = client.get_stations(network=network, station=station, level="response")
