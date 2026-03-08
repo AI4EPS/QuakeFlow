@@ -2,17 +2,22 @@
 """
 Verify parquet files by plotting waveforms with phase picks.
 
-Similar to plot_ceed.py - shows real data samples from GCS parquet files
-with waveform, P/S picks, polarity, and metadata.
+Uses ceed.py's records_to_sample, generate_labels, and plot_overview
+for event-based multi-station visualization.
 """
 import argparse
 import os
+import sys
 import random
 
 import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pyarrow.parquet as pq
+
+# Add EQNet to path for ceed imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "EQNet", "eqnet", "data"))
+from ceed import records_to_sample, generate_labels, plot_overview, plot_trace, LabelConfig
 
 GCS_CREDENTIALS_PATH = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
 BUCKET = "quakeflow_dataset"
@@ -34,139 +39,64 @@ def load_parquet_from_gcs(region, year, jday):
     return table.to_pandas()
 
 
-def normalize_trace(trace):
-    trace = trace - np.mean(trace)
-    max_val = np.max(np.abs(trace))
-    return trace / max_val if max_val > 0 else trace
-
-
-def plot_single_record(record, ax_wave, ax_zoom_p, ax_zoom_s, ax_info):
-    """Plot a single waveform record in 4 panels."""
-    w = record["waveform"]
-    waveform = np.stack([np.asarray(ch, dtype=np.float32) for ch in w])
-
-    nt = waveform.shape[1]
-    time = np.arange(nt) / SAMPLING_RATE
-    components = ["E", "N", "Z"]
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
-
-    p_idx = record.get("p_phase_index")
-    s_idx = record.get("s_phase_index")
-    p_pol = record.get("p_phase_polarity", "")
-
-    # Full waveform
-    for i, (comp, color) in enumerate(zip(components, colors)):
-        ax_wave.plot(time, normalize_trace(waveform[i]) + i, color=color, lw=0.5, label=comp)
-    if p_idx is not None and not (isinstance(p_idx, float) and np.isnan(p_idx)):
-        ax_wave.axvline(p_idx / SAMPLING_RATE, color="red", ls="--", lw=1.5, label=f"P ({p_pol})")
-    if s_idx is not None and not (isinstance(s_idx, float) and np.isnan(s_idx)):
-        ax_wave.axvline(s_idx / SAMPLING_RATE, color="blue", ls="--", lw=1.5, label="S")
-    ax_wave.set_yticks([0, 1, 2])
-    ax_wave.set_yticklabels(components)
-    ax_wave.legend(loc="upper right", fontsize=7)
-    ax_wave.set_xlim(0, time[-1])
-    station_label = f"{record.get('network','')}.{record.get('station','')}"
-    ax_wave.set_title(f"{record.get('event_id','')}, {station_label}, M{record.get('event_magnitude','?')}", fontsize=9)
-
-    # Zoom P
-    if p_idx is not None and not (isinstance(p_idx, float) and np.isnan(p_idx)):
-        p_time = p_idx / SAMPLING_RATE
-        t0 = max(0, p_time - 1)
-        t1 = min(time[-1], p_time + 3)
-        i0, i1 = int(t0 * SAMPLING_RATE), int(t1 * SAMPLING_RATE)
-        for i, (comp, color) in enumerate(zip(components, colors)):
-            ax_zoom_p.plot(time[i0:i1], normalize_trace(waveform[i, i0:i1]) + i, color=color, lw=0.8)
-        ax_zoom_p.axvline(p_time, color="red", ls="--", lw=1)
-        ax_zoom_p.set_xlim(t0, t1)
-        ax_zoom_p.set_yticks([0, 1, 2])
-        ax_zoom_p.set_yticklabels(components)
-    else:
-        ax_zoom_p.text(0.5, 0.5, "No P", ha="center", va="center", transform=ax_zoom_p.transAxes)
-    ax_zoom_p.set_title(f"P zoom ({p_pol})", fontsize=9)
-
-    # Zoom S
-    if s_idx is not None and not (isinstance(s_idx, float) and np.isnan(s_idx)):
-        s_time = s_idx / SAMPLING_RATE
-        t0 = max(0, s_time - 2)
-        t1 = min(time[-1], s_time + 5)
-        i0, i1 = int(t0 * SAMPLING_RATE), int(t1 * SAMPLING_RATE)
-        for i, (comp, color) in enumerate(zip(components, colors)):
-            ax_zoom_s.plot(time[i0:i1], normalize_trace(waveform[i, i0:i1]) + i, color=color, lw=0.8)
-        ax_zoom_s.axvline(s_time, color="blue", ls="--", lw=1)
-        ax_zoom_s.set_xlim(t0, t1)
-        ax_zoom_s.set_yticks([0, 1, 2])
-        ax_zoom_s.set_yticklabels(components)
-    else:
-        ax_zoom_s.text(0.5, 0.5, "No S", ha="center", va="center", transform=ax_zoom_s.transAxes)
-    ax_zoom_s.set_title("S zoom", fontsize=9)
-
-    # Info panel
-    ax_info.axis("off")
-    info_lines = [
-        f"event_id: {record.get('event_id', '')}",
-        f"event_time: {record.get('event_time', '')}",
-        f"lat/lon: {record.get('event_latitude', '')}, {record.get('event_longitude', '')}",
-        f"depth: {record.get('event_depth_km', '')} km",
-        f"magnitude: {record.get('event_magnitude', '')} ({record.get('event_magnitude_type', '')})",
-        "",
-        f"network.station: {record.get('network','')}.{record.get('station','')}",
-        f"location: {record.get('location','')}",
-        f"instrument: {record.get('instrument','')}",
-        f"component: {record.get('component','')}",
-        f"sta lat/lon: {record.get('station_latitude','')}, {record.get('station_longitude','')}",
-        f"distance: {record.get('distance_km', ''):.1f} km" if isinstance(record.get('distance_km'), (int, float)) else f"distance: {record.get('distance_km', '')}",
-        f"azimuth: {record.get('azimuth', '')}",
-        "",
-        f"p_index: {p_idx}",
-        f"s_index: {s_idx}",
-        f"p_polarity: {p_pol}",
-        f"p_score: {record.get('p_phase_score', '')}",
-        f"s_score: {record.get('s_phase_score', '')}",
-        f"snr: {record.get('snr', ''):.1f}" if isinstance(record.get('snr'), (int, float)) else f"snr: {record.get('snr', '')}",
-        "",
-        f"strike/dip/rake: {record.get('strike','')}/{record.get('dip','')}/{record.get('rake','')}",
-        f"waveform shape: {waveform.shape}",
-    ]
-    ax_info.text(0.05, 0.95, "\n".join(info_lines), transform=ax_info.transAxes,
-                 fontsize=7, va="top", fontfamily="monospace",
-                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
-
-
-def plot_parquet_samples(region, year, jday, n_samples=6, seed=42, output_prefix=None):
-    """Plot N random samples from a parquet file."""
+def plot_parquet_events(region, year, jday, n_events=3, n_traces=3, output_prefix=None):
+    """Plot top N events (most stations) using ceed.py's plot_overview and plot_trace."""
     print(f"Loading {region}EDC {year:04d}/{jday:03d}...")
     df = load_parquet_from_gcs(region, year, jday)
-    print(f"  {len(df)} records loaded")
+    print(f"  {len(df)} records, {df['event_id'].nunique()} events")
 
-    # Filter to records with valid P and S
-    mask = df["p_phase_index"].notna() & df["s_phase_index"].notna()
-    df_valid = df[mask]
-    print(f"  {len(df_valid)} records with P+S picks")
+    config = LabelConfig()
 
-    if len(df_valid) == 0:
-        print("  No valid records, skipping")
-        return
+    # Group by event, pick events with most stations
+    event_counts = df.groupby("event_id").size().sort_values(ascending=False)
+    event_ids = event_counts.head(n_events).index.tolist()
 
-    random.seed(seed)
-    indices = random.sample(range(len(df_valid)), min(n_samples, len(df_valid)))
+    for event_id in event_ids:
+        event_df = df[df["event_id"] == event_id]
+        records = []
+        for _, row in event_df.iterrows():
+            d = row.to_dict()
+            # Convert waveform from object array of arrays to proper 2D list
+            w = d.get("waveform")
+            if w is not None and hasattr(w, 'tolist'):
+                d["waveform"] = np.array(w.tolist(), dtype=np.float32).tolist()
+            # Convert NaN values to None for phase indices (ceed.py checks `is not None`)
+            for key in ("p_phase_index", "s_phase_index"):
+                if key in d and isinstance(d[key], float) and np.isnan(d[key]):
+                    d[key] = None
+            records.append(d)
 
-    fig = plt.figure(figsize=(20, 5 * len(indices)))
-    gs = fig.add_gridspec(len(indices), 4, width_ratios=[2, 1, 1, 1])
+        # Convert to ceed Sample
+        sample = records_to_sample(records)
+        mag = records[0].get("event_magnitude", "?")
+        title = f"{event_id} | M{mag} | {sample.nx} stations"
 
-    for row, idx in enumerate(indices):
-        record = df_valid.iloc[idx].to_dict()
-        ax_wave = fig.add_subplot(gs[row, 0])
-        ax_zoom_p = fig.add_subplot(gs[row, 1])
-        ax_zoom_s = fig.add_subplot(gs[row, 2])
-        ax_info = fig.add_subplot(gs[row, 3])
-        plot_single_record(record, ax_wave, ax_zoom_p, ax_zoom_s, ax_info)
+        # Overview plot (2x2: Z wiggle, Z+picks, phase labels, event time)
+        prefix = output_prefix or f"parquet_{region}_{year:04d}_{jday:03d}"
+        overview_path = os.path.join(FIGURES_DIR, f"{prefix}_{event_id}.png")
+        plot_overview(sample, config, title=title, save_path=overview_path)
+        print(f"  Saved overview: {overview_path} ({sample.nx} stations)")
 
-    plt.tight_layout()
-    prefix = output_prefix or f"parquet_{region}_{year:04d}_{jday:03d}"
-    out_path = os.path.join(FIGURES_DIR, f"{prefix}.png")
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_path}")
+        # Trace plots for stations with picks (prefer both P+S, fall back to P-only)
+        labeled_stations = set()
+        for tgt in sample.targets:
+            p_stas = {int(s) for s, _ in tgt.p_picks}
+            s_stas = {int(s) for s, _ in tgt.s_picks}
+            labeled_stations |= (p_stas & s_stas)
+        if not labeled_stations:
+            for tgt in sample.targets:
+                labeled_stations |= {int(s) for s, _ in tgt.p_picks}
+        labeled_stations = sorted(labeled_stations)
+
+        if labeled_stations:
+            labels = generate_labels(sample, config)
+            n = min(n_traces, len(labeled_stations))
+            stations = [labeled_stations[i] for i in np.linspace(0, len(labeled_stations) - 1, n, dtype=int)]
+            for j, sta in enumerate(stations):
+                trace_id = sample.trace_ids[sta] if sta < len(sample.trace_ids) else f"station_{sta}"
+                trace_path = os.path.join(FIGURES_DIR, f"{prefix}_{event_id}_trace{j:02d}.png")
+                plot_trace(sample, labels, sta=sta, title=f"{title} | {trace_id}", save_path=trace_path)
+            print(f"  Saved {n} trace plots")
 
 
 def plot_summary_stats(region, year, jday, output_prefix=None):
@@ -243,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--region", type=str, default="SC", help="Region: SC or NC")
     parser.add_argument("--year", type=int, default=2024, help="Year")
     parser.add_argument("--jday", type=int, default=1, help="Julian day")
-    parser.add_argument("--n_samples", type=int, default=6, help="Number of waveform samples to plot")
+    parser.add_argument("--n_events", type=int, default=3, help="Number of events to plot")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--stats_only", action="store_true", help="Only plot summary stats")
     parser.add_argument("--waveforms_only", action="store_true", help="Only plot waveforms")
@@ -252,6 +182,6 @@ if __name__ == "__main__":
     if not args.waveforms_only:
         plot_summary_stats(args.region, args.year, args.jday)
     if not args.stats_only:
-        plot_parquet_samples(args.region, args.year, args.jday, n_samples=args.n_samples, seed=args.seed)
+        plot_parquet_events(args.region, args.year, args.jday, n_events=args.n_events)
 
 # %%

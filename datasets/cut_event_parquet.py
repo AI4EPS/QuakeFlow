@@ -215,13 +215,14 @@ def prepare_picks(picks, events, config):
     picks = picks.merge(events, on="event_id", how="inner")
 
     # For each event, find the first P phase time across all stations
-    p_picks = picks[picks["phase_type"] == "P"]
+    # Exclude phase_score == 0 (placeholder phases with zero-weight, e.g. NCEDC weight code 4)
+    p_picks = picks[(picks["phase_type"] == "P") & (picks["phase_score"] > 0)]
     first_p_per_event = p_picks.groupby("event_id")["phase_time"].min().reset_index()
     first_p_per_event.columns = ["event_id", "first_p_time"]
 
-    # For events without P picks, use the first S pick
+    # For events without usable P picks, use the first S pick (also excluding score == 0)
     events_with_p = set(first_p_per_event["event_id"])
-    s_only_picks = picks[~picks["event_id"].isin(events_with_p) & (picks["phase_type"] == "S")]
+    s_only_picks = picks[~picks["event_id"].isin(events_with_p) & (picks["phase_type"] == "S") & (picks["phase_score"] > 0)]
     first_s_per_event = s_only_picks.groupby("event_id")["phase_time"].min().reset_index()
     first_s_per_event.columns = ["event_id", "first_p_time"]  # Use same column name
 
