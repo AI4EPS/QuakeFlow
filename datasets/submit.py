@@ -31,8 +31,8 @@ SCRIPT_MAP = {
 }
 
 MARKERS_DIR = {
-    "parquet": "done_markers_parquet",
-    "hdf5": "done_markers_h5",
+    "parquet": "done_parquet",
+    "hdf5": "done_h5",
 }
 
 # Estimated files per day (for auto batch sizing)
@@ -50,7 +50,7 @@ def ts():
 
 
 def bulk_list(region, fs, fmt):
-    """Fetch all available and done days for a region in 2 GCS calls.
+    """Fetch all available and done days for a region.
 
     Returns (available, done) where:
         available = {year: sorted_list_of_days}
@@ -58,19 +58,23 @@ def bulk_list(region, fs, fmt):
     """
     folder = f"{'SC' if region == 'SC' else 'NC'}EDC"
 
+    # Available: list year dirs first, then ls each year
     available = {}
     try:
-        for f in fs.find(f"{BUCKET}/{folder}/mseed/"):
-            if f.endswith(".txt"):
-                parts = f.split("/")
-                year = int(parts[-2])
-                day = int(parts[-1].replace(".txt", ""))
-                available.setdefault(year, []).append(day)
+        year_dirs = fs.ls(f"{BUCKET}/{folder}/mseed/")
+        for yd in year_dirs:
+            try:
+                year = int(yd.split("/")[-1])
+            except ValueError:
+                continue
+            days = sorted(int(f.split("/")[-1].replace(".txt", ""))
+                          for f in fs.ls(yd) if f.endswith(".txt"))
+            if days:
+                available[year] = days
     except Exception:
         pass
-    for year in available:
-        available[year].sort()
 
+    # Done markers: small directory, find() is fast
     done = {}
     try:
         for f in fs.find(f"{BUCKET}/{folder}/{MARKERS_DIR[fmt]}/"):

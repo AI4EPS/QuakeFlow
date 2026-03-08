@@ -269,6 +269,25 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
             if inv_cache is not None:
                 inv_cache[cache_key] = inv
 
+        # Reconcile location codes between trace data and inventory.
+        # PDS waveforms sometimes use "00" (SCEDC) or "N1" (NCEDC analog telemetry)
+        # while FDSN inventory uses "". Treat these as equivalent.
+        EQUIV_LOCS = {"", "00", "--", "N1"}
+        inv_locs = set()
+        for net_obj in inv:
+            for sta_obj in net_obj:
+                for ch in sta_obj:
+                    inv_locs.add(ch.location_code)
+        trace_locs = {tr.stats.location for tr in stream_3c}
+        if trace_locs != inv_locs:
+            inv_equiv = inv_locs & EQUIV_LOCS
+            trace_equiv = trace_locs & EQUIV_LOCS
+            if inv_equiv and trace_equiv and not (inv_equiv & trace_equiv):
+                target_loc = next(iter(inv_equiv))
+                for tr in stream_3c:
+                    if tr.stats.location in EQUIV_LOCS:
+                        tr.stats.location = target_loc
+
         # Apply inventory: try directly, fall back to FDSN if response doesn't match
         try:
             stream_3c.remove_sensitivity(inv)
@@ -325,12 +344,12 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
         end_time = pick["end_time"]
 
         # Cut waveform from cached stream
-        tmp = stream_3c.slice(
-            obspy.UTCDateTime(begin_time),
-            obspy.UTCDateTime(end_time),
-            keep_empty_traces=False,
-            nearest_sample=True,
-        )
+        t_begin = obspy.UTCDateTime(begin_time)
+        t_end = obspy.UTCDateTime(end_time)
+        tmp = stream_3c.slice(t_begin, t_end, keep_empty_traces=False, nearest_sample=True)
+        # Pad with zeros if trace doesn't cover full window
+        for tr in tmp:
+            tr.trim(t_begin, t_end, pad=True, fill_value=0)
 
         waveform = np.zeros((3, config["nt"]), dtype=np.float32)
         components = []
@@ -522,7 +541,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     config["sampling_rate"] = SAMPLING_RATE
     config["time_before"] = TIME_BEFORE
     config["time_after"] = TIME_AFTER
-    markers_path = f"{region}EDC/done_markers_h5"
+    markers_path = f"{region}EDC/done_h5"
 
     # Load station coordinates once (shared across all days)
     station_coords = load_station_csv(region, gcs_fs)
