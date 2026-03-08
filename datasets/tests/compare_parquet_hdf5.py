@@ -149,8 +149,8 @@ def main():
     day = 1
     n_samples = 100
 
-    parquet_path = f"./{region}EDC/dataset/{year:04d}/{day:03d}.parquet"
-    hdf5_path = f"quakeflow_dataset/{region}EDC/dataset/{year:04d}/{day:03d}/waveform.h5"
+    parquet_path = f"./{region}EDC/waveform_parquet/{year:04d}/{day:03d}.parquet"
+    hdf5_path = f"quakeflow_dataset/{region}EDC/waveform_h5/{year:04d}/{day:03d}/waveform.h5"
 
     print("=" * 60)
     print(f"Comparing Parquet vs HDF5 for {region}EDC {year}/{day:03d}")

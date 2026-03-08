@@ -233,7 +233,7 @@ def build_gcs_path(region, year, jday, bucket=DEFAULT_BUCKET):
     Returns:
         GCS path string (gs://bucket/path/waveform.h5)
     """
-    return f"gs://{bucket}/{region}EDC/dataset/{year:04d}/{jday:03d}/waveform.h5"
+    return f"gs://{bucket}/{region}EDC/waveform_h5/{year:04d}/{jday:03d}/waveform.h5"
 
 
 def parse_args():

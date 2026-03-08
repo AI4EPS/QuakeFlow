@@ -123,7 +123,7 @@ def plot_waveform(sample, waveform, save_path: str = None):
 
 
 if __name__ == "__main__":
-    parquet_path = "./SCEDC/dataset/2025/001.parquet"
+    parquet_path = "./SCEDC/waveform_parquet/2025/001.parquet"
 
     ds = test_local_parquet(parquet_path)
     if ds is None:

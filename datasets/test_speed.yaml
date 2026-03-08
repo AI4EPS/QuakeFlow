@@ -1,0 +1,49 @@
+resources:
+  cloud: gcp
+  region: us-west1
+  cpus: 4+
+  memory: 32+
+  disk_size: 20
+  use_spot: true
+
+workdir: .
+
+setup: |
+  pip install -q h5py tqdm pandas scipy 'numpy<2' fsspec gcsfs s3fs obspy pyproj pyarrow sysstat
+
+run: |
+  echo "=== System Info ==="
+  echo "CPUs: $(nproc)"
+  free -h
+  echo ""
+
+  # Monitor CPU and network every 5s in background
+  sar -u -n DEV 5 > /tmp/sar_log.txt 2>&1 &
+  SAR_PID=$!
+
+  # Simpler fallback monitor printed to stdout
+  (while true; do
+    ts=$(date +%H:%M:%S)
+    cpu=$(top -bn1 | grep "Cpu(s)" | awk '{printf "%.0f", 100-$8}')
+    rx1=$(cat /proc/net/dev | awk '/eth0|ens/{print $2}')
+    tx1=$(cat /proc/net/dev | awk '/eth0|ens/{print $10}')
+    sleep 5
+    rx2=$(cat /proc/net/dev | awk '/eth0|ens/{print $2}')
+    tx2=$(cat /proc/net/dev | awk '/eth0|ens/{print $10}')
+    rx_rate=$(( (rx2 - rx1) / 5 / 1024 / 1024 ))
+    tx_rate=$(( (tx2 - tx1) / 5 / 1024 / 1024 ))
+    echo "[monitor $ts] CPU: ${cpu}% | Net: ${rx_rate} MB/s down, ${tx_rate} MB/s up"
+  done) &
+  MON_PID=$!
+
+  echo "=== Running parquet job (1 day) ==="
+  python cut_event_parquet.py --region SC --year 2024 --days "1" --overwrite
+
+  kill $MON_PID $SAR_PID 2>/dev/null
+  echo ""
+  echo "=== SAR Summary ==="
+  echo "--- CPU ---"
+  sar -u -f /tmp/sar_log.txt 2>/dev/null || cat /tmp/sar_log.txt | grep -E "CPU|all"
+  echo "--- Network ---"
+  sar -n DEV -f /tmp/sar_log.txt 2>/dev/null || cat /tmp/sar_log.txt | grep -E "eth0|ens"
+  echo "=== Done ==="

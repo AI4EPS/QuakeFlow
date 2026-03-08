@@ -1,0 +1,15 @@
+resources:
+  cloud: gcp
+  region: us-west1
+  cpus: 4+
+  memory: 32+
+  disk_size: 20
+  use_spot: true
+
+workdir: .
+
+setup: |
+  pip install -q h5py tqdm pandas scipy 'numpy<2' fsspec gcsfs s3fs obspy pyproj pyarrow
+
+run: |
+  {cmd}

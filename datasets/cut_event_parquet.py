@@ -12,7 +12,7 @@ import gc
 import json
 import multiprocessing
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from functools import partial
 
 import fsspec
@@ -32,6 +32,60 @@ TIME_BEFORE = 40.96
 TIME_AFTER = 40.96 * 2
 NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
 EARTH_RADIUS_KM = 6371.0
+PARQUET_SCHEMA = pa.schema([
+    # Event info
+    ("event_id", pa.string()),
+    ("event_time", pa.string()),
+    ("event_latitude", pa.float32()),
+    ("event_longitude", pa.float32()),
+    ("event_depth_km", pa.float32()),
+    ("event_magnitude", pa.float32()),
+    ("event_magnitude_type", pa.string()),
+    ("event_time_index", pa.int32()),
+    # Station info
+    ("network", pa.string()),
+    ("station", pa.string()),
+    ("location", pa.string()),
+    ("instrument", pa.string()),
+    ("station_latitude", pa.float32()),
+    ("station_longitude", pa.float32()),
+    ("station_elevation_m", pa.float32()),
+    ("station_depth_km", pa.float32()),
+    # Waveform
+    ("waveform", pa.list_(pa.list_(pa.float32(), NT), 3)),
+    ("component", pa.string()),
+    ("snr", pa.float32()),
+    ("begin_time", pa.string()),
+    ("end_time", pa.string()),
+    # P phase
+    ("p_phase_time", pa.string()),
+    ("p_phase_index", pa.int32()),
+    ("p_phase_score", pa.float32()),
+    ("p_phase_polarity", pa.string()),
+    ("p_phase_remark", pa.string()),
+    # S phase
+    ("s_phase_time", pa.string()),
+    ("s_phase_index", pa.int32()),
+    ("s_phase_score", pa.float32()),
+    ("s_phase_polarity", pa.string()),
+    ("s_phase_remark", pa.string()),
+    # Optional fields
+    ("azimuth", pa.float32()),
+    ("back_azimuth", pa.float32()),
+    ("takeoff_angle", pa.float32()),
+    ("distance_km", pa.float32()),
+    # Focal mechanism
+    ("strike", pa.float32()),
+    ("dip", pa.float32()),
+    ("rake", pa.float32()),
+    ("num_first_motions", pa.float32()),
+    ("first_motion_misfit", pa.float32()),
+    ("num_sp_ratios", pa.float32()),
+    ("sp_ratio_misfit", pa.float32()),
+    ("plane1_uncertainty", pa.float32()),
+    ("plane2_uncertainty", pa.float32()),
+    ("fm_quality", pa.string()),
+])
 
 
 def calc_azimuth(lat1, lon1, lat2, lon2):
@@ -56,12 +110,31 @@ def calc_distance_km(lat1, lon1, lat2, lon2):
 def load_station_csv(region, gcs_fs):
     """Load station CSV from GCS and return a DataFrame with unique station coordinates.
 
+    Loads primary region first, then supplements with the other region's stations
+    to cover cross-network picks (e.g. CI stations in NCEDC phases).
     Aggregates to network+station level by taking the median coordinates.
     """
-    folder = "SCEDC" if region == "SC" else "NCEDC"
-    csv_path = f"quakeflow_dataset/{folder}/stations.csv"
-    with gcs_fs.open(csv_path, "r") as f:
+    primary = "SCEDC" if region == "SC" else "NCEDC"
+    secondary = "NCEDC" if region == "SC" else "SCEDC"
+
+    with gcs_fs.open(f"quakeflow_dataset/{primary}/stations.csv", "r") as f:
         stations = pd.read_csv(f)
+
+    # Supplement with stations only found in the other region
+    try:
+        with gcs_fs.open(f"quakeflow_dataset/{secondary}/stations.csv", "r") as f:
+            other = pd.read_csv(f)
+        existing = set(zip(stations["network"], stations["station"]))
+        mask = [
+            (net, sta) not in existing
+            for net, sta in zip(other["network"], other["station"])
+        ]
+        extra = other[mask]
+        if len(extra) > 0:
+            stations = pd.concat([stations, extra], ignore_index=True)
+            print(f"Supplemented with {extra.groupby(['network', 'station']).ngroups} stations from {secondary}")
+    except Exception as e:
+        print(f"Warning: could not load {secondary} stations: {e}")
 
     # Aggregate to network+station level (median across channels/locations/time periods)
     station_coords = (
@@ -170,6 +243,33 @@ def prepare_picks(picks, events, config):
     return picks
 
 
+def _download_inv_from_fdsn(network, station, region):
+    """Download station inventory from FDSN web service (SCEDC/NCEDC first, then IRIS)."""
+    from obspy.clients.fdsn import Client
+    primary = "SCEDC" if region == "SC" else "NCEDC"
+    secondary = "NCEDC" if region == "SC" else "SCEDC"
+    for provider in ["IRIS", primary, secondary]:
+        try:
+            client = Client(provider)
+            inv = client.get_stations(network=network, station=station, level="response")
+            print(f"Downloaded inventory for {network}.{station} from {provider}")
+            return inv
+        except Exception:
+            continue
+    raise Exception(f"No FDSN provider has inventory for {network}.{station}")
+
+
+def _upload_inv_to_gcs(inv, network, station, region, gcs_fs):
+    """Upload inventory XML to GCS, replacing any existing file."""
+    import tempfile
+    folder = "SCEDC" if region == "SC" else "NCEDC"
+    gcs_path = f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml"
+    with tempfile.NamedTemporaryFile(suffix=".xml") as tmp:
+        inv.write(tmp.name, format="STATIONXML")
+        gcs_fs.put(tmp.name, gcs_path)
+    print(f"Uploaded FDSN inventory to gs://{gcs_path}")
+
+
 def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, gcs_fs, inv_cache=None):
     """Load mseed files and process (remove sensitivity, rotate to ZNE)."""
     mseed_files = mseed_3c.split("|")
@@ -198,13 +298,47 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
         cache_key = (network, station)
         if inv_cache is not None and cache_key in inv_cache:
             inv = inv_cache[cache_key]
+            if inv is None:
+                return None  # Previously failed, skip
         else:
+            # Try GCS first, fall back to FDSN if missing or broken
+            inv = None
             folder = "SCEDC" if region == "SC" else "NCEDC"
-            with gcs_fs.open(f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml", "r") as f:
-                inv = obspy.read_inventory(f)
+            gcs_path = f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml"
+            try:
+                with gcs_fs.open(gcs_path, "r") as f:
+                    inv = obspy.read_inventory(f)
+            except Exception as gcs_err:
+                print(f"GCS inventory missing for {network}.{station}: {gcs_err}, trying FDSN...")
+                inv = None
+
+            if inv is None:
+                try:
+                    inv = _download_inv_from_fdsn(network, station, region)
+                except Exception as fdsn_err:
+                    print(f"FDSN inventory also failed for {network}.{station}: {fdsn_err}")
+                    if inv_cache is not None:
+                        inv_cache[cache_key] = None
+                    return None
+
             if inv_cache is not None:
                 inv_cache[cache_key] = inv
-        stream_3c.remove_sensitivity(inv)
+
+        # Apply inventory: try directly, fall back to FDSN if response doesn't match
+        try:
+            stream_3c.remove_sensitivity(inv)
+        except Exception:
+            try:
+                inv = _download_inv_from_fdsn(network, station, region)
+                stream_3c.remove_sensitivity(inv)
+                _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
+                if inv_cache is not None:
+                    inv_cache[cache_key] = inv
+            except Exception as err:
+                print(f"Warning: skipping {network}.{station}: {err}")
+                if inv_cache is not None:
+                    inv_cache[cache_key] = None  # Don't retry this station
+                return None
         stream_3c.detrend("constant")
         stream_3c.rotate("->ZNE", inventory=inv)
     except Exception as err:
@@ -349,7 +483,7 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
     return records
 
 
-def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token):
+def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token, overwrite=False):
     fs = fsspec.filesystem(protocol, token=token)
     gcs_fs = fsspec.filesystem("gs", token=token)
 
@@ -357,6 +491,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     config["sampling_rate"] = SAMPLING_RATE
     config["time_before"] = TIME_BEFORE
     config["time_after"] = TIME_AFTER
+    markers_path = f"{region}EDC/done_markers_parquet"
 
     # Load station coordinates once (shared across all days)
     station_coords = load_station_csv(region, gcs_fs)
@@ -368,6 +503,31 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     for jday in jdays:
         year, day = jday.split(".")
         year, day = int(year), int(day)
+
+        # Skip already-processed days (idempotent on SkyPilot recovery)
+        if not overwrite:
+            remote_done = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+            if fs.exists(remote_done):
+                print(f"Skipping {year:04d}.{day:03d}: already processed")
+                continue
+
+        # Skip days where events.csv or phases.csv is missing (some days have no phase data in SCEDC)
+        if protocol == "file":
+            events_file = f"{root_path}/{data_path}/{year:04d}/{day:03d}/events.csv"
+            phases_file = f"{root_path}/{data_path}/{year:04d}/{day:03d}/phases.csv"
+            if not os.path.exists(events_file) or not os.path.exists(phases_file):
+                print(f"Skipping {year:04d}.{day:03d}: missing events.csv or phases.csv")
+                marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+                fs.touch(marker)
+                continue
+        else:
+            events_file = f"{bucket}/{data_path}/{year:04d}/{day:03d}/events.csv"
+            phases_file = f"{bucket}/{data_path}/{year:04d}/{day:03d}/phases.csv"
+            if not fs.exists(events_file) or not fs.exists(phases_file):
+                print(f"Skipping {year:04d}.{day:03d}: missing events.csv or phases.csv")
+                marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+                fs.touch(marker)
+                continue
 
         os.makedirs(f"{root_path}/{result_path}/{year:04d}", exist_ok=True)
 
@@ -461,8 +621,16 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # Step 7: Match picks with mseed files
         # ============================================================
         region_folder = "SCEDC" if region == "SC" else "NCEDC"
-        with gcs_fs.open(f"quakeflow_dataset/{region_folder}/mseed/{year}/{day:03d}.txt", "r") as f:
-            mseeds = [x.strip() for x in f.readlines()]
+        try:
+            with gcs_fs.open(f"quakeflow_dataset/{region_folder}/mseed/{year}/{day:03d}.txt", "r") as f:
+                mseeds = [x.strip() for x in f.readlines()]
+        except FileNotFoundError:
+            print(f"Skipping {year:04d}/{day:03d}: no mseed list found")
+            marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+            fs.touch(marker)
+            del picks, events
+            gc.collect()
+            continue
 
         mseeds_df = pd.DataFrame(mseeds, columns=["mseed_3c"])
         mseeds_df["fname"] = mseeds_df["mseed_3c"].apply(lambda x: x.split("|")[0].split("/")[-1])
@@ -486,6 +654,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         if len(picks) == 0:
             print(f"No picks matched for {year:04d}/{day:03d}")
+            marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+            fs.touch(marker)
             del picks, events
             gc.collect()
             continue
@@ -493,109 +663,67 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         print(f"Matched picks: {len(picks)}")
 
         # ============================================================
-        # Step 8: Process by station (mseed_3c) - cache stream per station
+        # Step 8+9: Process all stations, then write parquet
         # ============================================================
         station_groups = list(picks.groupby("mseed_3c"))
-        ncpu = min(8, multiprocessing.cpu_count()*2)
+        ncpu = min(16, multiprocessing.cpu_count() * 4)  # Each thread holds ~200 MB mseed stream
         print(f"Processing {len(station_groups)} stations with {ncpu} workers")
 
+        local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.parquet"
         all_records = []
+
         with ThreadPoolExecutor(max_workers=ncpu) as executor:
-            futures = [
-                executor.submit(partial(process_station_group, config=config, gcs_fs=gcs_fs, inv_cache=inv_cache), group_df)
-                for _, group_df in station_groups
-            ]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing"):
-                records = future.result()
+            futures = set()
+            pbar = tqdm(total=len(station_groups), desc=f"{year:04d}/{day:03d}")
+
+            for _, group_df in station_groups:
+                if len(futures) >= ncpu:
+                    done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                    for f in done:
+                        records = f.result()
+                        if records:
+                            all_records.extend(records)
+                        pbar.update(1)
+
+                futures.add(
+                    executor.submit(partial(process_station_group, config=config, gcs_fs=gcs_fs, inv_cache=inv_cache), group_df)
+                )
+
+            for f in as_completed(futures):
+                records = f.result()
                 if records:
                     all_records.extend(records)
+                pbar.update(1)
+
+            pbar.close()
 
         if not all_records:
             print(f"No records for {year:04d}/{day:03d}")
-            del picks, events, station_groups, all_records
+            # Write empty marker so this day is not reprocessed
+            marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+            fs.touch(marker)
+            print(f"Marked done (no data): {marker}")
+            del picks, events, station_groups
             gc.collect()
             continue
 
         print(f"Total records: {len(all_records)}")
 
-        # ============================================================
-        # Step 9: Save to Parquet
-        # ============================================================
+        # Convert to parquet and write
         df = pd.DataFrame(all_records)
-        del all_records  # Free memory before sorting
-        gc.collect()
-
-        # Sort by event_id, then station for efficient event-based queries
-        df = df.sort_values(["event_id", "network", "station", "location", "instrument"]).reset_index(drop=True)
-
-        # Convert numpy waveforms to lists for Parquet serialization
+        del all_records
         df["waveform"] = df["waveform"].apply(lambda x: x.tolist())
-
-        schema = pa.schema([
-            # Event info
-            ("event_id", pa.string()),
-            ("event_time", pa.string()),
-            ("event_latitude", pa.float32()),
-            ("event_longitude", pa.float32()),
-            ("event_depth_km", pa.float32()),
-            ("event_magnitude", pa.float32()),
-            ("event_magnitude_type", pa.string()),
-            ("event_time_index", pa.int32()),
-            # Station info
-            ("network", pa.string()),
-            ("station", pa.string()),
-            ("location", pa.string()),
-            ("instrument", pa.string()),
-            ("station_latitude", pa.float32()),
-            ("station_longitude", pa.float32()),
-            ("station_elevation_m", pa.float32()),
-            ("station_depth_km", pa.float32()),
-            # Waveform
-            ("waveform", pa.list_(pa.list_(pa.float32(), NT), 3)),
-            ("component", pa.string()),
-            ("snr", pa.float32()),
-            ("begin_time", pa.string()),
-            ("end_time", pa.string()),
-            # P phase
-            ("p_phase_time", pa.string()),
-            ("p_phase_index", pa.int32()),
-            ("p_phase_score", pa.float32()),
-            ("p_phase_polarity", pa.string()),
-            ("p_phase_remark", pa.string()),
-            # S phase
-            ("s_phase_time", pa.string()),
-            ("s_phase_index", pa.int32()),
-            ("s_phase_score", pa.float32()),
-            ("s_phase_polarity", pa.string()),
-            ("s_phase_remark", pa.string()),
-            # Optional fields
-            ("azimuth", pa.float32()),
-            ("back_azimuth", pa.float32()),
-            ("takeoff_angle", pa.float32()),
-            ("distance_km", pa.float32()),
-            # Focal mechanism
-            ("strike", pa.float32()),
-            ("dip", pa.float32()),
-            ("rake", pa.float32()),
-            ("num_first_motions", pa.float32()),
-            ("first_motion_misfit", pa.float32()),
-            ("num_sp_ratios", pa.float32()),
-            ("sp_ratio_misfit", pa.float32()),
-            ("plane1_uncertainty", pa.float32()),
-            ("plane2_uncertainty", pa.float32()),
-            ("fm_quality", pa.string()),
-        ])
-
-        # Fill missing columns
-        for field in schema:
+        # Sort by event_id, distance
+        df.sort_values(by=["event_id", "distance_km"], inplace=True)
+        for field in PARQUET_SCHEMA:
             if field.name not in df.columns:
                 df[field.name] = None
-
-        df = df[[field.name for field in schema]]
-        table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
-
-        local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.parquet"
+        df = df[[field.name for field in PARQUET_SCHEMA]]
+        table = pa.Table.from_pandas(df, schema=PARQUET_SCHEMA, preserve_index=False)
         pq.write_table(table, local_path, compression="zstd")
+        del df, table
+        gc.collect()
+
         print(f"Saved: {local_path}")
 
         # Upload and cleanup
@@ -603,10 +731,13 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         fs.put(local_path, remote_path)
         print(f"Uploaded: {remote_path}")
         os.remove(local_path)
-        print(f"Deleted local: {local_path}")
+
+        marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
+        fs.touch(marker)
+        print(f"Marked done: {marker}")
 
         # Free memory
-        del df, table, picks, events, station_groups
+        del picks, events, station_groups
         gc.collect()
 
 
@@ -619,6 +750,7 @@ def parse_args():
     parser.add_argument("--days", type=str, help="Comma-separated days to process (e.g., '1,2,3' or '1-30')")
     parser.add_argument("--num_nodes", type=int, default=1)
     parser.add_argument("--node_rank", type=int, default=0)
+    parser.add_argument("--overwrite", action="store_true", help="Reprocess days even if output already exists")
     return parser.parse_args()
 
 
@@ -648,7 +780,7 @@ if __name__ == "__main__":
 
     config = {"region": region}
     data_path = f"{region}EDC/catalog"
-    result_path = f"{region}EDC/dataset"
+    result_path = f"{region}EDC/waveform_parquet"
 
     os.makedirs(f"{root_path}/{result_path}", exist_ok=True)
-    cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token)
+    cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token, overwrite=args.overwrite)

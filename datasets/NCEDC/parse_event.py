@@ -188,13 +188,16 @@ if __name__ == "__main__":
     for csv_file in tqdm(csv_files, desc="Processing catalogs"):
         process_catalog_file(csv_file)
 
-    # Upload year directories to GCS
+    # Upload individual files to GCS (avoid recursive put which creates nested dirs if target exists)
     print("Uploading to GCS...")
-    years = sorted(os.listdir(result_path))
-    for year in tqdm(years, desc="Uploading"):
+    for year in tqdm(sorted(os.listdir(result_path)), desc="Uploading"):
         year_path = f"{result_path}/{year}"
-        if os.path.isdir(year_path):
-            output_fs.put(year_path, f"{output_bucket}/{output_folder}/{year}", recursive=True)
+        if not os.path.isdir(year_path):
+            continue
+        for jday in os.listdir(year_path):
+            local_file = f"{year_path}/{jday}/events.csv"
+            if os.path.isfile(local_file):
+                output_fs.put(local_file, f"{output_bucket}/{output_folder}/{year}/{jday}/events.csv")
     print("Done!")
 
     

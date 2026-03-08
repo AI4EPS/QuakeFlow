@@ -53,13 +53,13 @@ def load_quakeflow_dataset(region="SC", years=None, days=None, streaming=False):
 
     # Build file patterns
     if years is None:
-        pattern = f"{BUCKET}/{region}EDC/dataset/**/*.parquet"
+        pattern = f"{BUCKET}/{region}EDC/waveform_parquet/**/*.parquet"
     elif days is None:
-        patterns = [f"{BUCKET}/{region}EDC/dataset/{year}/*.parquet" for year in years]
+        patterns = [f"{BUCKET}/{region}EDC/waveform_parquet/{year}/*.parquet" for year in years]
         pattern = patterns if len(patterns) > 1 else patterns[0]
     else:
         patterns = [
-            f"{BUCKET}/{region}EDC/dataset/{year}/{day:03d}.parquet"
+            f"{BUCKET}/{region}EDC/waveform_parquet/{year}/{day:03d}.parquet"
             for year in years for day in days
         ]
         pattern = patterns

@@ -77,7 +77,7 @@ def load_processed_catalog(region, year, jday, bucket=DEFAULT_BUCKET):
 def load_parquet(region, year, jday, bucket=DEFAULT_BUCKET):
     """Load parquet file from GCS."""
     fs = get_gcs_fs()
-    path = f"{bucket}/{region}EDC/dataset/{year:04d}/{jday:03d}.parquet"
+    path = f"{bucket}/{region}EDC/waveform_parquet/{year:04d}/{jday:03d}.parquet"
     if not fs.exists(path):
         return None
     with fs.open(path, 'rb') as f:
@@ -815,7 +815,7 @@ def validate_hdf5(region, year, jday, bucket=DEFAULT_BUCKET):
     import h5py
 
     fs = get_gcs_fs()
-    h5_path = f"{bucket}/{region}EDC/dataset/{year:04d}/{jday:03d}/waveform.h5"
+    h5_path = f"{bucket}/{region}EDC/waveform_h5/{year:04d}/{jday:03d}/waveform.h5"
 
     print(f"\n1. Checking HDF5 file exists...")
     if not fs.exists(h5_path):
