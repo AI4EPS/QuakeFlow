@@ -331,10 +331,12 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
         )
 
         # Retry with fresh FDSN inventory if response didn't match
+        used_fdsn = False
         if record == "retry_inv":
             try:
                 inv = _download_inv_from_fdsn(network, station, region)
                 inv_cache[cache_key] = inv
+                used_fdsn = True
                 sta_stream = full_stream.select(network=network, station=station).copy()
                 for tr in sta_stream:
                     if tr.stats.sampling_rate != config["sampling_rate"]:
@@ -350,10 +352,10 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
                 inv_cache[cache_key] = None
                 record = None
 
-        # Only upload inventory to GCS after remove_sensitivity succeeded
         if record is not None and record != "retry_inv":
             records.append(record)
-            if inv is not None:
+            # Only upload to GCS when FDSN retry provided a working inventory
+            if used_fdsn and inv is not None:
                 try:
                     _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
                 except Exception:
