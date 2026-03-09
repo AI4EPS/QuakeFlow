@@ -112,11 +112,13 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
     # while FDSN inventory uses "". Treat these as equivalent.
     EQUIV_LOCS = {"", "00", "--", "N1"}
     if inv is not None:
-        inv_locs = set()
+        inv_channels = []  # (location_code, channel_code, start_date, end_date)
         for net_obj in inv:
             for sta_obj in net_obj:
                 for ch in sta_obj:
-                    inv_locs.add(ch.location_code)
+                    inv_channels.append((ch.location_code, ch.code, ch.start_date, ch.end_date))
+
+        inv_locs = set(ic[0] for ic in inv_channels)
         trace_locs = {tr.stats.location for tr in stream}
         # If trace and inventory locations differ but both are in the equivalent set,
         # rewrite traces to use the inventory location code
@@ -128,6 +130,23 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
                 for tr in stream:
                     if tr.stats.location in EQUIV_LOCS:
                         tr.stats.location = target_loc
+
+        # Remap placeholder "XXX" channel codes to the correct inventory channel
+        # by matching the trace's time against inventory channel epochs.
+        # Prefer Z-component channels since single-channel PDS data is typically vertical.
+        for tr in stream:
+            if tr.stats.channel == "XXX":
+                tr_time = tr.stats.starttime
+                candidates = []
+                for loc, code, start, end in inv_channels:
+                    loc_match = (tr.stats.location == loc) or ({tr.stats.location, loc} <= EQUIV_LOCS)
+                    time_match = (start is None or tr_time >= start) and (end is None or tr_time <= end)
+                    if loc_match and time_match and len(code) == 3:
+                        candidates.append(code)
+                if candidates:
+                    # Prefer Z component, then pick first available
+                    z_cands = [c for c in candidates if c.endswith("Z")]
+                    tr.stats.channel = z_cands[0] if z_cands else candidates[0]
 
     # Resample to target sampling rate
     for tr in stream:
@@ -330,9 +349,12 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
             sta_stream, sta_picks, begin_time, end_time, config, inv, event_info
         )
 
-        # Retry with fresh FDSN inventory if response didn't match
+        # Retry with fresh FDSN inventory if response didn't match,
+        # but only if we haven't already tried FDSN for this station.
         used_fdsn = False
-        if record == "retry_inv":
+        fdsn_tried_key = ("fdsn_tried", network, station)
+        if record == "retry_inv" and fdsn_tried_key not in inv_cache:
+            inv_cache[fdsn_tried_key] = True
             try:
                 inv = _download_inv_from_fdsn(network, station, region)
                 inv_cache[cache_key] = inv
@@ -351,6 +373,8 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
                 print(f"  FDSN retry failed for {network}.{station}: {err}")
                 inv_cache[cache_key] = None
                 record = None
+        elif record == "retry_inv":
+            record = None
 
         if record is not None and record != "retry_inv":
             records.append(record)
