@@ -693,7 +693,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # Step 8+9: Process all stations, then write parquet
         # ============================================================
         station_groups = list(picks.groupby("mseed_3c"))
-        ncpu = min(16, multiprocessing.cpu_count() * 4)  # Each thread holds ~200 MB mseed stream
+        ncpu = min(8, multiprocessing.cpu_count() * 2)  # Each thread holds ~200 MB mseed stream
         print(f"Processing {len(station_groups)} stations with {ncpu} workers")
 
         local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.parquet"
