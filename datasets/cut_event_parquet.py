@@ -782,6 +782,7 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")
     protocol = "gs"
     with open(GCS_CREDENTIALS_PATH, "r") as fp:
         token = json.load(fp)
