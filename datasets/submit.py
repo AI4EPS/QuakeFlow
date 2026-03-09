@@ -14,6 +14,7 @@ import argparse
 import json
 import math
 import os
+import random
 import subprocess
 import time
 from datetime import datetime
@@ -132,7 +133,7 @@ def sky_launch(yaml_path, name):
     os.system(f"sky launch {yaml_path} -c {name} -y -d --idle-minutes-to-autostop 10 --down")
 
 
-def monitor_loop(jobs, max_concurrent, fs, fmt):
+def monitor_loop(jobs, max_concurrent, fs, fmt, overwrite=False):
     retries = {}
     completed = set()
 
@@ -188,6 +189,8 @@ def monitor_loop(jobs, max_concurrent, fs, fmt):
                 attempt = retries[name]
                 label = "Launching" if attempt == 1 else f"Relaunching (attempt {attempt}/{MAX_RETRIES})"
                 print(f"  {name}: {label} ({remaining} days left)")
+                random.shuffle(job["days"])
+                generate_yaml(job["name"], job["region"], job["year"], job["days"], fmt, overwrite)
                 sky_launch(job["yaml"], name)
                 launched += 1
             else:
@@ -246,7 +249,7 @@ def main():
     if args.dry_run or not jobs:
         return
 
-    monitor_loop(jobs, args.max_concurrent, fs, args.format)
+    monitor_loop(jobs, args.max_concurrent, fs, args.format, args.overwrite)
 
 
 if __name__ == "__main__":
