@@ -45,36 +45,33 @@ MAX_RETRIES = 5
 POLL_INTERVAL = 60
 
 
-def ts():
+def timestamp():
     return datetime.now().strftime("%H:%M:%S")
 
 
-def bulk_list(region, fs, fmt):
-    """Fetch all available and done days for a region.
-
-    Returns (available, done) where:
-        available = {year: sorted_list_of_days}
-        done = {year: set_of_days}
-    """
-    folder = f"{'SC' if region == 'SC' else 'NC'}EDC"
-
-    # Available: list year dirs first, then ls each year
+def fetch_available_days(region, fs):
+    """Fetch available mseed days for a region. Returns {year: sorted_list_of_days}."""
+    folder = f"{region}EDC"
     available = {}
     try:
         year_dirs = fs.ls(f"{BUCKET}/{folder}/mseed/")
-        for yd in year_dirs:
+        for year_dir in year_dirs:
             try:
-                year = int(yd.split("/")[-1])
+                year = int(year_dir.split("/")[-1])
             except ValueError:
                 continue
             days = sorted(int(f.split("/")[-1].replace(".txt", ""))
-                          for f in fs.ls(yd) if f.endswith(".txt"))
+                          for f in fs.ls(year_dir) if f.endswith(".txt"))
             if days:
                 available[year] = days
     except Exception:
         pass
+    return available
 
-    # Done markers: small directory, find() is fast
+
+def fetch_done_days(region, fs, fmt):
+    """Fetch done marker days for a region. Returns {year: set_of_days}."""
+    folder = f"{region}EDC"
     done = {}
     try:
         for f in fs.find(f"{BUCKET}/{folder}/{MARKERS_DIR[fmt]}/"):
@@ -85,33 +82,22 @@ def bulk_list(region, fs, fmt):
                 done.setdefault(year, set()).add(day)
     except Exception:
         pass
-
-    return available, done
-
-
-def get_done_days(region, year, fs, fmt):
-    folder = f"{'SC' if region == 'SC' else 'NC'}EDC"
-    try:
-        return {int(f.split("/")[-1].replace(".done", ""))
-                for f in fs.ls(f"{BUCKET}/{folder}/{MARKERS_DIR[fmt]}/{year:04d}/")
-                if f.endswith(".done")}
-    except Exception:
-        return set()
+    return done
 
 
 def auto_batch_size(region, year, target_files=300_000):
     data = FILES_PER_DAY.get(region, FILES_PER_DAY["NC"])
     nearest = min(data.keys(), key=lambda y: abs(y - year))
-    fpd = data[nearest]
-    return max(30, min(366, round(target_files / max(1, fpd))))
+    files_per_day = data[nearest]
+    return max(30, min(366, round(target_files / max(1, files_per_day))))
 
 
 def batch(items, size):
     if not items:
         return []
-    n = math.ceil(len(items) / size)
-    even = math.ceil(len(items) / n)
-    return [items[i:i + even] for i in range(0, len(items), even)]
+    num_chunks = math.ceil(len(items) / size)
+    chunk_size = math.ceil(len(items) / num_chunks)
+    return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
 def generate_yaml(name, region, year, days, fmt, overwrite=False):
@@ -146,64 +132,71 @@ def sky_launch(yaml_path, name):
     os.system(f"sky launch {yaml_path} -c {name} -y -d --idle-minutes-to-autostop 10 --down")
 
 
-def monitor_loop(queue, active, max_concurrent, fs, fmt):
-    done = set()
+def monitor_loop(jobs, max_concurrent, fs, fmt):
     retries = {}
+    completed = set()
 
-    while queue or active:
-        # Fill slots
-        while queue and len(active) < max_concurrent:
-            job = queue.pop(0)
-            name = job["name"]
-            print(f"[{ts()}] Launching {name}...")
-            sky_launch(job["yaml"], name)
-            active[name] = job
-            time.sleep(10)
+    total_jobs = len(jobs)
+    jobs_by_name = {job["name"]: job for job in jobs}
 
-        if not active:
-            break
+    while True:
+        # 1. Bulk-fetch done markers per region (one GCS call each)
+        done_by_region = {}
+        active_regions = {job["region"] for name, job in jobs_by_name.items() if name not in completed}
+        for region in active_regions:
+            done_by_region[region] = fetch_done_days(region, fs, fmt)
 
-        print(f"\n[{ts()}] Active: {len(active)}, Queued: {len(queue)}, Done: {len(done)}")
-        time.sleep(POLL_INTERVAL)
+        # 2. Count complete days and identify pending jobs
+        pending = {}  # name -> (job, remaining_count)
+        total_days = 0
+        completed_days = 0
 
-        up_clusters = get_active_clusters()
-        to_remove = []
-        to_relaunch = []
-
-        # Cache done_days per (region, year) to avoid duplicate GCS calls
-        done_cache = {}
-        for name, job in list(active.items()):
-            key = (job["region"], job["year"])
-            if key not in done_cache:
-                done_cache[key] = get_done_days(job["region"], job["year"], fs, fmt)
-            done_days = done_cache[key]
+        for name, job in jobs_by_name.items():
+            if name in completed:
+                continue
+            done_days = done_by_region.get(job["region"], {}).get(job["year"], set())
             remaining = sum(1 for d in job["days"] if d not in done_days)
+            total_days += len(job["days"])
+            completed_days += len(job["days"]) - remaining
 
             if remaining == 0:
-                print(f"  {name}: completed")
-                if name in up_clusters:
-                    os.system(f"sky down {name} -y &")
-                to_remove.append(name)
-                done.add(name)
-            elif name in up_clusters:
-                print(f"  {name}: running ({remaining} days left)")
-            elif retries.get(name, 0) < MAX_RETRIES:
-                retries[name] = retries.get(name, 0) + 1
-                print(f"  {name}: gone, relaunch ({retries[name]}/{MAX_RETRIES}, {remaining} days left)")
-                to_relaunch.append(name)
+                completed.add(name)
             else:
-                print(f"  {name}: max retries, giving up ({remaining} days left)")
-                to_remove.append(name)
+                pending[name] = (job, remaining)
 
-        for name in to_remove:
-            active.pop(name, None)
-        for name in to_relaunch:
-            job = active.pop(name)
-            sky_launch(job["yaml"], name)
-            active[name] = job
-            time.sleep(10)
+        # Print summary
+        print(f"\n[{timestamp()}] Jobs: {len(completed)}/{total_jobs} complete, "
+              f"Days: {completed_days}/{total_days} done, "
+              f"{len(pending)} jobs remaining")
 
-    print(f"\n[{ts()}] All done. {len(done)} jobs completed.")
+        if not pending:
+            break
+
+        # 3. Check which clusters are running
+        running_clusters = get_active_clusters()
+
+        # 4. For each pending job, launch if not running
+        launched = 0
+        for name, (job, remaining) in pending.items():
+            if name in running_clusters:
+                print(f"  {name}: running ({remaining} days left)")
+            elif retries.get(name, 0) >= MAX_RETRIES:
+                print(f"  {name}: max retries reached, skipping")
+                completed.add(name)
+            elif len(running_clusters) + launched < max_concurrent:
+                retries[name] = retries.get(name, 0) + 1
+                attempt = retries[name]
+                label = "Launching" if attempt == 1 else f"Relaunching (attempt {attempt}/{MAX_RETRIES})"
+                print(f"  {name}: {label} ({remaining} days left)")
+                sky_launch(job["yaml"], name)
+                launched += 1
+            else:
+                print(f"  {name}: waiting (max concurrent reached)")
+
+        # 5. Wait before next check
+        time.sleep(POLL_INTERVAL)
+
+    print(f"\n[{timestamp()}] All done. {len(completed)} jobs completed.")
 
 
 def main():
@@ -225,22 +218,17 @@ def main():
         token = json.load(f)
     fs = fsspec.filesystem("gs", token=token)
 
-    # Build job list — bulk-fetch per region (2 GCS calls each)
+    # Build job list — bulk-fetch per region
     jobs = []
     for region in args.regions:
         print(f"Listing {region}...")
-        available_all, done_all = bulk_list(region, fs, args.format)
+        available_all = fetch_available_days(region, fs)
         for year in years:
             available = available_all.get(year, [])
             if not available:
                 continue
-            done = done_all.get(year, set())
-            if not args.overwrite and done >= set(available):
-                continue
-            bs = args.batch_size or auto_batch_size(region, year)
-            for day_batch in batch(available, bs):
-                if not args.overwrite and all(d in done for d in day_batch):
-                    continue
+            batch_size = args.batch_size or auto_batch_size(region, year)
+            for day_batch in batch(available, batch_size):
                 name = f"{args.format}-{region.lower()}-{year}-{day_batch[0]:03d}-{day_batch[-1]:03d}"
                 jobs.append({"name": name, "yaml": None, "region": region, "year": year, "days": day_batch})
 
@@ -258,19 +246,7 @@ def main():
     if args.dry_run or not jobs:
         return
 
-    # If cluster already running, monitor it; otherwise queue for launch
-    existing = get_active_clusters()
-    queue = []
-    active = {}
-    for job in jobs:
-        if job["name"] in existing:
-            print(f"  {job['name']}: already running")
-            active[job["name"]] = job
-        else:
-            queue.append(job)
-
-    print(f"Resuming {len(active)}, queuing {len(queue)}")
-    monitor_loop(queue, active, args.max_concurrent, fs, args.format)
+    monitor_loop(jobs, args.max_concurrent, fs, args.format)
 
 
 if __name__ == "__main__":
