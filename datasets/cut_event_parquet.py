@@ -799,7 +799,7 @@ if __name__ == "__main__":
         day_nums = list(np.array_split(all_days, args.num_nodes)[args.node_rank])
 
     jdays = [f"{year}.{d:03d}" for d in day_nums]
-    print(f"Processing {len(jdays)} days: {jdays[0]} to {jdays[-1]}")
+    print(f"Processing {len(jdays)} days: {min(jdays)} to {max(jdays)}")
 
     config = {"region": region}
     data_path = f"{region}EDC/catalog"
