@@ -374,6 +374,10 @@ def process_station_group(picks_df, config, token=None):
         if max(snr) == 0:
             continue
 
+        # Skip constant/near-constant traces (e.g. dead channels)
+        if np.std(waveform) == 0:
+            continue
+
         # Event time index (sample index of origin time relative to begin_time)
         event_time_index = None
         if pd.notna(pick.get("event_time")):
