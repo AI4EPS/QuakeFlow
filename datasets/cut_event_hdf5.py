@@ -16,7 +16,7 @@ import gc
 import json
 import multiprocessing
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from functools import partial
 
 import fsspec
@@ -312,7 +312,7 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
     return stream_3c
 
 
-def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
+def process_station_group(picks_df, config, token=None):
     """
     Process all picks for a single station (same mseed_3c).
 
@@ -327,9 +327,12 @@ def process_station_group(picks_df, config, gcs_fs, inv_cache=None):
     network = picks_df.iloc[0]["network"]
     station = picks_df.iloc[0]["station"]
 
+    # Create per-process GCS filesystem (ProcessPoolExecutor can't share fsspec objects)
+    gcs_fs = fsspec.filesystem("gs", token=token)
+
     # Load and cache the stream for this station
     stream_3c = load_and_process_stream(
-        mseed_3c, network, station, region, config["sampling_rate"], gcs_fs, inv_cache
+        mseed_3c, network, station, region, config["sampling_rate"], gcs_fs
     )
     if stream_3c is None:
         return records
@@ -547,8 +550,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     station_coords = load_station_csv(region, gcs_fs)
     print(f"Loaded station coordinates: {len(station_coords)} stations")
 
-    # Cache station inventories across days to avoid re-reading XML files
-    inv_cache = {}
+    # Note: inv_cache removed — each subprocess creates its own gcs_fs and inv_cache
+    # to avoid obspy segfaults from concurrent C library access in threads
 
     for jday in jdays:
         year, day = jday.split(".")
@@ -722,7 +725,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.h5"
         all_records = []
 
-        with ThreadPoolExecutor(max_workers=ncpu) as executor:
+        with ProcessPoolExecutor(max_workers=ncpu) as executor:
             futures = set()
             pbar = tqdm(total=len(station_groups), desc=f"{year:04d}/{day:03d}")
 
@@ -736,7 +739,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                         pbar.update(1)
 
                 futures.add(
-                    executor.submit(partial(process_station_group, config=config, gcs_fs=gcs_fs, inv_cache=inv_cache), group_df)
+                    executor.submit(partial(process_station_group, config=config, token=token), group_df)
                 )
 
             for f in as_completed(futures):
