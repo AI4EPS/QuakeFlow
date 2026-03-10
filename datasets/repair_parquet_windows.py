@@ -180,17 +180,53 @@ if __name__ == "__main__":
         day_filter = parse_days(args.days)
 
     all_affected = {}  # (region, year) -> {day: [...]}
+    grand_total_days = 0
+    grand_total_events = 0
 
     for region in args.region:
         for year in args.year:
             print(f"\nScanning {region} {year}...")
             affected = scan_region_year(region, year, gcs_fs, args.bucket, day_filter=day_filter)
-            if affected:
-                all_affected[(region, year)] = affected
-                total_events = sum(len(v) for v in affected.values())
-                print(f"  Total: {len(affected)} days, {total_events} events affected")
-            else:
+            if not affected:
                 print(f"  No affected days found")
+                continue
+
+            all_affected[(region, year)] = affected
+            total_events = sum(len(v) for v in affected.values())
+            grand_total_days += len(affected)
+            grand_total_events += total_events
+            print(f"  Total: {len(affected)} days, {total_events} events affected")
+
+            days_str = ",".join(str(d) for d in sorted(affected.keys()))
+            print(f"  Step 1: python cut_event_parquet.py --region {region} --year {year} --days {days_str} --overwrite")
+            print(f"  Step 2: python supplement_event_waveforms.py --region {region} --year {year} --days {days_str}")
+
+            # Fix immediately per year if --fix is set
+            if args.fix:
+                # Step 1: Re-cut from continuous data
+                cmd_cut = [
+                    sys.executable, "cut_event_parquet.py",
+                    "--region", region,
+                    "--year", str(year),
+                    "--days", days_str,
+                    "--overwrite",
+                    "--root_path", args.root_path,
+                    "--bucket", args.bucket,
+                ]
+                print(f"\n  Step 1 - Re-cut: {' '.join(cmd_cut)}")
+                subprocess.run(cmd_cut, check=True)
+
+                # Step 2: Supplement with event waveforms
+                cmd_supp = [
+                    sys.executable, "supplement_event_waveforms.py",
+                    "--region", region,
+                    "--year", str(year),
+                    "--days", days_str,
+                    "--root_path", args.root_path,
+                    "--bucket", args.bucket,
+                ]
+                print(f"\n  Step 2 - Supplement: {' '.join(cmd_supp)}")
+                subprocess.run(cmd_supp, check=True)
 
     # Summary
     print(f"\n{'='*60}")
@@ -201,44 +237,10 @@ if __name__ == "__main__":
         print("No affected parquet files found.")
         sys.exit(0)
 
+    print(f"\nGrand total: {grand_total_days} days, {grand_total_events} events across {len(all_affected)} region-years")
     for (region, year), affected in all_affected.items():
         days_str = ",".join(str(d) for d in sorted(affected.keys()))
         total_events = sum(len(v) for v in affected.values())
-        print(f"\n{region} {year}: {len(affected)} days, {total_events} events")
-        print(f"  Days: {days_str}")
-        print(f"  Step 1: python cut_event_parquet.py --region {region} --year {year} --days {days_str} --overwrite")
-        print(f"  Step 2: python supplement_event_waveforms.py --region {region} --year {year} --days {days_str}")
-
-    if args.fix:
-        print(f"\n{'='*60}")
-        print("Reprocessing affected days...")
-        print(f"{'='*60}")
-        for (region, year), affected in all_affected.items():
-            days_str = ",".join(str(d) for d in sorted(affected.keys()))
-
-            # Step 1: Re-cut from continuous data
-            cmd_cut = [
-                sys.executable, "cut_event_parquet.py",
-                "--region", region,
-                "--year", str(year),
-                "--days", days_str,
-                "--overwrite",
-                "--root_path", args.root_path,
-                "--bucket", args.bucket,
-            ]
-            print(f"\nStep 1 - Re-cut: {' '.join(cmd_cut)}")
-            subprocess.run(cmd_cut, check=True)
-
-            # Step 2: Supplement with event waveforms
-            cmd_supp = [
-                sys.executable, "supplement_event_waveforms.py",
-                "--region", region,
-                "--year", str(year),
-                "--days", days_str,
-                "--root_path", args.root_path,
-                "--bucket", args.bucket,
-            ]
-            print(f"\nStep 2 - Supplement: {' '.join(cmd_supp)}")
-            subprocess.run(cmd_supp, check=True)
+        print(f"  {region} {year}: {len(affected)} days, {total_events} events — Days: {days_str}")
 
 # %%
