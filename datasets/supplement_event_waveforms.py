@@ -535,17 +535,19 @@ def supplement_day(year, day, region, config, gcs_fs, inv_cache, dry_run=False):
     new_df = pd.DataFrame(new_records)
     new_df["waveform"] = new_df["waveform"].apply(lambda x: x.tolist())
 
+    # Align new_df columns to schema before concat to avoid FutureWarning
+    # about empty/all-NA columns during concatenation
+    for field in PARQUET_SCHEMA:
+        if field.name not in new_df.columns:
+            new_df[field.name] = None
+    new_df = new_df[[field.name for field in PARQUET_SCHEMA]]
+
     if existing_df is not None:
         merged_df = pd.concat([existing_df, new_df], ignore_index=True)
     else:
         merged_df = new_df
 
     merged_df.sort_values(by=["event_id", "distance_km"], inplace=True)
-
-    for field in PARQUET_SCHEMA:
-        if field.name not in merged_df.columns:
-            merged_df[field.name] = None
-    merged_df = merged_df[[field.name for field in PARQUET_SCHEMA]]
 
     table = pa.Table.from_pandas(merged_df, schema=PARQUET_SCHEMA, preserve_index=False)
 
