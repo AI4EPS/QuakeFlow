@@ -12,12 +12,14 @@ import gc
 import json
 import multiprocessing
 import os
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from functools import partial
 
 import fsspec
 import numpy as np
 import obspy
+from obspy.clients.fdsn import Client as FDSNClient
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -248,12 +250,11 @@ def prepare_picks(picks, events, config):
 
 def _download_inv_from_fdsn(network, station, region):
     """Download station inventory from FDSN web service (SCEDC/NCEDC first, then IRIS)."""
-    from obspy.clients.fdsn import Client
     primary = "SCEDC" if region == "SC" else "NCEDC"
     secondary = "NCEDC" if region == "SC" else "SCEDC"
     for provider in [primary, "IRIS", secondary]:
         try:
-            client = Client(provider)
+            client = FDSNClient(provider)
             inv = client.get_stations(network=network, station=station, level="response")
             print(f"Downloaded inventory for {network}.{station} from {provider}")
             return inv
@@ -264,7 +265,6 @@ def _download_inv_from_fdsn(network, station, region):
 
 def _upload_inv_to_gcs(inv, network, station, region, gcs_fs):
     """Upload inventory XML to GCS, replacing any existing file."""
-    import tempfile
     folder = "SCEDC" if region == "SC" else "NCEDC"
     gcs_path = f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml"
     with tempfile.NamedTemporaryFile(suffix=".xml") as tmp:
@@ -1259,8 +1259,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                     fs.put(local_path, remote_path)
                     os.remove(local_path)
                     print(f"Uploaded: {remote_path}")
-                    del existing_df, table
-                del picks, events
+                    del table
+                del existing_df, picks, events
                 gc.collect()
                 continue
 
