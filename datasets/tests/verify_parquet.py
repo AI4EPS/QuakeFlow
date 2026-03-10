@@ -39,7 +39,7 @@ def load_parquet_from_gcs(region, year, jday):
     return table.to_pandas()
 
 
-def plot_parquet_events(region, year, jday, n_events=3, n_traces=3, output_prefix=None):
+def plot_parquet_events(region, year, jday, n_events=3, n_traces=3, output_prefix=None, no_traces=False):
     """Plot top N events (most stations) using ceed.py's plot_overview and plot_trace."""
     print(f"Loading {region}EDC {year:04d}/{jday:03d}...")
     df = load_parquet_from_gcs(region, year, jday)
@@ -76,6 +76,9 @@ def plot_parquet_events(region, year, jday, n_events=3, n_traces=3, output_prefi
         overview_path = os.path.join(FIGURES_DIR, f"{prefix}_{event_id}.png")
         plot_overview(sample, config, title=title, save_path=overview_path)
         print(f"  Saved overview: {overview_path} ({sample.nx} stations)")
+
+        if no_traces:
+            continue
 
         # Trace plots for stations with picks (prefer both P+S, fall back to P-only)
         labeled_stations = set()
@@ -177,11 +180,12 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--stats_only", action="store_true", help="Only plot summary stats")
     parser.add_argument("--waveforms_only", action="store_true", help="Only plot waveforms")
+    parser.add_argument("--no_traces", action="store_true", help="Skip single-trace plots, only overview")
     args = parser.parse_args()
 
     if not args.waveforms_only:
         plot_summary_stats(args.region, args.year, args.jday)
     if not args.stats_only:
-        plot_parquet_events(args.region, args.year, args.jday, n_events=args.n_events)
+        plot_parquet_events(args.region, args.year, args.jday, n_events=args.n_events, no_traces=args.no_traces)
 
 # %%
