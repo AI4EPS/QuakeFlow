@@ -15,9 +15,11 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import fsspec
 import pandas as pd
+from tqdm import tqdm
 import pyarrow.parquet as pq
 
 from cut_event_parquet import (
@@ -143,13 +145,20 @@ def scan_region_year(region, year, gcs_fs, bucket="quakeflow_dataset", day_filte
                     pass
 
     affected = {}
-    for day in sorted(days):
-        events = check_day(year, day, region, gcs_fs, bucket)
-        if events:
-            affected[day] = events
-            n_events = len(events)
-            max_shift = max(s for _, s in events)
-            print(f"  {year:04d}/{day:03d}: {n_events} affected events (max shift: {max_shift} samples)")
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = {executor.submit(check_day, year, d, region, gcs_fs, bucket): d for d in sorted(days)}
+        for future in tqdm(as_completed(futures), total=len(futures), desc=f"  {year}", leave=False):
+            day = futures[future]
+            try:
+                events = future.result()
+            except Exception as e:
+                print(f"  {year:04d}/{day:03d}: error — {e}")
+                continue
+            if events:
+                affected[day] = events
+                n_events = len(events)
+                max_shift = max(s for _, s in events)
+                tqdm.write(f"  {year:04d}/{day:03d}: {n_events} affected events (max shift: {max_shift} samples)")
 
     return affected
 
