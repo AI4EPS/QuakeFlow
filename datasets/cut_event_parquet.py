@@ -443,6 +443,14 @@ def process_station_group(picks_df, config, token=None):
         if np.std(waveform) == 0:
             continue
 
+        # Skip records with too little data after first phase (e.g. short event waveforms)
+        nonzero_samples = np.nonzero(waveform.any(axis=0))[0]
+        if len(nonzero_samples) > 0:
+            last_nonzero = nonzero_samples[-1]
+            data_after_phase = (last_nonzero - snr_index) / config["sampling_rate"]
+            if data_after_phase < 30.0:
+                continue
+
         # Build record - one per event-station with both P and S
         record = {
             # Event info
@@ -687,6 +695,14 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
     snr = calc_snr(waveform, snr_index)
     if max(snr) == 0:
         return None
+
+    # Skip records with too little data after first phase (e.g. short event waveforms)
+    nonzero_samples = np.nonzero(waveform.any(axis=0))[0]
+    if len(nonzero_samples) > 0:
+        last_nonzero = nonzero_samples[-1]
+        data_after_phase = (last_nonzero - snr_index) / config["sampling_rate"]
+        if data_after_phase < 30.0:
+            return None
 
     pick = station_picks.iloc[0]
 
