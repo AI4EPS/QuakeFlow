@@ -999,7 +999,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         picks = picks.merge(station_coords, on=["network", "station"], how="left")
         n_missing = picks["station_latitude"].isna().sum()
         if n_missing > 0:
-            print(f"Warning: {n_missing}/{len(picks)} picks missing station coordinates")
+            print(f"Dropping {n_missing}/{len(picks)} picks missing station coordinates")
+            picks = picks[picks["station_latitude"].notna()]
 
         # ============================================================
         # Step 4: Prepare picks with consistent time windows per event
