@@ -1296,17 +1296,12 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                 mseeds = [x.strip() for x in f.readlines()]
         except FileNotFoundError:
             mseeds = []
-            if recheck_action != "supplement":
-                print(f"Skipping {year:04d}/{day:03d}: no mseed list found")
-                marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
-                fs.touch(marker)
-                del picks, events
-                gc.collect()
-                continue
+            print(f"No mseed list for {year:04d}/{day:03d}")
 
         os.makedirs(f"{root_path}/{result_path}/{year:04d}", exist_ok=True)
         local_path = f"{root_path}/{result_path}/{year:04d}/{day:03d}.parquet"
         all_records = []
+        picks_all = picks  # save full picks for S3 supplement (mseed merge filters picks)
 
         if mseeds:
             mseeds_df = pd.DataFrame(mseeds, columns=["mseed_3c"])
@@ -1329,13 +1324,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                 how="inner"
             )
 
-        if len(picks) == 0 and recheck_action != "supplement":
-            print(f"No picks matched for {year:04d}/{day:03d}")
-            marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
-            fs.touch(marker)
-            del picks, events
-            gc.collect()
-            continue
+        if len(picks) == 0:
+            print(f"No picks matched mseed for {year:04d}/{day:03d}")
 
         # ============================================================
         # Step 8: Process stations from continuous data
@@ -1383,14 +1373,14 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             s3_existing_pairs = new_pairs
 
         existing_time_windows = {}
-        for event_id, grp in picks.groupby("event_id"):
+        for event_id, grp in picks_all.groupby("event_id"):
             row = grp.iloc[0]
             existing_time_windows[event_id] = (row["begin_time"], row["end_time"])
 
         try:
             supplement_records = supplement_from_s3(
                 year, day, region, config, gcs_fs,
-                s3_existing_pairs, picks, existing_time_windows,
+                s3_existing_pairs, picks_all, existing_time_windows,
             )
             if supplement_records:
                 all_records.extend(supplement_records)
@@ -1398,7 +1388,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         except Exception as err:
             print(f"Supplement failed (non-fatal): {err}")
 
-        if not all_records and recheck_action != "supplement":
+        if not all_records:
             print(f"No records for {year:04d}/{day:03d}")
             marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
             fs.touch(marker)
