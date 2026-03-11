@@ -44,7 +44,7 @@ def get_available_years(region, fs):
         return []
 
 
-def generate_yaml(name, region, year, days_arg=None):
+def generate_yaml(name, region, year, days_arg=None, use_spot=False):
     """Generate a sky YAML for one recheck job."""
     cmd = f"python cut_event_parquet.py --region {region} --year {year} --recheck"
     if days_arg:
@@ -53,6 +53,8 @@ def generate_yaml(name, region, year, days_arg=None):
     with open(TEMPLATE) as f:
         content = f.read()
     content = content.replace("{cmd}", cmd)
+    if not use_spot:
+        content = content.replace("use_spot: true", "use_spot: false")
 
     os.makedirs(JOBS_DIR, exist_ok=True)
     path = os.path.join(JOBS_DIR, f"{name}.yaml")
@@ -132,6 +134,7 @@ def main():
     parser.add_argument("--year", type=int, nargs="+", help="Specific year(s) to process")
     parser.add_argument("--days", type=str, help="Days: '5' or '1-30' or '1,5,10'")
     parser.add_argument("--max_concurrent", type=int, default=64, help="Max concurrent sky clusters")
+    parser.add_argument("--spot", action="store_true", help="Use spot instances instead of on-demand")
     parser.add_argument("--dry_run", action="store_true", help="Preview jobs without launching")
     args = parser.parse_args()
 
@@ -158,7 +161,7 @@ def main():
 
         for year in years:
             name = f"fix-{region.lower()}-{year}"
-            yaml = generate_yaml(name, region, year, args.days)
+            yaml = generate_yaml(name, region, year, args.days, use_spot=args.spot)
             jobs.append({"name": name, "yaml": yaml, "region": region, "year": year})
 
     print(f"\nTotal jobs: {len(jobs)}")

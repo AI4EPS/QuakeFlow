@@ -929,20 +929,25 @@ def supplement_from_s3(year, day, region, config, gcs_fs, existing_pairs, picks,
 def check_parquet_metadata(existing_meta, picks, year, day):
     """Compare existing parquet metadata against current catalog picks.
 
-    Returns (action, bad_event_ids) where:
+    Returns (action, reprocess_event_ids, meta_patch_info) where:
       action: "supplement" if changes needed, "skip" if up to date
-      bad_event_ids: set of event_ids with wrong metadata (to delete and reprocess)
+      reprocess_event_ids: set of event_ids needing waveform re-download (time window changed)
+      meta_patch_info: dict with metadata-only updates to apply in-place:
+        - "event_updates": {event_id: {col: new_val, ...}}  (event metadata + time)
+        - "station_updates": {(network, station): {col: new_val, ...}}  (station coords)
+        - "phase_updates": set of event_ids with changed phase pick times
     """
     existing_events = set(existing_meta["event_id"].unique())
     expected_events = set(picks["event_id"].unique())
     common_events = expected_events & existing_events
-    bad_event_ids = set()
+    reprocess_event_ids = set()
+    meta_patch_info = {"event_updates": {}, "station_updates": {}, "phase_updates": set()}
 
     if common_events:
         common_meta = existing_meta[existing_meta["event_id"].isin(common_events)]
         common_picks = picks[picks["event_id"].isin(common_events)]
 
-        # A1. Time windows
+        # A1. Time windows — these require waveform reprocessing
         expected_tw = common_picks.groupby("event_id")[["begin_time", "end_time"]].first().reset_index()
         expected_tw["begin_time"] = expected_tw["begin_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
         expected_tw["end_time"] = expected_tw["end_time"].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -951,9 +956,9 @@ def check_parquet_metadata(existing_meta, picks, year, day):
         tw_diff = (merged_tw["begin_time_new"] != merged_tw["begin_time_old"]) | \
                   (merged_tw["end_time_new"] != merged_tw["end_time_old"])
         if tw_diff.any():
-            bad_event_ids |= set(merged_tw.loc[tw_diff, "event_id"])
+            reprocess_event_ids |= set(merged_tw.loc[tw_diff, "event_id"])
 
-        # A2. Event metadata (location, magnitude)
+        # A2. Event metadata (location, magnitude) — patch in-place
         ev_float_cols = ["event_latitude", "event_longitude", "event_depth_km", "event_magnitude"]
         expected_ev = common_picks.groupby("event_id")[ev_float_cols].first().reset_index()
         existing_ev = common_meta.groupby("event_id")[ev_float_cols].first().reset_index()
@@ -963,9 +968,11 @@ def check_parquet_metadata(existing_meta, picks, year, day):
             old_vals = pd.to_numeric(merged_ev[f"{col}_old"], errors="coerce")
             diff_mask = (new_vals - old_vals).abs() > 0.001
             if diff_mask.any():
-                bad_event_ids |= set(merged_ev.loc[diff_mask, "event_id"])
+                for _, row in merged_ev[diff_mask].iterrows():
+                    eid = row["event_id"]
+                    meta_patch_info["event_updates"].setdefault(eid, {})[col] = row[f"{col}_new"]
 
-        # A3. Event time
+        # A3. Event time — patch in-place
         expected_et = common_picks.groupby("event_id")["event_time"].first().reset_index()
         expected_et["event_time"] = pd.to_datetime(expected_et["event_time"])
         existing_et = common_meta.groupby("event_id")["event_time"].first().reset_index()
@@ -973,9 +980,11 @@ def check_parquet_metadata(existing_meta, picks, year, day):
         merged_et = expected_et.merge(existing_et, on="event_id", suffixes=("_new", "_old"))
         time_diff = (merged_et["event_time_new"] - merged_et["event_time_old"]).abs() > pd.Timedelta("1ms")
         if time_diff.any():
-            bad_event_ids |= set(merged_et.loc[time_diff, "event_id"])
+            for _, row in merged_et[time_diff].iterrows():
+                eid = row["event_id"]
+                meta_patch_info["event_updates"].setdefault(eid, {})["event_time"] = row["event_time_new"].strftime("%Y-%m-%dT%H:%M:%S.%f")
 
-        # A4. Phase pick times (deterministic: best score, earliest time)
+        # A4. Phase pick times (deterministic: best score, earliest time) — needs reprocessing
         score_cols = {"P": "p_phase_score", "S": "s_phase_score"}
         for phase_type, phase_col in [("P", "p_phase_time"), ("S", "s_phase_time")]:
             type_picks = common_picks[common_picks["phase_type"] == phase_type].sort_values(
@@ -998,9 +1007,9 @@ def check_parquet_metadata(existing_meta, picks, year, day):
                 if both_valid.any():
                     diff_mask = (exp_vals[both_valid] - ext_vals[both_valid]).abs() > pd.Timedelta("1ms")
                     if diff_mask.any():
-                        bad_event_ids |= set(idx[0] for idx in diff_mask[diff_mask].index)
+                        meta_patch_info["phase_updates"] |= set(idx[0] for idx in diff_mask[diff_mask].index)
 
-        # A5. Station coordinates
+        # A5. Station coordinates — patch in-place
         sta_cols = ["station_latitude", "station_longitude", "station_elevation_m"]
         expected_sta = common_picks.groupby(["network", "station"])[sta_cols].first().reset_index()
         existing_sta = common_meta.groupby(["network", "station"])[sta_cols].first().reset_index()
@@ -1010,10 +1019,9 @@ def check_parquet_metadata(existing_meta, picks, year, day):
             old_vals = pd.to_numeric(merged_sta[f"{col}_old"], errors="coerce")
             diff_mask = (new_vals - old_vals).abs() > 0.001
             if diff_mask.any():
-                bad_stations = set(zip(merged_sta.loc[diff_mask, "network"], merged_sta.loc[diff_mask, "station"]))
-                for eid, net, sta in zip(common_meta["event_id"], common_meta["network"], common_meta["station"]):
-                    if (net, sta) in bad_stations:
-                        bad_event_ids.add(eid)
+                for _, row in merged_sta[diff_mask].iterrows():
+                    key = (row["network"], row["station"])
+                    meta_patch_info["station_updates"].setdefault(key, {})[col] = row[f"{col}_new"]
 
     # Step B: Check for new events + phase_score==0 records
     new_event_ids = expected_events - existing_events
@@ -1022,10 +1030,18 @@ def check_parquet_metadata(existing_meta, picks, year, day):
     n_both_bad = int((p_bad & s_bad).sum())
     n_patch = int((p_bad & ~s_bad).sum() + (~p_bad & s_bad).sum())
 
-    if bad_event_ids or new_event_ids or n_both_bad > 0 or n_patch > 0:
+    has_meta_patches = meta_patch_info["event_updates"] or meta_patch_info["station_updates"] or meta_patch_info["phase_updates"]
+    if reprocess_event_ids or new_event_ids or n_both_bad > 0 or n_patch > 0 or has_meta_patches:
         changes = []
-        if bad_event_ids:
-            changes.append(f"{len(bad_event_ids)} events with wrong metadata to reprocess")
+        if reprocess_event_ids:
+            changes.append(f"{len(reprocess_event_ids)} events with time window changes to reprocess")
+        if meta_patch_info["event_updates"]:
+            changes.append(f"{len(meta_patch_info['event_updates'])} events with metadata to patch")
+        if meta_patch_info["station_updates"]:
+            n_sta = len(meta_patch_info["station_updates"])
+            changes.append(f"{n_sta} stations with coordinates to patch")
+        if meta_patch_info["phase_updates"]:
+            changes.append(f"{len(meta_patch_info['phase_updates'])} events with phase times to patch")
         if new_event_ids:
             changes.append(f"{len(new_event_ids)} new events")
         if n_both_bad > 0:
@@ -1033,10 +1049,10 @@ def check_parquet_metadata(existing_meta, picks, year, day):
         if n_patch > 0:
             changes.append(f"{n_patch} records to patch (one phase_score<=0)")
         print(f"Supplement {year:04d}.{day:03d}: {'; '.join(changes)}")
-        return "supplement", bad_event_ids
+        return "supplement", reprocess_event_ids, meta_patch_info
     else:
         print(f"Skipping {year:04d}.{day:03d}: parquet up to date ({len(existing_events)} events, {len(existing_meta)} records)")
-        return "skip", bad_event_ids
+        return "skip", reprocess_event_ids, meta_patch_info
 
 
 def cut_templates(jdays, root_path, data_path, result_path, region, config, bucket, protocol, token, recheck=False):
@@ -1066,6 +1082,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         n_deleted = 0
         n_missing_pairs = 0
         existing_df = None
+        meta_patch_info = {"event_updates": {}, "station_updates": {}, "phase_updates": set()}
 
         # Skip already-processed days (fast check via .done marker)
         if not recheck:
@@ -1157,7 +1174,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             ]
             with fs.open(remote_parquet, "rb") as f:
                 existing_meta = pq.read_table(f, columns=check_cols).to_pandas()
-            recheck_action, bad_event_ids = check_parquet_metadata(existing_meta, picks, year, day)
+            recheck_action, bad_event_ids, meta_patch_info = check_parquet_metadata(existing_meta, picks, year, day)
         except FileNotFoundError:
             pass  # no parquet yet, process
         except Exception as err:
@@ -1216,14 +1233,36 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                 print(f"Could not load parquet for {year:04d}.{day:03d}: {err}; falling back to process")
                 recheck_action = "process"
 
-            # Remove records for events with wrong metadata (will be reprocessed)
+            # Remove records for events with time window changes (need new waveforms)
             if bad_event_ids:
                 bad_meta_mask = existing_df["event_id"].isin(bad_event_ids)
                 n_bad_meta = int(bad_meta_mask.sum())
                 if n_bad_meta > 0:
-                    print(f"Removing {n_bad_meta} records from {len(bad_event_ids)} events with wrong metadata")
+                    print(f"Removing {n_bad_meta} records from {len(bad_event_ids)} events with time window changes")
                     existing_df = existing_df[~bad_meta_mask]
                     n_deleted += n_bad_meta
+
+            # Patch metadata in-place for events/stations with changed metadata (no waveform re-download)
+            n_meta_patched = 0
+            if meta_patch_info["event_updates"]:
+                for eid, updates in meta_patch_info["event_updates"].items():
+                    if eid in bad_event_ids:
+                        continue  # already removed for reprocessing
+                    mask = existing_df["event_id"] == eid
+                    if mask.any():
+                        for col, val in updates.items():
+                            existing_df.loc[mask, col] = val
+                        n_meta_patched += int(mask.sum())
+            if meta_patch_info["station_updates"]:
+                for (net, sta), updates in meta_patch_info["station_updates"].items():
+                    mask = (existing_df["network"] == net) & (existing_df["station"] == sta)
+                    if mask.any():
+                        for col, val in updates.items():
+                            existing_df.loc[mask, col] = val
+                        n_meta_patched += int(mask.sum())
+            if n_meta_patched > 0:
+                print(f"Patched {n_meta_patched} records with updated metadata (in-place)")
+                n_deleted += n_meta_patched  # count as change for write trigger
 
             # Clean up phase_score==0 records (None means no pick, which is fine)
             p_bad = existing_df["p_phase_score"] == 0
