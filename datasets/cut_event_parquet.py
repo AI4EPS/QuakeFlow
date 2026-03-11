@@ -1064,6 +1064,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         recheck_action = "process"  # overridden below
         bad_event_ids = set()
         n_deleted = 0
+        n_missing_pairs = 0
         existing_df = None
 
         # Skip already-processed days (fast check via .done marker)
@@ -1263,7 +1264,8 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             picks = picks[picks.apply(
                 lambda r: (r["event_id"], r["network"], r["station"]) in missing_pairs, axis=1
             )]
-            print(f"Supplement mode: {len(missing_pairs)} missing pairs, {len(picks)} picks to process")
+            n_missing_pairs = len(missing_pairs)
+            print(f"Supplement mode: {n_missing_pairs} missing pairs, {len(picks)} picks to process")
 
         # ============================================================
         # Step 7: Match picks with mseed files
@@ -1377,15 +1379,15 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                     remote_path = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
                     fs.put(local_path, remote_path)
                     os.remove(local_path)
-                    print(f"Updated: {remote_path}")
+                    print(f"Updated: {remote_path} (deleted/patched: {n_deleted}, missing pairs: {n_missing_pairs})")
                     del table
                 else:
-                    print(f"Skipping {year:04d}.{day:03d}: supplement produced no changes")
+                    print(f"Skipping {year:04d}.{day:03d}: supplement produced no changes (missing pairs: {n_missing_pairs})")
                 del existing_df, picks, events
                 gc.collect()
                 continue
             # No records produced at all
-            print(f"No records for {year:04d}/{day:03d}")
+            print(f"No records for {year:04d}/{day:03d} (deleted/patched: {n_deleted}, missing pairs: {n_missing_pairs})")
             marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
             fs.touch(marker)
             print(f"Marked done (no data): {marker}")
@@ -1450,7 +1452,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
         fs.touch(marker)
-        print(f"Marked done: {marker}")
+        print(f"Marked done: {marker} (deleted/patched: {n_deleted}, missing pairs: {n_missing_pairs})")
 
         # Free memory
         del picks, events
