@@ -562,12 +562,12 @@ def list_event_waveforms_s3(region, year, jday):
     event_files = {}  # event_id -> list of s3 paths
     for fpath in files:
         fname = fpath.split("/")[-1]
-        if not fname.endswith(".ms"):
+        if not (fname.endswith(".ms") or fname.endswith(".mseed")):
             continue
 
         if region == "SC":
-            # Format: {numeric_id}.ms -> ci{numeric_id}
-            event_num = fname.replace(".ms", "")
+            # Format: {numeric_id}.ms or {numeric_id}.mseed -> ci{numeric_id}
+            event_num = fname.replace(".mseed", "").replace(".ms", "")
             event_id = f"ci{event_num}"
             s3_path = f"s3://{fpath}"
         else:
