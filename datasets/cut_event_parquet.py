@@ -1048,7 +1048,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
     config["time_before"] = TIME_BEFORE
     config["time_after"] = TIME_AFTER
     markers_path = f"{region}EDC/done_parquet"
-    markers_supplement = f"{region}EDC/done_supplement"
 
     # Load station coordinates once (shared across all days)
     station_coords = load_station_csv(region, gcs_fs)
@@ -1062,23 +1061,16 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         year, day = int(year), int(day)
 
         # Per-day state
-        recheck_action = "full_process"  # overridden by skip checks / recheck logic
+        recheck_action = "process"  # overridden below
         bad_event_ids = set()
         n_deleted = 0
         existing_df = None
 
-        # Skip already-processed days (fast check via .done markers)
+        # Skip already-processed days (fast check via .done marker)
         if not recheck:
-            done_parquet = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
-            done_supp = f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done"
-            parquet_done = fs.exists(done_parquet)
-            supp_done = fs.exists(done_supp)
-            if parquet_done and supp_done:
+            if fs.exists(f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"):
                 print(f"Skipping {year:04d}.{day:03d}: already processed")
                 continue
-            if parquet_done and not supp_done:
-                # Continuous data done, but supplement not yet attempted
-                recheck_action = "supplement_only"
 
         # Skip days where events.csv or phases.csv is missing (some days have no phase data in SCEDC)
         if protocol == "file":
@@ -1087,7 +1079,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             if not os.path.exists(events_file) or not os.path.exists(phases_file):
                 print(f"Skipping {year:04d}.{day:03d}: missing events.csv or phases.csv")
                 fs.touch(f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done")
-                fs.touch(f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done")
                 continue
         else:
             events_file = f"{bucket}/{data_path}/{year:04d}/{day:03d}/events.csv"
@@ -1095,7 +1086,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             if not fs.exists(events_file) or not fs.exists(phases_file):
                 print(f"Skipping {year:04d}.{day:03d}: missing events.csv or phases.csv")
                 fs.touch(f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done")
-                fs.touch(f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done")
                 continue
 
         os.makedirs(f"{root_path}/{result_path}/{year:04d}", exist_ok=True)
@@ -1151,27 +1141,26 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         print(f"Picks after merge: {len(picks)}")
 
         # ============================================================
-        # Step 4b: Recheck — decide action based on existing parquet
+        # Step 4b: Check existing parquet — skip if up to date
         # ============================================================
-        if recheck:
-            remote_parquet = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
-            try:
-                check_cols = [
-                    "event_id", "network", "station", "location", "instrument",
-                    "begin_time", "end_time",
-                    "event_time", "event_latitude", "event_longitude",
-                    "event_depth_km", "event_magnitude",
-                    "p_phase_time", "p_phase_score",
-                    "s_phase_time", "s_phase_score",
-                    "station_latitude", "station_longitude", "station_elevation_m",
-                ]
-                with fs.open(remote_parquet, "rb") as f:
-                    existing_meta = pq.read_table(f, columns=check_cols).to_pandas()
-                recheck_action, bad_event_ids = check_parquet_metadata(existing_meta, picks, year, day)
-            except FileNotFoundError:
-                pass  # no parquet yet, full_process
-            except Exception as err:
-                print(f"Could not check existing parquet: {err}")
+        remote_parquet = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
+        try:
+            check_cols = [
+                "event_id", "network", "station", "location", "instrument",
+                "begin_time", "end_time",
+                "event_time", "event_latitude", "event_longitude",
+                "event_depth_km", "event_magnitude",
+                "p_phase_time", "p_phase_score",
+                "s_phase_time", "s_phase_score",
+                "station_latitude", "station_longitude", "station_elevation_m",
+            ]
+            with fs.open(remote_parquet, "rb") as f:
+                existing_meta = pq.read_table(f, columns=check_cols).to_pandas()
+            recheck_action, bad_event_ids = check_parquet_metadata(existing_meta, picks, year, day)
+        except FileNotFoundError:
+            pass  # no parquet yet, process
+        except Exception as err:
+            print(f"Could not check existing parquet: {err}")
 
         if recheck_action == "skip":
             del picks, events
@@ -1216,17 +1205,15 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             pass  # Focal mechanisms are optional
 
         # ============================================================
-        # Step 6b: For supplement/supplement_only mode, load existing parquet and filter picks
+        # Step 6b: For supplement mode, load existing parquet and filter picks
         # ============================================================
-        if recheck_action in ("supplement", "supplement_only"):
-            if recheck_action == "supplement_only":
-                print(f"Supplement only {year:04d}.{day:03d}: checking S3 event waveforms")
+        if recheck_action == "supplement":
             try:
                 with fs.open(f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet", "rb") as f:
                     existing_df = pq.read_table(f).to_pandas()
             except Exception as err:
-                print(f"Could not load parquet for {year:04d}.{day:03d}: {err}; falling back to full_process")
-                recheck_action = "full_process"
+                print(f"Could not load parquet for {year:04d}.{day:03d}: {err}; falling back to process")
+                recheck_action = "process"
 
             # Remove records for events with wrong metadata (will be reprocessed)
             if bad_event_ids:
@@ -1357,7 +1344,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # ============================================================
         # Build pairs from new records + existing parquet (supplement mode)
         new_pairs = set((r["event_id"], r["network"], r["station"]) for r in all_records)
-        if recheck_action in ("supplement", "supplement_only") and existing_df is not None:
+        if recheck_action == "supplement" and existing_df is not None:
             parquet_pairs = set(zip(existing_df["event_id"], existing_df["network"], existing_df["station"]))
             s3_existing_pairs = new_pairs | parquet_pairs
         else:
@@ -1380,7 +1367,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
             print(f"Supplement failed (non-fatal): {err}")
 
         if not all_records:
-            if recheck_action in ("supplement", "supplement_only") and existing_df is not None:
+            if recheck_action == "supplement" and existing_df is not None:
                 # Supplement produced no new records — existing data is fine, mark supplement done
                 if n_deleted > 0:
                     # Had deletions/patches but no new records — write updated parquet
@@ -1394,17 +1381,13 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                     del table
                 else:
                     print(f"Skipping {year:04d}.{day:03d}: supplement produced no changes")
-                supp_marker = f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done"
-                fs.touch(supp_marker)
                 del existing_df, picks, events
                 gc.collect()
                 continue
-            # Full process produced no records at all
+            # No records produced at all
             print(f"No records for {year:04d}/{day:03d}")
             marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
             fs.touch(marker)
-            supp_marker = f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done"
-            fs.touch(supp_marker)
             print(f"Marked done (no data): {marker}")
             del picks, events
             gc.collect()
@@ -1424,7 +1407,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         else:
             new_df = None
 
-        if recheck_action in ("supplement", "supplement_only") and existing_df is not None:
+        if recheck_action == "supplement" and existing_df is not None:
             if new_df is None and n_deleted == 0:
                 # No new records and no deletions — nothing changed
                 print(f"Skipping {year:04d}.{day:03d}: supplement produced no changes")
@@ -1467,8 +1450,6 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         marker = f"{bucket}/{markers_path}/{year:04d}/{day:03d}.done"
         fs.touch(marker)
-        supp_marker = f"{bucket}/{markers_supplement}/{year:04d}/{day:03d}.done"
-        fs.touch(supp_marker)
         print(f"Marked done: {marker}")
 
         # Free memory
