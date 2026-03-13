@@ -391,29 +391,29 @@ def process(file):
             f"{output_bucket}/{output_folder}/{year}/{jday}/phases.csv",
         )
 
-    # %% save picks with P/S pairs - keep best score per event/station/phase_type
-    phases_best = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
-
-    # Find groups that have both P and S
-    group_cols = ["event_id", "network", "station"]
-    phase_counts = phases_best.groupby(group_cols + ["phase_type"]).size().unstack(fill_value=0)
-    has_both = phase_counts.index[(phase_counts.get("P", 0) > 0) & (phase_counts.get("S", 0) > 0)]
-
-    if len(has_both) == 0:
-        return
-
-    phases_ps = phases_best.set_index(group_cols).loc[has_both].reset_index()
-
-    for (year, jday), picks in phases_ps.groupby(["year", "jday"]):
-        if len(picks) == 0:
-            return
-
-        picks = picks[phase_columns]
-        picks.to_csv(f"{result_path}/{year}/{jday}/phases_ps.csv", index=False)
-        output_fs.put(
-            f"{result_path}/{year}/{jday}/phases_ps.csv",
-            f"{output_bucket}/{output_folder}/{year}/{jday}/phases_ps.csv",
-        )
+    # # %% save picks with P/S pairs - keep best score per event/station/phase_type
+    # phases_best = phases.loc[phases.groupby(["event_id", "network", "station", "phase_type"])["phase_score"].idxmax()]
+    #
+    # # Find groups that have both P and S
+    # group_cols = ["event_id", "network", "station"]
+    # phase_counts = phases_best.groupby(group_cols + ["phase_type"]).size().unstack(fill_value=0)
+    # has_both = phase_counts.index[(phase_counts.get("P", 0) > 0) & (phase_counts.get("S", 0) > 0)]
+    #
+    # if len(has_both) == 0:
+    #     return
+    #
+    # phases_ps = phases_best.set_index(group_cols).loc[has_both].reset_index()
+    #
+    # for (year, jday), picks in phases_ps.groupby(["year", "jday"]):
+    #     if len(picks) == 0:
+    #         return
+    #
+    #     picks = picks[phase_columns]
+    #     picks.to_csv(f"{result_path}/{year}/{jday}/phases_ps.csv", index=False)
+    #     output_fs.put(
+    #         f"{result_path}/{year}/{jday}/phases_ps.csv",
+    #         f"{output_bucket}/{output_folder}/{year}/{jday}/phases_ps.csv",
+    #     )
 
 
 
