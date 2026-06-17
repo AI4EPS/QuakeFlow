@@ -6,6 +6,28 @@ Key logic:
 1. For each event, use the first P phase across ALL stations as the reference time
 2. All stations for the same event share the same time window (begin_time, end_time)
 3. Cache mseed streams per station to avoid redundant reads
+
+Data source per (event, station, channel) -- priority cascade:
+
+  #  Situation                                           Source used
+  -  --------------------------------------------------  --------------------------------------
+  1  Continuous file exists and covers the window        Continuous (daily mseed)
+  2  Window crosses a day boundary  (SKIP S3)            FDSN: SCEDC/NCEDC -> EARTHSCOPE
+     -> daily file AND the S3 event window can both be   (queries by time range, spans the
+        truncated at midnight; FDSN spans the boundary    day boundary)
+  3  Continuous exists, internal real gap (not midnight) Continuous as-is (zero-filled)
+                                                         (FDSN = same archive, cannot fill it)
+  4  No continuous file, NOT cross-midnight, in S3 .ms   S3 event archive (scedc-pds)
+  5  No continuous file, NOT cross-midnight, not in S3   FDSN: SCEDC/NCEDC -> EARTHSCOPE
+                                                         (data center may hold omitted stations)
+  6  Chosen source still incomplete / FDSN empty         Keep best partial if >=30s, else drop
+
+Cross-cutting:
+- Dedup: one record per (event, station, instrument); a completing source replaces a partial.
+- Graceful FDSN failure: a timeout/error is treated as "no data" (fall back, never crash the day).
+- Final keep/drop: MIN_DATA_SECONDS (30s) of total non-zero data, applied after the chosen source.
+- FDSN (SCEDC/NCEDC, then EARTHSCOPE -- the renamed IRIS) only adds value for day-boundary
+  crossing and stations missing from our daily mseed list; it cannot fill genuine recording gaps.
 """
 import argparse
 import gc
@@ -33,6 +55,13 @@ SAMPLING_RATE = 100.0
 TIME_BEFORE = 40.96
 TIME_AFTER = 40.96 * 2
 NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
+# Drop records with too little ACTUAL waveform data (short/truncated recordings). Coverage-based,
+# not data-after-phase: a complete recording of a distant station has a late phase but still fills
+# the window and should be kept, so we measure total non-zero data, not time after the phase.
+MIN_DATA_SECONDS = 30.0
+# Location codes treated as equivalent. PDS waveforms sometimes use "00" (SCEDC) or "N1" (NCEDC
+# analog telemetry) while FDSN inventory uses ""; treat these blank stand-ins as the same.
+EQUIV_LOCS = {"", "00", "--", "N1"}
 EARTH_RADIUS_KM = 6371.0
 PARQUET_SCHEMA = pa.schema([
     # Event info
@@ -53,9 +82,11 @@ PARQUET_SCHEMA = pa.schema([
     ("station_longitude", pa.float32()),
     ("station_elevation_m", pa.float32()),
     ("station_depth_km", pa.float32()),
+    ("local_depth_m", pa.float32()),  # channel burial depth from StationXML <Depth>
     # Waveform
     ("waveform", pa.list_(pa.list_(pa.float32(), NT), 3)),
     ("component", pa.string()),
+    ("unit", pa.string()),
     ("snr", pa.float32()),
     ("begin_time", pa.string()),
     ("end_time", pa.string()),
@@ -88,6 +119,53 @@ PARQUET_SCHEMA = pa.schema([
     ("plane2_uncertainty", pa.float32()),
     ("fm_quality", pa.string()),
 ])
+
+# Cap rows per Parquet row group below 2^31 / (3*NT) = 58253, so a single row group's waveform
+# (list<list<float>>) never exceeds Arrow's 32-bit list-offset limit. read_table returns one chunk
+# per row group, so this keeps a plain pq.read_table() working whole even on the densest days
+# (e.g. the Ridgecrest mainshock day with ~73k records).
+ROW_GROUP_SIZE = 50000
+
+
+def waveform_unit(inv, stream, scale_prefix="micro "):
+    """Physical unit of the waveform after remove_sensitivity() and the 1e6 scaling.
+
+    Read strictly from the StationXML response input units (velocity sensors -> m/s,
+    accelerometers -> m/s^2). The instrument code is NOT a reliable proxy -- HL/BL/VM
+    are accelerometers and the same code can map to both velocity and acceleration --
+    so we never guess from it; returns None if the XML has no usable input units.
+    Warns when the unit contradicts the instrument code (a likely upstream metadata
+    error, e.g. an E?H geophone tagged M/S**2 as in CE.77352).
+    """
+    if inv is None or len(stream) == 0:
+        return None
+    tr = stream[0]
+    try:
+        units = inv.get_response(tr.id, tr.stats.starttime).instrument_sensitivity.input_units
+    except Exception:
+        units = None
+    if not units:
+        return None
+    # Normalize SEED-style "M/S**2"/"M/S2" to "m/s^2" (velocity "M/S" stays "m/s")
+    unit = scale_prefix + units.strip().lower().replace("**", "^").replace("/s2", "/s^2")
+    chan = tr.stats.channel
+    code = chan[1].upper() if len(chan) >= 2 else ""
+    is_accel = unit.endswith("m/s^2")
+    if (code == "H" and is_accel) or (code == "N" and not is_accel):
+        print(f"WARNING: unit/instrument mismatch for {tr.id}: code '{code}' but unit '{unit}' "
+              f"(input_units={units!r}) -- likely StationXML metadata error")
+    return unit
+
+
+def channel_local_depth(inv, stream):
+    """Channel burial depth in meters from the StationXML <Depth>, or None if unavailable."""
+    if inv is None or len(stream) == 0:
+        return None
+    tr = stream[0]
+    try:
+        return float(inv.get_channel_metadata(tr.id, tr.stats.starttime)["local_depth"])
+    except Exception:
+        return None
 
 
 def calc_azimuth(lat1, lon1, lat2, lon2):
@@ -240,10 +318,14 @@ def prepare_picks(picks, events, config):
     picks["begin_time"] = picks["first_p_time"] - pd.Timedelta(seconds=config["time_before"])
     picks["end_time"] = picks["first_p_time"] + pd.Timedelta(seconds=config["time_after"])
 
-    # Calculate phase_index relative to begin_time
+    # Calculate phase_index relative to begin_time.
+    # Round (not truncate) to the nearest sample so this matches parquet_to_hdf5.window_arrays,
+    # which recomputes the multi-event pick-array phase_index with int(round(...)). Otherwise the
+    # scalar p_phase_index/s_phase_index (carried from here) and the pick-array entry for the same
+    # arrival could differ by one sample within the same record.
     picks["phase_index"] = (
         (picks["phase_time"] - picks["begin_time"]).dt.total_seconds() * config["sampling_rate"]
-    ).astype(int)
+    ).round().astype(int)
 
     return picks
 
@@ -296,17 +378,17 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                 stream_3c.append(trace)
         except Exception as err:
             print(f"Error reading mseed: {err} on {c}")
-            return None
+            return None, None, None
 
     if len(stream_3c) == 0:
-        return None
+        return None, None, None
 
     try:
         cache_key = (network, station)
         if inv_cache is not None and cache_key in inv_cache:
             inv = inv_cache[cache_key]
             if inv is None:
-                return None  # Previously failed, skip
+                return None, None, None  # Previously failed, skip
         else:
             # Try GCS first, fall back to FDSN if missing or broken
             inv = None
@@ -325,16 +407,13 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                 except Exception as fdsn_err:
                     print(f"FDSN inventory also failed for {network}.{station}: {fdsn_err}")
                     if inv_cache is not None:
-                        inv_cache[cache_key] = None
-                    return None
+                        inv_cache[(network, station)] =None
+                    return None, None, None
 
             if inv_cache is not None:
-                inv_cache[cache_key] = inv
+                inv_cache[(network, station)] =inv
 
-        # Reconcile location codes between trace data and inventory.
-        # PDS waveforms sometimes use "00" (SCEDC) or "N1" (NCEDC analog telemetry)
-        # while FDSN inventory uses "". Treat these as equivalent.
-        EQUIV_LOCS = {"", "00", "--", "N1"}
+        # Reconcile location codes between trace data and inventory (EQUIV_LOCS is module-level).
         inv_locs = set()
         for net_obj in inv:
             for sta_obj in net_obj:
@@ -359,19 +438,21 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                 stream_3c.remove_sensitivity(inv)
                 _upload_inv_to_gcs(inv, network, station, region, gcs_fs)
                 if inv_cache is not None:
-                    inv_cache[cache_key] = inv
+                    inv_cache[(network, station)] =inv
             except Exception as err:
                 print(f"Warning: skipping {network}.{station}: {err}")
                 if inv_cache is not None:
-                    inv_cache[cache_key] = None  # Don't retry this station
-                return None
+                    inv_cache[(network, station)] =None  # Don't retry this station
+                return None, None, None
+        unit = waveform_unit(inv, stream_3c)
+        local_depth = channel_local_depth(inv, stream_3c)
         stream_3c.detrend("constant")
         stream_3c.rotate("->ZNE", inventory=inv)
     except Exception as err:
         print(f"Error processing inventory: {err}")
-        return None
+        return None, None, None
 
-    return stream_3c
+    return stream_3c, unit, local_depth
 
 
 def process_station_group(picks_df, config, token=None):
@@ -393,7 +474,7 @@ def process_station_group(picks_df, config, token=None):
     gcs_fs = fsspec.filesystem("gs", token=token)
 
     # Load and cache the stream for this station
-    stream_3c = load_and_process_stream(
+    stream_3c, unit, local_depth = load_and_process_stream(
         mseed_3c, network, station, region, config["sampling_rate"], gcs_fs
     )
     if stream_3c is None:
@@ -443,13 +524,12 @@ def process_station_group(picks_df, config, token=None):
         if np.std(waveform) == 0:
             continue
 
-        # Skip records with too little data after first phase (e.g. short event waveforms)
-        nonzero_samples = np.nonzero(waveform.any(axis=0))[0]
-        if len(nonzero_samples) > 0:
-            last_nonzero = nonzero_samples[-1]
-            data_after_phase = (last_nonzero - snr_index) / config["sampling_rate"]
-            if data_after_phase < 30.0:
-                continue
+        # Skip records with too little actual waveform data (e.g. short/truncated recordings).
+        # Coverage-based, not data-after-phase, so a complete recording of a distant station
+        # (late phase but full window) is kept.
+        data_seconds = np.count_nonzero(waveform.any(axis=0)) / config["sampling_rate"]
+        if data_seconds < MIN_DATA_SECONDS:
+            continue
 
         # Build record - one per event-station with both P and S
         record = {
@@ -476,6 +556,8 @@ def process_station_group(picks_df, config, token=None):
             # Waveform (keep as numpy, convert to list at write time)
             "waveform": waveform,
             "component": "".join(components),
+            "unit": unit,
+            "local_depth_m": local_depth,
             "snr": round(max(snr), 3),
             "begin_time": begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
             "end_time": end_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -604,8 +686,7 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
     network = station_picks.iloc[0]["network"]
     station = station_picks.iloc[0]["station"]
 
-    # Reconcile location codes between trace data and inventory.
-    EQUIV_LOCS = {"", "00", "--", "N1"}
+    # Reconcile location codes between trace data and inventory (EQUIV_LOCS is module-level).
     if inv is not None:
         inv_channels = []
         for net_obj in inv:
@@ -651,11 +732,15 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
                 tr.resample(config["sampling_rate"])
 
     # Remove instrument response
+    unit = None
+    local_depth = None
     if inv is not None:
         try:
             stream.remove_sensitivity(inv)
         except Exception:
             return "retry_inv"
+        unit = waveform_unit(inv, stream)
+        local_depth = channel_local_depth(inv, stream)
         stream.detrend("constant")
         try:
             stream.rotate("->ZNE", inventory=inv)
@@ -696,13 +781,15 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
     if max(snr) == 0:
         return None
 
-    # Skip records with too little data after first phase (e.g. short event waveforms)
-    nonzero_samples = np.nonzero(waveform.any(axis=0))[0]
-    if len(nonzero_samples) > 0:
-        last_nonzero = nonzero_samples[-1]
-        data_after_phase = (last_nonzero - snr_index) / config["sampling_rate"]
-        if data_after_phase < 30.0:
-            return None
+    # Skip constant/near-constant traces (e.g. dead channels) -- mirror the main cutting path
+    if np.std(waveform) == 0:
+        return None
+
+    # Skip records with too little actual waveform data (e.g. short/truncated recordings).
+    # Coverage-based, not data-after-phase (mirrors process_station_group; see MIN_DATA_SECONDS).
+    data_seconds = np.count_nonzero(waveform.any(axis=0)) / config["sampling_rate"]
+    if data_seconds < MIN_DATA_SECONDS:
+        return None
 
     pick = station_picks.iloc[0]
 
@@ -725,6 +812,8 @@ def process_event_stream(stream, station_picks, begin_time, end_time, config, in
         "station_depth_km": float(pick["station_depth_km"]) if pd.notna(pick.get("station_depth_km")) else None,
         "waveform": waveform,
         "component": "".join(components),
+        "unit": unit,
+        "local_depth_m": local_depth,
         "snr": round(max(snr), 3),
         "begin_time": begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
         "end_time": end_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -787,44 +876,24 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
     if event_id in existing_time_windows:
         begin_time, end_time = existing_time_windows[event_id]
 
-    event_info = {
-        "event_id": event_id,
-        "event_time": pick0["event_time"],
-        "event_latitude": pick0.get("event_latitude"),
-        "event_longitude": pick0.get("event_longitude"),
-        "event_depth_km": pick0.get("event_depth_km"),
-        "event_magnitude": pick0.get("event_magnitude"),
-        "event_magnitude_type": pick0.get("event_magnitude_type"),
-    }
+    event_info = _event_info(event_id, pick0)
 
     records = []
 
-    for (network, station), sta_picks in missing_picks.groupby(["network", "station"]):
-        sta_stream = full_stream.select(network=network, station=station)
+    # Group by instrument and select only that band's channels. The event archive often holds
+    # several bands per station (e.g. BH+HH+HN = 9 traces); without this filter,
+    # process_event_stream's per-component select() returns >1 trace, len(trace)==1 fails, and
+    # the station is silently dropped. One record per (station, instrument) -- matches the
+    # continuous path's granularity.
+    for (network, station, instrument), sta_picks in missing_picks.groupby(["network", "station", "instrument"]):
+        sta_stream = full_stream.select(network=network, station=station, channel=f"{instrument}*")
         if len(sta_stream) == 0:
             continue
 
         sta_stream = sta_stream.copy()
 
-        # Get inventory for response removal
-        cache_key = (network, station)
-        if cache_key in inv_cache:
-            inv = inv_cache[cache_key]
-        else:
-            inv = None
-            folder = "SCEDC" if region == "SC" else "NCEDC"
-            gcs_path = f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml"
-            try:
-                with gcs_fs.open(gcs_path, "r") as f:
-                    inv = obspy.read_inventory(f)
-            except Exception:
-                try:
-                    inv = _download_inv_from_fdsn(network, station, region)
-                except Exception as err:
-                    print(f"  No inventory for {network}.{station}: {err}")
-                    inv = None
-            inv_cache[cache_key] = inv
-
+        # Get inventory for response removal (GCS StationXML, then FDSN; cached)
+        inv = _load_inventory(network, station, region, gcs_fs, inv_cache)
         if inv is None:
             continue
 
@@ -839,9 +908,9 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
             inv_cache[fdsn_tried_key] = True
             try:
                 inv = _download_inv_from_fdsn(network, station, region)
-                inv_cache[cache_key] = inv
+                inv_cache[(network, station)] =inv
                 used_fdsn = True
-                sta_stream = full_stream.select(network=network, station=station).copy()
+                sta_stream = full_stream.select(network=network, station=station, channel=f"{instrument}*").copy()
                 for tr in list(sta_stream):
                     if tr.stats.sampling_rate != config["sampling_rate"]:
                         if tr.stats.sampling_rate % config["sampling_rate"] == 0:
@@ -857,7 +926,7 @@ def process_event_waveform(event_id, s3_paths, missing_picks, config, gcs_fs, in
                 )
             except Exception as err:
                 print(f"  FDSN retry failed for {network}.{station}: {err}")
-                inv_cache[cache_key] = None
+                inv_cache[(network, station)] =None
                 record = None
         elif record == "retry_inv":
             record = None
@@ -924,6 +993,132 @@ def supplement_from_s3(year, day, region, config, gcs_fs, existing_pairs, picks,
         new_records.extend(records)
 
     return new_records
+
+
+# ---------------------------------------------------------------------------
+# FDSN catch-all (data-source rows 2 & 5): fetch the exact window from the data
+# center when continuous is incomplete (window crosses a day boundary) or the
+# station is absent from both the daily mseed list and the S3 event archive.
+# FDSN serves the same archive as the daily mseed, so it only adds value for
+# day-boundary crossing and omitted stations -- it cannot fill a real recording
+# gap. See the module docstring's data-source table.
+# ---------------------------------------------------------------------------
+def _load_inventory(network, station, region, gcs_fs, inv_cache=None):
+    """Station inventory: GCS StationXML first, then FDSN. Cached. Returns inv or None."""
+    cache_key = (network, station)
+    if inv_cache is not None and cache_key in inv_cache:
+        return inv_cache[cache_key]
+    inv = None
+    folder = "SCEDC" if region == "SC" else "NCEDC"
+    gcs_path = f"quakeflow_dataset/{folder}/FDSNstationXML/{network}/{network}.{station}.xml"
+    try:
+        with gcs_fs.open(gcs_path, "r") as f:
+            inv = obspy.read_inventory(f)
+    except Exception:
+        try:
+            inv = _download_inv_from_fdsn(network, station, region)
+        except Exception:
+            inv = None
+    if inv_cache is not None:
+        inv_cache[cache_key] = inv
+    return inv
+
+
+def _event_info(event_id, pick0):
+    """Event-metadata dict shared by the S3 and FDSN record builders."""
+    return {
+        "event_id": event_id,
+        "event_time": pick0["event_time"],
+        "event_latitude": pick0.get("event_latitude"),
+        "event_longitude": pick0.get("event_longitude"),
+        "event_depth_km": pick0.get("event_depth_km"),
+        "event_magnitude": pick0.get("event_magnitude"),
+        "event_magnitude_type": pick0.get("event_magnitude_type"),
+    }
+
+
+def _fdsn_clients(region):
+    """Build the FDSN client chain once: regional center first, then EARTHSCOPE (the renamed IRIS).
+    Returns a list of (name, Client); a center that fails to initialize is skipped. Built once per
+    day so the per-client service handshake happens once, not once per request."""
+    centers = ["SCEDC", "EARTHSCOPE"] if region == "SC" else ["NCEDC", "EARTHSCOPE"]
+    clients = []
+    for name in centers:
+        try:
+            clients.append((name, FDSNClient(name, timeout=60)))
+        except Exception:
+            continue
+    return clients
+
+
+def fetch_fdsn_stream(clients, network, station, instrument, begin_time, end_time):
+    """Download [begin_time, end_time] for one station band from the given FDSN clients (tried in
+    order). All location codes are requested ("*"); the caller disambiguates if more than one comes
+    back. Returns a raw obspy Stream (>=1 trace) or None. Never raises -- a timeout/error is treated
+    as 'no data' (graceful fallback)."""
+    t1 = obspy.UTCDateTime(begin_time)
+    t2 = obspy.UTCDateTime(end_time)
+    for _, client in clients:
+        try:
+            st = client.get_waveforms(network, station, "*", f"{instrument}*", t1, t2)
+            if len(st) > 0:
+                return st
+        except Exception:
+            continue
+    return None
+
+
+def _select_one_location(stream, catalog_loc):
+    """A station can report several location codes for a band (e.g. "" and "10"); keeping them all
+    makes process_event_stream's per-component select() return >1 trace and silently drop the record.
+    With a single location, return the stream untouched -- do NOT filter by the catalog code, which
+    may differ from FDSN's. With more than one, pick a single location: the catalog code (blank
+    stand-ins treated as equal), else a blank stand-in, else the first."""
+    locs = sorted({tr.stats.location for tr in stream})
+    if len(locs) <= 1:
+        return stream
+    chosen = next((L for L in locs if L == catalog_loc or {L, catalog_loc} <= EQUIV_LOCS), None)
+    if chosen is None:
+        chosen = next((L for L in locs if L in EQUIV_LOCS), locs[0])
+    return obspy.Stream([tr for tr in stream if tr.stats.location == chosen])
+
+
+def supplement_from_fdsn(region, config, gcs_fs, target_picks):
+    """FDSN catch-all: (re)cut one record per (event, station, instrument) in target_picks by
+    downloading the full window from the data center. Reuses process_event_stream for the cut, so
+    results match the S3 path. Returns a list of record dicts; any failure skips that pair."""
+    if target_picks is None or len(target_picks) == 0:
+        return []
+    clients = _fdsn_clients(region)
+    if not clients:
+        return []
+    inv_cache = {}
+    records = []
+    grouped = list(target_picks.groupby(["event_id", "network", "station", "instrument"]))
+    print(f"FDSN catch-all: {len(grouped)} (event, station, instrument) targets")
+    for (event_id, network, station, instrument), sta_picks in tqdm(grouped, desc="  FDSN supplement", leave=False):
+        pick0 = sta_picks.iloc[0]
+        begin_time = pick0["begin_time"]
+        end_time = pick0["end_time"]
+        stream = fetch_fdsn_stream(clients, network, station, instrument, begin_time, end_time)
+        if stream is None:
+            continue
+        stream = _select_one_location(stream, pick0.get("location") or "")
+        inv = _load_inventory(network, station, region, gcs_fs, inv_cache)
+        if inv is None:
+            continue
+        event_info = _event_info(event_id, pick0)
+        record = process_event_stream(stream.copy(), sta_picks, begin_time, end_time, config, inv, event_info)
+        if record == "retry_inv":
+            try:
+                inv = _download_inv_from_fdsn(network, station, region)
+                inv_cache[(network, station)] = inv
+                record = process_event_stream(stream.copy(), sta_picks, begin_time, end_time, config, inv, event_info)
+            except Exception:
+                record = None
+        if record is not None and record != "retry_inv":
+            records.append(record)
+    return records
 
 
 def check_parquet_metadata(existing_meta, picks, year, day):
@@ -1227,12 +1422,22 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # ============================================================
         if recheck_action == "supplement":
             try:
+                # Batched read: a dense day's parquet (>58k records in one row group) overflows
+                # Arrow's 32-bit list offsets on a whole-file read_table; iter_batches keeps each
+                # chunk under the limit. Mirrors parquet_to_hdf5.prepare_day's batched read.
                 with fs.open(f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet", "rb") as f:
-                    existing_df = pq.read_table(f).to_pandas()
+                    pf = pq.ParquetFile(f)
+                    existing_df = pd.concat(
+                        [b.to_pandas() for b in pf.iter_batches(batch_size=ROW_GROUP_SIZE)],
+                        ignore_index=True,
+                    )
             except Exception as err:
                 print(f"Could not load parquet for {year:04d}.{day:03d}: {err}; falling back to process")
                 recheck_action = "process"
+                existing_df = None
 
+        # Patch the existing parquet only if it actually loaded; otherwise fall through to a full cut
+        if recheck_action == "supplement":
             # Remove records for events with time window changes (need new waveforms)
             if bad_event_ids:
                 bad_meta_mask = existing_df["event_id"].isin(bad_event_ids)
@@ -1385,11 +1590,25 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         # ============================================================
         # Build pairs from new records + existing parquet (supplement mode)
         new_pairs = set((r["event_id"], r["network"], r["station"]) for r in all_records)
+
+        # Events whose window crosses a day boundary go straight to FDSN (Step 9c) and SKIP S3:
+        # the daily continuous file can't span midnight, the S3 event window can be truncated too,
+        # and FDSN returns the full window across the boundary. Excluding them here avoids S3
+        # redundantly cutting a pair that Step 9c would then replace.
+        _xm = (pd.to_datetime(picks_for_s3["begin_time"]).dt.date
+               != pd.to_datetime(picks_for_s3["end_time"]).dt.date)
+        cross_midnight_events = set(picks_for_s3.loc[_xm, "event_id"])
+        cross_midnight_pairs = set(
+            (e, n, s)
+            for e, n, s in zip(picks_for_s3["event_id"], picks_for_s3["network"], picks_for_s3["station"])
+            if e in cross_midnight_events
+        )
+
         if recheck_action == "supplement" and existing_df is not None:
             parquet_pairs = set(zip(existing_df["event_id"], existing_df["network"], existing_df["station"]))
-            s3_existing_pairs = new_pairs | parquet_pairs
+            s3_existing_pairs = new_pairs | parquet_pairs | cross_midnight_pairs
         else:
-            s3_existing_pairs = new_pairs
+            s3_existing_pairs = new_pairs | cross_midnight_pairs
 
         existing_time_windows = {}
         for event_id, grp in picks_for_s3.groupby("event_id"):
@@ -1407,6 +1626,40 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
         except Exception as err:
             print(f"Supplement failed (non-fatal): {err}")
 
+        # ============================================================
+        # Step 9c: FDSN catch-all (data-source rows 2 & 5)
+        #   row 2: window crosses a day boundary -> the daily continuous file can't span it
+        #   row 5: no continuous mseed file AND not recovered from the S3 event archive
+        # Fetch the exact window from SCEDC/NCEDC (then EARTHSCOPE) and dedup-replace partials.
+        # FDSN serves the same archive as the daily mseed, so it cannot fill real recording gaps.
+        # ============================================================
+        try:
+            produced_keys = set(
+                (r["event_id"], r["network"], r["station"], r.get("instrument", "")) for r in all_records
+            )
+            matched_keys = (set(zip(picks["event_id"], picks["network"], picks["station"], picks["instrument"]))
+                            if "mseed_3c" in picks.columns else set())
+            ps3 = picks_for_s3.copy()
+            ps3["_key4"] = list(zip(ps3["event_id"], ps3["network"], ps3["station"], ps3["instrument"]))
+            # row 2: cross-midnight (computed in Step 9, skipped by S3); row 5: no continuous file, not in S3
+            crossmidnight_keys = set(ps3.loc[ps3["event_id"].isin(cross_midnight_events), "_key4"])
+            nofile_keys = set(ps3["_key4"]) - matched_keys
+            fdsn_target_keys = crossmidnight_keys | (nofile_keys - produced_keys)
+            target_picks = ps3[ps3["_key4"].isin(fdsn_target_keys)].drop(columns=["_key4"])
+            fdsn_records = supplement_from_fdsn(region, config, gcs_fs, target_picks)
+            if fdsn_records:
+                fdsn_keys = set(
+                    (r["event_id"], r["network"], r["station"], r.get("instrument", "")) for r in fdsn_records
+                )
+                all_records = [
+                    r for r in all_records
+                    if (r["event_id"], r["network"], r["station"], r.get("instrument", "")) not in fdsn_keys
+                ]
+                all_records.extend(fdsn_records)
+                print(f"FDSN catch-all: {len(fdsn_records)} records (dedup-replaced partials/missing)")
+        except Exception as err:
+            print(f"FDSN catch-all failed (non-fatal): {err}")
+
         if not all_records:
             if recheck_action == "supplement" and existing_df is not None:
                 # Supplement produced no new records — existing data is fine, mark supplement done
@@ -1414,7 +1667,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
                     # Had deletions/patches but no new records — write updated parquet
                     existing_df.sort_values(by=["event_id", "distance_km"], inplace=True)
                     table = pa.Table.from_pandas(existing_df, schema=PARQUET_SCHEMA, preserve_index=False)
-                    pq.write_table(table, local_path, compression="zstd")
+                    pq.write_table(table, local_path, compression="zstd", row_group_size=ROW_GROUP_SIZE)
                     remote_path = f"{bucket}/{result_path}/{year:04d}/{day:03d}.parquet"
                     fs.put(local_path, remote_path)
                     os.remove(local_path)
@@ -1476,7 +1729,7 @@ def cut_templates(jdays, root_path, data_path, result_path, region, config, buck
 
         df.sort_values(by=["event_id", "distance_km"], inplace=True)
         table = pa.Table.from_pandas(df, schema=PARQUET_SCHEMA, preserve_index=False)
-        pq.write_table(table, local_path, compression="zstd")
+        pq.write_table(table, local_path, compression="zstd", row_group_size=ROW_GROUP_SIZE)
         print(f"Total records: {len(df)}")
         del df, table
         gc.collect()

@@ -34,6 +34,9 @@ SAMPLING_RATE = 100.0
 TIME_BEFORE = 40.96
 TIME_AFTER = 40.96 * 2
 NT = int(round((TIME_BEFORE + TIME_AFTER) * SAMPLING_RATE))  # 12288 samples
+# Drop records with too little actual waveform data (matches cut_event_parquet). Coverage-based,
+# not data-after-phase, so a complete recording of a distant station (late phase) is kept.
+MIN_DATA_SECONDS = 30.0
 EARTH_RADIUS_KM = 6371.0
 
 
@@ -180,10 +183,11 @@ def prepare_picks(picks, events, config):
     picks["begin_time"] = picks["first_p_time"] - pd.Timedelta(seconds=config["time_before"])
     picks["end_time"] = picks["first_p_time"] + pd.Timedelta(seconds=config["time_after"])
 
-    # Calculate phase_index relative to begin_time
+    # Calculate phase_index relative to begin_time. Round (not truncate) to match cut_event_parquet
+    # and parquet_to_hdf5.window_arrays, so the scalar and pick-array indices agree.
     picks["phase_index"] = (
         (picks["phase_time"] - picks["begin_time"]).dt.total_seconds() * config["sampling_rate"]
-    ).astype(int)
+    ).round().astype(int)
 
     return picks
 
@@ -215,6 +219,47 @@ def _upload_inv_to_gcs(inv, network, station, region, gcs_fs):
     print(f"Uploaded FDSN inventory to gs://{gcs_path}")
 
 
+def waveform_unit(inv, stream, scale_prefix="micro "):
+    """Physical unit of the waveform after remove_sensitivity() and the 1e6 scaling.
+
+    Read strictly from the StationXML response input units (velocity sensors -> m/s,
+    accelerometers -> m/s^2). The instrument code is NOT a reliable proxy -- HL/BL/VM
+    are accelerometers and the same code can map to both velocity and acceleration --
+    so we never guess from it; returns None if the XML has no usable input units.
+    Warns when the unit contradicts the instrument code (a likely upstream metadata error).
+    Kept identical to cut_event_parquet.waveform_unit so both cutters agree.
+    """
+    if inv is None or len(stream) == 0:
+        return None
+    tr = stream[0]
+    try:
+        units = inv.get_response(tr.id, tr.stats.starttime).instrument_sensitivity.input_units
+    except Exception:
+        units = None
+    if not units:
+        return None
+    # Normalize SEED-style "M/S**2"/"M/S2" to "m/s^2" (velocity "M/S" stays "m/s")
+    unit = scale_prefix + units.strip().lower().replace("**", "^").replace("/s2", "/s^2")
+    chan = tr.stats.channel
+    code = chan[1].upper() if len(chan) >= 2 else ""
+    is_accel = unit.endswith("m/s^2")
+    if (code == "H" and is_accel) or (code == "N" and not is_accel):
+        print(f"WARNING: unit/instrument mismatch for {tr.id}: code '{code}' but unit '{unit}' "
+              f"(input_units={units!r}) -- likely StationXML metadata error")
+    return unit
+
+
+def channel_local_depth(inv, stream):
+    """Channel burial depth in meters from the StationXML <Depth>, or None if unavailable."""
+    if inv is None or len(stream) == 0:
+        return None
+    tr = stream[0]
+    try:
+        return float(inv.get_channel_metadata(tr.id, tr.stats.starttime)["local_depth"])
+    except Exception:
+        return None
+
+
 def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, gcs_fs, inv_cache=None):
     """Load mseed files and process (remove sensitivity, rotate to ZNE)."""
     mseed_files = mseed_3c.split("|")
@@ -234,17 +279,17 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                 stream_3c.append(trace)
         except Exception as err:
             print(f"Error reading mseed: {err} on {c}")
-            return None
+            return None, None, None
 
     if len(stream_3c) == 0:
-        return None
+        return None, None, None
 
     try:
         cache_key = (network, station)
         if inv_cache is not None and cache_key in inv_cache:
             inv = inv_cache[cache_key]
             if inv is None:
-                return None  # Previously failed, skip
+                return None, None, None  # Previously failed, skip
         else:
             # Try GCS first, fall back to FDSN if missing or broken
             inv = None
@@ -264,7 +309,7 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                     print(f"FDSN inventory also failed for {network}.{station}: {fdsn_err}")
                     if inv_cache is not None:
                         inv_cache[cache_key] = None
-                    return None
+                    return None, None, None
 
             if inv_cache is not None:
                 inv_cache[cache_key] = inv
@@ -302,14 +347,16 @@ def load_and_process_stream(mseed_3c, network, station, region, sampling_rate, g
                 print(f"Warning: skipping {network}.{station}: {err}")
                 if inv_cache is not None:
                     inv_cache[cache_key] = None  # Don't retry this station
-                return None
+                return None, None, None
+        unit = waveform_unit(inv, stream_3c)
+        local_depth = channel_local_depth(inv, stream_3c)
         stream_3c.detrend("constant")
         stream_3c.rotate("->ZNE", inventory=inv)
     except Exception as err:
         print(f"Error processing inventory: {err}")
-        return None
+        return None, None, None
 
-    return stream_3c
+    return stream_3c, unit, local_depth
 
 
 def process_station_group(picks_df, config, token=None):
@@ -331,7 +378,7 @@ def process_station_group(picks_df, config, token=None):
     gcs_fs = fsspec.filesystem("gs", token=token)
 
     # Load and cache the stream for this station
-    stream_3c = load_and_process_stream(
+    stream_3c, unit, local_depth = load_and_process_stream(
         mseed_3c, network, station, region, config["sampling_rate"], gcs_fs
     )
     if stream_3c is None:
@@ -378,6 +425,13 @@ def process_station_group(picks_df, config, token=None):
         if np.std(waveform) == 0:
             continue
 
+        # Skip records with too little actual waveform data (e.g. short/truncated recordings).
+        # Coverage-based (matches cut_event_parquet); a complete recording of a distant station
+        # (late phase but full window) is kept.
+        data_seconds = np.count_nonzero(waveform.any(axis=0)) / config["sampling_rate"]
+        if data_seconds < MIN_DATA_SECONDS:
+            continue
+
         # Event time index (sample index of origin time relative to begin_time)
         event_time_index = None
         if pd.notna(pick.get("event_time")):
@@ -408,6 +462,8 @@ def process_station_group(picks_df, config, token=None):
             # Waveform
             "waveform": waveform,
             "component": "".join(components),
+            "unit": unit,
+            "local_depth_m": local_depth,
             "snr": round(max(snr), 3),
             "begin_time": begin_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
             "end_time": end_time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -506,12 +562,12 @@ def save_to_hdf5(records, output_path):
                 compression_opts=4,
                 chunks=(3, 12288),
             )
-            ds.attrs["unit"] = "micro m/s"
+            set_attr(ds, "unit", record.get("unit"))
 
             # Station attrs
             for key in ["network", "station", "location", "instrument",
                        "station_latitude", "station_longitude",
-                       "station_elevation_m", "station_depth_km",
+                       "station_elevation_m", "station_depth_km", "local_depth_m",
                        "component", "snr",
                        "azimuth", "back_azimuth", "takeoff_angle", "distance_km"]:
                 if record.get(key) is not None:
