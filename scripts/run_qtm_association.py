@@ -166,9 +166,9 @@ def run_association(
             os.makedirs(f"{root_path}/{result_path}")
 
         # %%
-        stations = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_stations.csv")
-        template_events = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_events.csv")
-        template_picks = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_picks.csv")
+        stations = pd.read_csv(f"{root_path}/{region}/qtm/template_stations.csv")
+        template_events = pd.read_csv(f"{root_path}/{region}/qtm/template_events.csv")
+        template_picks = pd.read_csv(f"{root_path}/{region}/qtm/template_picks.csv")
         template_events = template_events[["idx_eve", "latitude", "longitude", "depth_km", "magnitude"]]
         print(f"Number of template events: {len(template_events)}")
         print(f"Number of template picks: {len(template_picks)}")

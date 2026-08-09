@@ -17,6 +17,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
     parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
+    parser.add_argument("--batch_size", type=int, default=4,
+                        help="templates correlated per GPU step. Each pair holds a full copy of the "
+                             "continuous trace (~600 MB for 24 h at 100 Hz, 3 comp), so this is bounded "
+                             "by GPU memory: 16 needs ~16 GB of a 24 GB card")
     return parser.parse_args()
 
 
@@ -73,8 +77,8 @@ with open(f"{root_path}/{region}/qtm/mseed_list.txt", "w") as fp:
 # %%
 # with open(f"{root_path}/{region}/qtm/event_phase_station_id.txt", "r") as fp:
 #     event_phase_station_id = fp.read().splitlines()
-picks = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_picks.csv")
-stations = pd.read_csv(f"{root_path}/{region}/cctorch/cctorch_stations.csv")
+picks = pd.read_csv(f"{root_path}/{region}/qtm/template_picks.csv")
+stations = pd.read_csv(f"{root_path}/{region}/qtm/template_stations.csv")
 if "station_id" not in picks.columns:
     picks = picks.merge(stations[["idx_sta", "station_id"]], on="idx_sta")
 print(picks.head())
@@ -94,7 +98,7 @@ with open(f"{root_path}/{region}/qtm/pairs.txt", "w") as fp:
             fp.write(f"{idx_mseed},{idx_pick}\n")
 
 ## based on GPU memory
-batch_size = 4
+batch_size = args.batch_size
 block_size1 = 1
 block_size2 = 100_000  # ~7GB
 
@@ -102,9 +106,9 @@ block_size2 = 100_000  # ~7GB
 base_cmd = (
     f"../CCTorch/run.py --mode=TM --pair_list={root_path}/{region}/qtm/pairs.txt "
     f"--data_list1={root_path}/{region}/qtm/mseed_list.csv --data_format1=mseed "
-    f"--data_list2={root_path}/{region}/cctorch/cctorch_picks.csv --data_path2={root_path}/{region}/cctorch/template.dat --data_format2=memmap "
-    f"--picks_csv={root_path}/{region}/cctorch/cctorch_picks.csv --events_csv={root_path}/{region}/cctorch/cctorch_events.csv --stations_csv={root_path}/{region}/cctorch/cctorch_stations.csv "
-    f"--config={root_path}/{region}/cctorch/config.json --batch_size={batch_size} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c --result_path={root_path}/{region}/qtm/ccpairs "
+    f"--data_list2={root_path}/{region}/qtm/template_picks.csv --data_path2={root_path}/{region}/qtm/template.dat --data_format2=memmap "
+    f"--picks_csv={root_path}/{region}/qtm/template_picks.csv --events_csv={root_path}/{region}/qtm/template_events.csv --stations_csv={root_path}/{region}/qtm/template_stations.csv "
+    f"--config={root_path}/{region}/qtm/config.json --batch_size={batch_size} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c --result_path={root_path}/{region}/qtm/ccpairs "
     # f"--device=cuda --dataset_cpu"
     f"--device=cuda"
 )
@@ -123,4 +127,8 @@ else:
 
 # %%
 print(cmd)
-os.system(cmd)
+## os.system returns the wait status, not the exit code, and torchrun dying (OOM, for one)
+## otherwise passes silently and the previous run's ccpairs get scored as if they were new
+status = os.system(cmd)
+if status != 0:
+    raise SystemExit(f"CCTorch failed (exit status {status >> 8 or status}); see the log above")
