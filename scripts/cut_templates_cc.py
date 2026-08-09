@@ -151,6 +151,13 @@ def extract_template_numpy(
 ):
 
     reference_t0 = config["reference_t0"]
+    nt_template = config["template_shape"][-1]
+    ## Shortest P window worth keeping. One truncated at the S arrival can be a handful of
+    ## samples, which is no detector at all -- a correlation over n samples has no power,
+    ## and its running variance cancels badly enough to push cc outside [-1, 1]. A demo
+    ## template came out 4 samples long and returned 1.0013. A quarter of the slot is 1 s at
+    ## 100 Hz, two cycles at the 2 Hz low corner.
+    min_template_samples = config.get("min_template_samples", nt_template // 4)
 
     template_array = np.memmap(template_fname, dtype=np.float32, mode="r+", shape=tuple(config["template_shape"]))
     template_mask = np.memmap(template_mask_fname, dtype=bool, mode="r+", shape=tuple(config["template_shape"]))
@@ -221,6 +228,14 @@ def extract_template_numpy(
                 begin_time_index = max(0, int(round(begin_time * config["sampling_rate"])))
                 end_time_index = max(0, int(round(end_time * config["sampling_rate"])))
 
+                trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
+                trace_data = trace_data[:nt_template]
+                ## rejected before the travel time is recorded, so a channel too short to
+                ## correlate is dead everywhere rather than claiming an arrival it cannot
+                ## support
+                if len(trace_data) < min_template_samples:
+                    continue
+
                 ## define traveltime at the exact data point of event origin time
                 traveltime_array[idx_pick, ic, 0] = begin_time_index / config["sampling_rate"] - (
                     event["event_timestamp"] - trace_starttime - config[f"time_before_{phase_type.lower()}"]
@@ -231,11 +246,9 @@ def extract_template_numpy(
                 )
                 traveltime_mask[idx_pick, ic, 0] = True
 
-                trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-                trace_data = trace_data[: config["template_shape"][-1]]
                 template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
-                ## a P window truncated at the S arrival is shorter than the slot; mark the
-                ## samples that are real so nothing downstream normalises over the padding
+                ## mark the samples that are real so nothing downstream normalises over the
+                ## padding that follows them
                 template_mask[idx_pick, ic, 0, : len(trace_data)] = True
 
         if lock is not None:
