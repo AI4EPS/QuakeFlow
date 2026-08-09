@@ -90,8 +90,6 @@ def run_adloc(
             print(f"Error reading {picks_csv}: {e}")
             return
 
-        events = None
-
         # picks["phase_time"] = pd.to_datetime(picks["phase_time"])
         # events["time"] = pd.to_datetime(events["time"])
 
@@ -152,14 +150,13 @@ def run_adloc(
             events["z_km"] = events["depth_km"]
 
         ## set up the config; you can also specify the region manually
-        if ("xlim_km" not in config) or ("ylim_km" not in config) or ("zlim_km" not in config):
-
-            # project minlatitude, maxlatitude, minlongitude, maxlongitude to ymin, ymax, xmin, xmax
+        if ("xlim_km" not in config) or ("ylim_km" not in config) :
             xmin, ymin = proj(config["minlongitude"], config["minlatitude"])
             xmax, ymax = proj(config["maxlongitude"], config["maxlatitude"])
-            zmin, zmax = config["mindepth"], config["maxdepth"]
             config["xlim_km"] = (xmin, xmax)
             config["ylim_km"] = (ymin, ymax)
+        if ("zlim_km" not in config):
+            zmin, zmax = config["mindepth"], config["maxdepth"]
             config["zlim_km"] = (zmin, zmax)
 
         config["vel"] = {"P": 6.0, "S": 6.0 / 1.73}
@@ -229,28 +226,29 @@ def run_adloc(
             events["idx_eve"] = np.arange(len(events))
 
         else:
-            picks = picks.merge(stations[["station_id", "x_km", "y_km", "z_km"]], on="station_id")
-            events = picks.groupby("event_index").agg(
-                {"x_km": "mean", "y_km": "mean", "z_km": "mean", "phase_time": "min"}
+            event_index = picks["event_index"].unique()
+            events = pd.DataFrame(
+                {
+                    "event_index": event_index,
+                    "idx_eve": np.arange(len(event_index)),
+                }
             )
-            picks.drop(["x_km", "y_km", "z_km"], axis=1, inplace=True)
-            events["z_km"] = 10.0  # km default depth
-            events.rename({"phase_time": "time"}, axis=1, inplace=True)
-            events["event_index"] = events.index
-            events.reset_index(drop=True, inplace=True)
-            events["idx_eve"] = np.arange(len(events))
 
         picks = picks.merge(events[["event_index", "idx_eve"]], on="event_index")
         picks = picks.merge(stations[["station_id", "idx_sta"]], on="station_id")
 
         # %%
-        estimator = ADLoc(config, stations=stations[["x_km", "y_km", "z_km"]].values, eikonal=config["eikonal"])
+        estimator = ADLoc(config, eikonal=config["eikonal"])
 
         # %%
         NCPU = mp.cpu_count()
         # MAX_SST_ITER = 1
         # MIN_SST_S = 0.01
-        events_init = events.copy()
+        config["ncpu"] = 16
+        events_init = None
+        config["proj"] = None
+        # config["proj"] = proj
+        # events_init = events.copy()
 
         if True:
             # for iter in range(MAX_SST_ITER):
@@ -322,10 +320,11 @@ def run_adloc(
 
         # %%
         if "event_index" not in events.columns:
-            events["event_index"] = events.merge(picks[["idx_eve", "event_index"]], on="idx_eve")["event_index"]
-        events[["longitude", "latitude"]] = events.apply(
-            lambda x: pd.Series(proj(x["x_km"], x["y_km"], inverse=True)), axis=1
-        )
+            events = events.merge(picks[["idx_eve", "event_index"]].drop_duplicates(), on="idx_eve", how="left")
+        if config.get("proj") is not None:
+            longitude, latitude = config["proj"](events["x_km"].to_numpy(), events["y_km"].to_numpy(), inverse=True)
+            events["longitude"] = longitude
+            events["latitude"] = latitude
         events["depth_km"] = events["z_km"]
         events.drop(["idx_eve", "x_km", "y_km", "z_km"], axis=1, inplace=True, errors="ignore")
         events.sort_values(["time"], inplace=True)
