@@ -17,9 +17,8 @@ def parse_args():
     parser.add_argument("root_path", nargs="?", type=str, default="local", help="root path")
     parser.add_argument("region", nargs="?", type=str, default="demo", help="region")
     parser.add_argument("--batch_size", type=int, default=4,
-                        help="templates correlated per GPU step. Each pair holds a full copy of the "
-                             "continuous trace (~600 MB for 24 h at 100 Hz, 3 comp), so this is bounded "
-                             "by GPU memory: 16 needs ~16 GB of a 24 GB card")
+                        help="templates correlated per GPU step. Each holds a full copy of the "
+                             "continuous trace, so this is bounded by GPU memory.")
     parser.add_argument("--dtype", type=str, default="float32", choices=["float32", "float64"],
                         help="precision of the normalized correlation. float32 tracks float64 to "
                              "~1.5e-6 and runs ~2.5x faster; float64 is exact but sits at the FP64 "
