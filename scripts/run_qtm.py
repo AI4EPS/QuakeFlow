@@ -9,7 +9,6 @@ from itertools import product
 import numpy as np
 import pandas as pd
 import torch
-from tqdm import tqdm
 
 
 # %%
@@ -21,6 +20,10 @@ def parse_args():
                         help="templates correlated per GPU step. Each pair holds a full copy of the "
                              "continuous trace (~600 MB for 24 h at 100 Hz, 3 comp), so this is bounded "
                              "by GPU memory: 16 needs ~16 GB of a 24 GB card")
+    parser.add_argument("--dtype", type=str, default="float32", choices=["float32", "float64"],
+                        help="precision of the normalized correlation. float32 tracks float64 to "
+                             "~1.5e-6 and runs ~2.5x faster; float64 is exact but sits at the FP64 "
+                             "roofline. See tests/qtm/test_dtype.py.")
     return parser.parse_args()
 
 
@@ -56,6 +59,22 @@ mseeds["begin_time"] = mseeds["file_name"].apply(
     )
 )
 
+## Every waveform day on disk is scanned unless bounded. That is rarely what is wanted:
+## the tests scan the single day their templates come from, and a production archive may
+## hold years. scan_start/scan_end sit beside event_start/event_end in config["cctorch"],
+## so one place decides which days are cut from and which are searched.
+cctorch_config = config.get("cctorch", {})
+for bound, op in (("scan_start", "ge"), ("scan_end", "lt")):
+    if cctorch_config.get(bound):
+        n_before = len(mseeds)
+        keep = getattr(pd.to_datetime(mseeds["begin_time"]), op)(pd.Timestamp(cctorch_config[bound]))
+        mseeds = mseeds[keep]
+        print(f"{bound} {cctorch_config[bound]}: {len(mseeds)} of {n_before} waveform files kept")
+if len(mseeds) == 0:
+    raise ValueError(
+        f"no waveforms between {cctorch_config.get('scan_start')} and {cctorch_config.get('scan_end')}"
+    )
+
 mseeds = (
     mseeds.groupby("mseed_id")
     .agg(
@@ -84,18 +103,22 @@ if "station_id" not in picks.columns:
 print(picks.head())
 
 # %% Generate event mseed pairs
-pairs = []
-unique_station_ids = np.intersect1d(mseeds["station_id"].unique(), picks["station_id"].unique())
-print(f"Number of unique station ids: {len(unique_station_ids)}")
+## A station can have waveforms but no templates, or templates but no waveforms for the day
+## being scanned; only their intersection can be correlated. The intersection was already
+## computed here and then ignored, so a station with waveforms and no templates raised a
+## KeyError instead of being skipped.
+pairs = mseeds[["idx_mseed", "station_id"]].merge(picks[["idx_pick", "station_id"]], on="station_id")
+pairs = pairs.sort_values(["idx_mseed", "idx_pick"])
 
-# %%
-with open(f"{root_path}/{region}/qtm/pairs.txt", "w") as fp:
-    mseeds = mseeds.set_index("idx_mseed")
-    picks = picks.groupby("station_id")
-    for idx_mseed, row in tqdm(mseeds.iterrows(), total=len(mseeds), desc="Writing pairs"):
-        station_id = row["station_id"]
-        for idx_pick in picks.get_group(station_id)["idx_pick"].values:
-            fp.write(f"{idx_mseed},{idx_pick}\n")
+n_paired = pairs["station_id"].nunique()
+print(f"Number of unique station ids: {n_paired}")
+print(f"  skipping {mseeds['station_id'].nunique() - n_paired} station(s) with waveforms but no "
+      f"templates, {picks['station_id'].nunique() - n_paired} with templates but no waveforms")
+print(f"Number of pairs: {len(pairs):,}")
+
+pairs[["idx_mseed", "idx_pick"]].to_csv(
+    f"{root_path}/{region}/qtm/pairs.txt", index=False, header=False
+)
 
 ## based on GPU memory
 batch_size = args.batch_size
@@ -108,7 +131,7 @@ base_cmd = (
     f"--data_list1={root_path}/{region}/qtm/mseed_list.csv --data_format1=mseed "
     f"--data_list2={root_path}/{region}/qtm/template_picks.csv --data_path2={root_path}/{region}/qtm/template.dat --data_format2=memmap "
     f"--picks_csv={root_path}/{region}/qtm/template_picks.csv --events_csv={root_path}/{region}/qtm/template_events.csv --stations_csv={root_path}/{region}/qtm/template_stations.csv "
-    f"--config={root_path}/{region}/qtm/config.json --batch_size={batch_size} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c --result_path={root_path}/{region}/qtm/ccpairs "
+    f"--config={root_path}/{region}/qtm/config.json --batch_size={batch_size} --block_size1={block_size1} --block_size2={block_size2} --normalize --reduce_c --dtype={args.dtype} --result_path={root_path}/{region}/qtm/ccpairs "
     # f"--device=cuda --dataset_cpu"
     f"--device=cuda"
 )

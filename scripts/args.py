@@ -62,5 +62,9 @@ def parse_args():
                         help="also require cc > nmad * median(|cc|) of the trace, the adaptive threshold of "
                              "Shelly et al. (2007), who use 8-9. Defaults to 9 for --mode TM and 0 (off) for "
                              "--mode CC, since relocation reads the correlations directly. 0 disables it.")
+    parser.add_argument("--dtype", type=str, default="float32", choices=["float32", "float64"],
+                        help="precision of the normalized correlation. float32 tracks float64 to "
+                             "~1.5e-6 and runs ~2.5x faster; float64 is exact but sits at the FP64 "
+                             "roofline. See tests/qtm/test_dtype.py.")
 
     return parser.parse_args()

@@ -43,7 +43,7 @@ if args.dtct_pair:
     print(f"Number of pairs from hypodd dt.ct: {len(lines)}")
     with open(f"{root_path}/{region}/hypodd/pairs.txt", "w") as fp:
         fp.writelines(lines)
-    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/hypodd/pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --result_path={root_path}/{result_path}"
+    base_cmd = f"../CCTorch/run.py --pair_list={root_path}/{region}/hypodd/pairs.txt --data_path1={root_path}/{region}/cctorch/template.dat --data_format1=memmap --config={root_path}/{region}/cctorch/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} --dtype={args.dtype} --result_path={root_path}/{result_path}"
 
 else:
     base_cmd = (
@@ -51,7 +51,7 @@ else:
         f"--data_list1={root_path}/{data_path}/cctorch_picks.csv "
         f"--events_csv={root_path}/{data_path}/cctorch_events.csv --picks_csv={root_path}/{data_path}/cctorch_picks.csv --stations_csv={root_path}/{data_path}/cctorch_stations.csv "
         f"--config={root_path}/{data_path}/config.json  --batch_size={batch} --block_size1={block_size1} --block_size2={block_size2} "
-        f"--result_path={root_path}/{result_path}"
+        f"--dtype={args.dtype} --result_path={root_path}/{result_path}"
     )
 
 
