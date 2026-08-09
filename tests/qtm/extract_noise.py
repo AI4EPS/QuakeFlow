@@ -27,6 +27,7 @@ import obspy
 import pandas as pd
 from scipy.signal import butter, sosfiltfilt, welch
 from paths import DEFAULT_ROOT
+from mseed import read_trace
 
 FREQMIN, FREQMAX = 2.0, 12.0  # the band cut_templates_cc.py uses for the templates
 
@@ -150,7 +151,7 @@ def plot_day_overview(args, events, t0, t1):
     ax.grid(alpha=0.3)
 
     if ref:
-        tr = obspy.read(ref[0], format="MSEED")[0]
+        tr = read_trace(ref[0])
         tr.merge = None
         sr = tr.stats.sampling_rate
         d = np.asarray(tr.data, dtype=np.float64)
@@ -189,7 +190,7 @@ def plot_noise_gallery(args, noise):
     fig, axes = plt.subplots(1, 2, figsize=(14, max(6, 0.28 * len(z))), width_ratios=[2.2, 1])
     ax = axes[0]
     for k, row in z.iterrows():
-        tr = obspy.read(row["file_name"], format="MSEED")[0]
+        tr = read_trace(row["file_name"])
         sr = tr.stats.sampling_rate
         d = np.asarray(tr.data, dtype=np.float64)[: int(snippet * sr)]
         d = bandpass(d, sr)
@@ -229,7 +230,7 @@ def plot_noise_spectra(args, noise):
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     for _, row in z.iterrows():
-        tr = obspy.read(row["file_name"], format="MSEED")[0]
+        tr = read_trace(row["file_name"])
         sr = tr.stats.sampling_rate
         d = np.asarray(tr.data, dtype=np.float64)
         f, p = welch(d, fs=sr, nperseg=int(60 * sr))

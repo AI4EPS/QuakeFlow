@@ -46,6 +46,7 @@ import obspy
 import pandas as pd
 from scipy.signal import butter, sosfiltfilt
 from paths import DEFAULT_ROOT
+from mseed import read_trace
 
 FREQMIN, FREQMAX = 2.0, 12.0
 
@@ -243,7 +244,7 @@ def inject(args, events, win, noise, inj, noise_scale, signal_scale):
     amp_used = {}
     for _, row in noise.sort_values("file_name").iterrows():
         name = f"{row['station_id']}{row['component']}"
-        trace = obspy.read(row["file_name"], format="MSEED")[0]
+        trace = read_trace(row["file_name"])
         sr = trace.stats.sampling_rate
         data = np.asarray(trace.data, dtype=np.float64) / max(noise_scale[row["station_id"]], 1e-30)
         clean = np.zeros_like(data)
@@ -452,7 +453,7 @@ def plot_record(args, gt_events, noise, t0):
     for ax, station_id in zip(np.atleast_1d(axes), picks):
         comp = z[z["station_id"] == station_id]["component"].iloc[0]
         f = f"{base}/waveforms/{year_jday.year}/{year_jday.julday:03d}/{station_id}{comp}.mseed"
-        tr = obspy.read(f, format="MSEED")[0]
+        tr = read_trace(f)
         sr = tr.stats.sampling_rate
         d = bandpass(np.asarray(tr.data, dtype=np.float64), sr)
         step = int(sr)  # 1 s envelope so the whole record fits
@@ -499,7 +500,7 @@ def plot_zoom(args, gt_events, gt_picks, noise, t0):
             (f"{base}/benchmark/noise/{sid}{comp}.mseed", "0.6", "noise only"),
             (f"{base}/waveforms/{year_jday.year}/{year_jday.julday:03d}/{sid}{comp}.mseed", "k", "benchmark"),
         ]:
-            tr = obspy.read(path, format="MSEED")[0]
+            tr = read_trace(path)
             sr = tr.stats.sampling_rate
             i0 = max(int(round((tp - pre - 2 - tr.stats.starttime) * sr)), 0)
             i1 = min(int(round((tp + post + 2 - tr.stats.starttime) * sr)), tr.stats.npts)

@@ -26,6 +26,7 @@ import obspy
 import pandas as pd
 from scipy.signal import butter, sosfiltfilt
 from paths import DEFAULT_ROOT
+from mseed import read_trace
 
 
 def parse_args():
@@ -114,7 +115,7 @@ def main():
         fig, ax = plt.subplots(figsize=(11, max(6, 0.3 * len(sids))))
         for k, sid in enumerate(sids):
             comp = args.component if args.component in files[sid] else sorted(files[sid])[-1]
-            tr = obspy.read(files[sid][comp], format="MSEED")[0]
+            tr = read_trace(files[sid][comp])
             sr = tr.stats.sampling_rate
             tp = obspy.UTCDateTime(p.loc[sid, "phase_time"].to_pydatetime())
             pre, post = float(p.loc[sid, "win_pre"]), float(p.loc[sid, "win_post"])
@@ -180,7 +181,7 @@ def main():
             labels.append(ev)
             continue
         row = pk.iloc[0]
-        tr = obspy.read(files[ref][comp], format="MSEED")[0]
+        tr = read_trace(files[ref][comp])
         sr = tr.stats.sampling_rate
         tp = obspy.UTCDateTime(row["phase_time"].to_pydatetime())
         pre, post = float(row["win_pre"]), float(row["win_post"])
@@ -283,7 +284,7 @@ def main():
             if comp not in files[sid]:
                 ax.set_axis_off()
                 continue
-            tr = obspy.read(files[sid][comp], format="MSEED")[0]
+            tr = read_trace(files[sid][comp])
             sr = tr.stats.sampling_rate
             tp = obspy.UTCDateTime(p.loc[sid, "phase_time"].to_pydatetime())
             i0 = max(int(round((tp - pre - tr.stats.starttime) * sr)), 0)

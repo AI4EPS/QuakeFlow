@@ -41,6 +41,7 @@ import pandas as pd
 from pyproj import Proj
 from scipy.signal import butter, sosfiltfilt
 from paths import DEFAULT_ROOT
+from mseed import read_trace
 
 FREQMIN, FREQMAX = 2.0, 12.0
 TAPER_SEC = 0.25  # cosine ramp on each end of the cut, so splicing does not make a step
@@ -278,7 +279,7 @@ def probe_snr(args, cand):
         if not f:
             print(f"  probe channel {name} not found, skipped")
             continue
-        trace = obspy.read(f[0], format="MSEED")[0]
+        trace = read_trace(f[0])
         sr = trace.stats.sampling_rate
         d = np.asarray(trace.data, dtype=np.float64)
         if np.ma.isMaskedArray(d):
@@ -374,7 +375,7 @@ def cut(args, events, win):
         station_id, component = name[:-1], name[-1]
         if (win["station_id"] == station_id).sum() == 0:
             continue
-        trace = obspy.read(f, format="MSEED")[0]
+        trace = read_trace(f)
         sr = trace.stats.sampling_rate
         data = np.asarray(trace.data, dtype=np.float64)
         if np.ma.isMaskedArray(data):
