@@ -447,7 +447,9 @@ def cut_templates(root_path, region, config):
         velocity = pd.read_csv(f"{root_path}/{region}/obspy/velocity.csv")
         zz = velocity["z_km"].values
         vp = velocity["vp"].values
-        vs = velocity["vs"].values
+        ## a vs column is optional -- plenty of 1D models are published as z/vp only, and
+        ## requiring it turned a usable velocity.csv into a KeyError
+        vs = velocity["vs"].values if "vs" in velocity.columns else vp / vp_vs_ratio
         h = 0.1
 
     vel = {"Z": zz, "P": vp, "S": vs}
