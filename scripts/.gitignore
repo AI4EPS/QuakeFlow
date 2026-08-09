@@ -19,3 +19,6 @@ Shelly2020.txt
 
 
 
+
+# CCTorch writes this next to wherever it is run from
+cctorch.log
