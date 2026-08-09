@@ -12,7 +12,7 @@ import numpy as np
 import obspy
 import pandas as pd
 from adloc.eikonal2d import calc_traveltime, init_eikonal2d
-from args import parse_args
+from args import mode_layout, parse_args
 from pyproj import Proj
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
@@ -140,6 +140,7 @@ def predict_full_picks(picks, events, stations, config):
 # %%
 def extract_template_numpy(
     template_fname,
+    template_mask_fname,
     traveltime_fname,
     traveltime_index_fname,
     traveltime_mask_fname,
@@ -152,6 +153,7 @@ def extract_template_numpy(
     reference_t0 = config["reference_t0"]
 
     template_array = np.memmap(template_fname, dtype=np.float32, mode="r+", shape=tuple(config["template_shape"]))
+    template_mask = np.memmap(template_mask_fname, dtype=bool, mode="r+", shape=tuple(config["template_shape"]))
     traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"]))
     traveltime_index_array = np.memmap(
         traveltime_index_fname, dtype=np.float32, mode="r+", shape=tuple(config["traveltime_shape"])
@@ -188,7 +190,13 @@ def extract_template_numpy(
                                 trace.resample(config["sampling_rate"])
                         # trace.detrend("linear")
                         # trace.taper(max_percentage=0.05, type="cosine")
-                        trace.filter("bandpass", freqmin=2.0, freqmax=12.0, corners=4, zerophase=True)
+                        trace.filter(
+                            "bandpass",
+                            freqmin=config["freqmin"],
+                            freqmax=config["freqmax"],
+                            corners=4,
+                            zerophase=True,
+                        )
                         waveforms_dict[c] = trace
                 else:
                     trace = waveforms_dict[c]
@@ -224,11 +232,16 @@ def extract_template_numpy(
                 traveltime_mask[idx_pick, ic, 0] = True
 
                 trace_data = trace.data[begin_time_index:end_time_index].astype(np.float32)
-                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data[: config["template_shape"][-1]]
+                trace_data = trace_data[: config["template_shape"][-1]]
+                template_array[idx_pick, ic, 0, : len(trace_data)] = trace_data
+                ## a P window truncated at the S arrival is shorter than the slot; mark the
+                ## samples that are real so nothing downstream normalises over the padding
+                template_mask[idx_pick, ic, 0, : len(trace_data)] = True
 
         if lock is not None:
             with lock:
                 template_array.flush()
+                template_mask.flush()
                 traveltime_array.flush()
                 traveltime_index_array.flush()
                 traveltime_mask.flush()
@@ -287,7 +300,15 @@ def cut_templates(root_path, region, config):
     # result_path = f"{region}/cctorch"
 
     data_path = f"{region}/adloc"
-    result_path = f"{region}/cctorch"
+    ## CC and TM build different templates (different windows, and TM carries the MAD
+    ## threshold in its config), so they cannot share a directory: running one used to
+    ## overwrite the other's template.dat, and a template-matching run would silently
+    ## invalidate the relocation inputs. Each mode gets its own folder and table prefix
+    ## from args.MODE_LAYOUT -- CC -> cctorch/cctorch_*, TM -> qtm/template_* -- so modes
+    ## can coexist and adding one needs no change here. The templates are template_*, which
+    ## leaves qtm_* for what run_qtm_association.py produces in the same folder.
+    folder, prefix = mode_layout(config.get("mode", "CC"))
+    result_path = f"{region}/{folder}"
 
     if not os.path.exists(f"{root_path}/{result_path}"):
         os.makedirs(f"{root_path}/{result_path}")
@@ -295,25 +316,45 @@ def cut_templates(root_path, region, config):
     ## TODO: move to config
     sampling_rate = 100.0
 
-    # CC parameters
-    time_before_p = 0.3
-    time_after_p = 2.5 - time_before_p
-    time_before_s = 0.3
-    time_after_s = 4.0 - time_before_s
-    no_overlapping = True
-    # TM parameters
-    # time_before_p = 0.3
-    # time_after_p = 4.0 - time_before_p
-    # time_before_s = 0.3
-    # time_after_s = 4.0 - time_before_s
-    # no_overlapping = False
+    ## Passband of the templates. Written into cctorch/config.json so CCTorch filters the
+    ## continuous data the same way; if the two differ, cc of a waveform with itself < 1.
+    freqmin = 2.0
+    freqmax = 12.0
+
+    ## The P window stops at the S arrival, so P and S templates are different lengths and
+    ## share one array of nt = max(P, S) samples. The tail of the P slot is zero padding,
+    ## recorded in template_mask.dat so nothing downstream mistakes it for data. Both modes
+    ## use the same windows today; the split is here so they can diverge without the TM
+    ## path silently inheriting a CC-shaped template.
+    mode = config.get("mode", "CC")
+    if mode == "CC":
+        time_before_p = 0.3
+        time_after_p = 2.5 - time_before_p
+        time_before_s = 0.3
+        time_after_s = 4.0 - time_before_s
+        no_overlapping = True
+    elif mode == "TM":
+        time_before_p = 0.3
+        time_after_p = 2.5 - time_before_p
+        time_before_s = 0.3
+        time_after_s = 4.0 - time_before_s
+        no_overlapping = True
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+    print(f"Cutting templates for mode={mode}")
 
     time_window = max((time_before_p + time_after_p), (time_before_s + time_after_s))
     nt = int(round(time_window * sampling_rate))
     max_epicenter_dist = 500.0
     max_pair_dist = 15
     max_neighbors = 50
-    min_cc_score = 0.5
+    min_cc_score = args.min_cc_score
+    ## Template matching thresholds on cc > max(min_cc_score, nmad * median(|cc|)) -- the
+    ## absolute floor plus Shelly et al. (2007)'s adaptive one, which is what the benchmark
+    ## measures as the best operating point (precision 49.7% -> 78.2%, association false
+    ## alarms 82/126 -> 6/47). Relocation reads the correlations themselves, so it gets no
+    ## MAD term. An explicit --nmad always wins.
+    nmad = args.nmad if args.nmad is not None else (9.0 if mode == "TM" else 0.0)
     min_obs = 8
     max_obs = 100
     # component_mapping = {
@@ -326,6 +367,7 @@ def cut_templates(root_path, region, config):
 
     config.update(
         {
+            "mode": mode,
             "time_before_p": time_before_p,
             "time_after_p": time_after_p,
             "time_before_s": time_before_s,
@@ -337,9 +379,17 @@ def cut_templates(root_path, region, config):
             "max_pair_dist_km": max_pair_dist,
             "max_neighbors": max_neighbors,
             "min_cc_score": min_cc_score,
+            ## CCTorch's TM path thresholds on `min_cc`, not `min_cc_score` (which only the
+            ## CC writer reads), so write both or the value here has no effect on TM.
+            "min_cc": min_cc_score,
+            ## Shelly-style adaptive threshold: keep a peak only if it also exceeds
+            ## nmad * median(|cc|) of its own correlation trace. 0 disables it.
+            "nmad": nmad,
             "min_obs": min_obs,
             "max_obs": max_obs,
             "sampling_rate": sampling_rate,
+            "freqmin": freqmin,
+            "freqmax": freqmax,
             "component_mapping": component_mapping,
         }
     )
@@ -467,12 +517,15 @@ def cut_templates(root_path, region, config):
     picks = picks.merge(stations[["station_id", "idx_sta"]], on="station_id")
 
     # %%
-    stations.to_csv(f"{root_path}/{result_path}/cctorch_stations.csv", index=False)
-    events.to_csv(f"{root_path}/{result_path}/cctorch_events.csv", index=False)
-    picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
+    stations.to_csv(f"{root_path}/{result_path}/{prefix}_stations.csv", index=False)
+    events.to_csv(f"{root_path}/{result_path}/{prefix}_events.csv", index=False)
+    picks.to_csv(f"{root_path}/{result_path}/{prefix}_picks.csv", index=False)
 
     # %%
-    pair_fname = f"{root_path}/{result_path}/pairs.txt"
+    ## named for what it holds: run_qtm.py writes its own pairs.txt (mseed x template) into
+    ## the qtm folder, so a bare "pairs.txt" here would have one silently clobber the other.
+    ## Nothing consumes this file for CC -- run_cctorch.py builds its own from hypodd.
+    pair_fname = f"{root_path}/{result_path}/event_pairs.txt"
     config["pair_file"] = pair_fname
 
     # %%
@@ -488,15 +541,18 @@ def cut_templates(root_path, region, config):
     config["traveltime_shape"] = traveltime_shape
 
     template_fname = f"{root_path}/{result_path}/template.dat"
+    template_mask_fname = f"{root_path}/{result_path}/template_mask.dat"
     traveltime_fname = f"{root_path}/{result_path}/traveltime.dat"
     traveltime_index_fname = f"{root_path}/{result_path}/traveltime_index.dat"
     traveltime_mask_fname = f"{root_path}/{result_path}/traveltime_mask.dat"
     config["template_file"] = template_fname
+    config["template_mask_file"] = template_mask_fname
     config["traveltime_file"] = traveltime_fname
     config["traveltime_index_file"] = traveltime_index_fname
     config["traveltime_mask_file"] = traveltime_mask_fname
 
     template_array = np.memmap(template_fname, dtype=np.float32, mode="w+", shape=template_shape)
+    template_mask = np.memmap(template_mask_fname, dtype=bool, mode="w+", shape=template_shape)
     traveltime_array = np.memmap(traveltime_fname, dtype=np.float32, mode="w+", shape=traveltime_shape)
     traveltime_index_array = np.memmap(traveltime_index_fname, dtype=np.float32, mode="w+", shape=traveltime_shape)
     traveltime_mask = np.memmap(traveltime_mask_fname, dtype=bool, mode="w+", shape=traveltime_shape)
@@ -525,7 +581,7 @@ def cut_templates(root_path, region, config):
     picks.sort_values(by=["idx_eve", "idx_sta", "phase_type"], inplace=True)
     picks["idx_pick"] = np.arange(len(picks))
 
-    picks.to_csv(f"{root_path}/{result_path}/cctorch_picks.csv", index=False)
+    picks.to_csv(f"{root_path}/{result_path}/{prefix}_picks.csv", index=False)
 
     ## Find mseed files
     mseed_list = sorted(glob(f"{root_path}/{region}/waveforms/????/???/*.mseed"))
@@ -625,6 +681,7 @@ def cut_templates(root_path, region, config):
                     extract_template_numpy,
                     (
                         template_fname,
+                        template_mask_fname,
                         traveltime_fname,
                         traveltime_index_fname,
                         traveltime_mask_fname,
@@ -667,6 +724,7 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     config.update(config["cctorch"])
+    config["mode"] = args.mode
 
     # %%
     print(json.dumps(config, indent=4, sort_keys=True))
