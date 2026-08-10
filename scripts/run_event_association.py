@@ -189,7 +189,7 @@ def link_picks_to_events(phase_picks, event_picks, VPVS_RATIO=1.73):
         event = group.copy()
         event = event[event['event_index'] != -1]  # Filter out events with event_index == -1
         if len(event) == 0:
-            return pd.DataFrame(columns=phase_picks.columns)
+            return phase_picks.iloc[0:0]  # Return empty DataFrame if no valid events
         
         station_id = event['station_id'].iloc[0]  # The station_id for this group
         # travel time tt = (tp + ts) / 2 = (1 + ps_ratio)/2 * tp => tp = tt * 2 / (1 + ps_ratio)
@@ -207,8 +207,8 @@ def link_picks_to_events(phase_picks, event_picks, VPVS_RATIO=1.73):
             picks_for_station = phase_picks.loc[station_id].copy()  # or picks.loc[station_id].copy()
             #picks.loc[station_id].copy()
         except KeyError:
-            # If no picks for this station, just return empty or do nothing
-            return pd.DataFrame(columns=phase_picks.columns)
+            # If no picks for this station, just return empty DataFrame
+            return phase_picks.iloc[0:0]  # Return empty DataFrame if no picks for this station
 
         # We have shape (n_events, ) and picks_for_station has shape (n_picks_for_station, ...).
         # Let's match them up by broadcast.
@@ -232,6 +232,9 @@ def link_picks_to_events(phase_picks, event_picks, VPVS_RATIO=1.73):
     updated_picks_list = event_picks.groupby("station_id").parallel_apply(process_group)
     updated_picks_list.index = updated_picks_list.index.droplevel(0)
     updated_picks_list = updated_picks_list.reset_index()
+    if 'index' in updated_picks_list.columns:
+        # rename the 'index' column to 'station_id'
+        updated_picks_list.rename(columns={'index': 'station_id'}, inplace=True)
     
     return updated_picks_list
 
