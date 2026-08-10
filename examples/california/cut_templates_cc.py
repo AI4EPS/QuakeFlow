@@ -32,6 +32,12 @@ def fillin_missing_picks(picks, events, stations, config):
     pivoted = picks.pivot(index=["event_index", "station_id"], columns="phase_type", values="traveltime")
     pivoted.columns.name = None
     pivoted = pivoted.reset_index()
+    
+    # in case no P picks or S picks
+    if "P" not in pivoted.columns:
+        pivoted["P"] = np.nan
+    if "S" not in pivoted.columns:
+        pivoted["S"] = np.nan
 
     pivoted["P_pred"] = np.where(pivoted["P"].isna(), pivoted["S"] / vp_vs_ratio, pivoted["P"])
     pivoted["S_pred"] = np.where(pivoted["S"].isna(), pivoted["P"] * vp_vs_ratio, pivoted["S"])
@@ -407,12 +413,33 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
     config["zlim_km"] = (zmin, zmax)
 
     # %% Eikonal for 1D velocity model
-    zz = [0.0, 5.5, 16.0, 32.0]
-    vp = [5.5, 5.5, 6.7, 7.8]
+    # zz = [0.0, 5.5, 16.0, 32.0]
+    # vp = [5.5, 5.5, 6.7, 7.8]
     # zz = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 30]
     # vp = [4.74, 5.01, 5.35, 5.71, 6.07, 6.17, 6.27, 6.34, 6.39, 7.8]
     vp_vs_ratio = 1.73
-    vs = [v / vp_vs_ratio for v in vp]
+    # vs = [v / vp_vs_ratio for v in vp]
+    # Mendocino velocity in Clara's paper, the depth is the top of the layer corresponding to the velocity
+    zz = [0.0000, 0.6000, 1.2000, 1.8000, 2.4000, 
+        3.0000, 3.6000, 4.2000, 4.8000, 5.4000, 
+        6.0000, 8.0000, 10.000, 12.000, 14.000, 
+        16.000, 18.000, 20.000, 22.000, 24.000, 
+        26.000, 28.000, 30.000, 32.000, 34.000, 
+        36.000, 38.000, 40.000, 60.000]
+    
+    vp = [3.5000, 3.7214, 3.9429, 4.1643, 
+        4.3857, 4.6071, 4.8286, 5.0500, 5.1124, 
+        5.1747, 5.2371, 5.4449, 5.6528, 5.8607, 
+        6.0685, 6.2764, 6.4843, 6.6921, 6.9000, 
+        7.9000, 7.9000, 7.9000, 7.9000, 7.9000,
+        7.9000, 7.9000, 7.9000, 7.9000, 7.9000]
+
+    vs = [2.0208, 2.1486, 2.2765, 2.4043, 
+        2.5322, 2.6600, 2.7879, 2.9157, 2.9517, 
+        2.9877, 3.0237, 3.1437, 3.2637, 3.3838, 
+        3.5038, 3.6238, 3.7438, 3.8638, 3.9838, 
+        4.5612, 4.5612, 4.5612, 4.5612, 4.5612, 
+        4.5612, 4.5612, 4.5612, 4.5612, 4.5612]
     h = 0.3
 
     if os.path.exists(f"{root_path}/{region}/obspy/velocity.csv"):
@@ -476,15 +503,19 @@ def cut_templates(jdays, root_path, region, config, bucket, protocol, token):
         # events = pd.read_csv("adloc_events.csv", parse_dates=["time"])
         if protocol == "file":
             events = pd.read_csv(
-                f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"]
+                f"{root_path}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", parse_dates=["time"],
                 # f"{root_path}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv",
-                parse_dates=["time"],
+                # parse_dates=["time"],
             )
         else:
             with fs.open(f"{bucket}/{data_path}/{year:04d}/adloc_events_{jday:03d}.csv", "r") as fp:
             # with fs.open(f"{bucket}/{data_path}/{year:04d}/ransac_events_{jday:03d}.csv", "r") as fp:
                 events = pd.read_csv(fp, parse_dates=["time"])
-
+        
+        # avoid empty events dataframe
+        if len(events) == 0:
+            print(f"No events for {year:04d}-{jday:03d}")
+            continue
         # # ############### DEBUG ###############
         # events = events[
         #     (events["latitude"] >= minlat)
